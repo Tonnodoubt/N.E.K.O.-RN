@@ -63,6 +63,21 @@ npm run android
 npx expo run:ios
 ```
 
+### 4.3 本地离线构建 (Local Offline Build via EAS)
+如果你需要生成可分发的 APK 安装包，或在没有 Expo 账号登录的情况下进行本地构建，可以使用 EAS CLI 的本地构建功能：
+
+```bash
+# 1. 清理并重新生成原生 Android 项目目录
+npx expo prebuild --platform android --clean
+
+# 2. 确保所有依赖（含原生模块）已正确安装
+npm i
+
+# 3. 使用 EAS 进行本地开发版本构建（生成 APK）
+npx eas build --profile development --platform android --local
+```
+*注意：本地构建需要你的机器配置好完整的 Android 构建环境（JDK, Android SDK, CMake 等）。*
+
 ## 5. 真机调试 (Real-Device Debugging)
 
 由于我们需要原生音频流和 Live2D 性能支持，**真机调试是推荐且必须的方案**。
@@ -94,4 +109,6 @@ npx expo run:ios
 ## 8. 附录：常用指令
 - `npm start`: 启动 Metro Bundler。
 - `npm run clean`: 清除缓存并重置项目（由 `react-native-clean-project` 提供）。
+- `npx expo prebuild --platform android --clean`: 清理并重构原生 Android 工程。
+- `npx eas build --profile development --platform android --local`: 本地构建 Android 开发版 APK。
 - `npx expo install <package>`: 使用 Expo 兼容版本安装包。
