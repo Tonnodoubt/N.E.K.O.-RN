@@ -16,6 +16,10 @@
 ### 1. 核心概述 (Core)
 - [系统概述](./core/overview.md)：项目使命、技术能力与技术栈。
 - [架构设计](./arch/design.md)：分层架构、核心设计模式与 Mermaid 图表。
+- **[跨项目集成架构](./arch/cross-project-integration.md)**：N.E.K.O 与 N.E.K.O.-RN 两仓库的协作机制、通信协议、共享包策略与运行时序（⭐）
+- **[RN 项目现状评估](./arch/rn-current-status.md)**：功能完成度详表、服务层/Hooks/Packages 逐项评估（⭐ 2026-02-19）
+- **[RN 移动端开发指南](./arch/rn-development-guide.md)**：从搭环境到出包的完整操作手册，含验证清单与常见问题排查（⭐ 换电脑必读）
+- **[分支合并策略](./arch/branch-merge-strategy.md)**：`react_rewrite_web` 与 `main` 的分歧分析、合并方案与风险评估
 
 ### 2. 详细规格 (Modules)
 - [音频服务](./modules/audio.md)：采样率、上行/下行控制。
