@@ -41,11 +41,24 @@ export function createNativeAudioService(args: {
   let audioFrameSub: { remove: () => void } | null = null;
   let ampSub: { remove: () => void } | null = null;
   let playbackStopSub: { remove: () => void } | null = null;
+  let errorSub: { remove: () => void } | null = null;
 
   let sessionResolver: (() => void) | null = null;
+  let recordingReject: ((error: Error) => void) | null = null;
 
   const attachRecordingListeners = () => {
     if (audioFrameSub) return;
+
+    // 🔥 监听原生层错误
+    errorSub = PCMStream.addListener("onError", (event: any) => {
+      const message = event?.message || "Unknown native error";
+      console.error("❌ Native PCMStream error:", message);
+      if (recordingReject) {
+        const reject = recordingReject;
+        recordingReject = null;
+        reject(new Error(message));
+      }
+    });
 
     audioFrameSub = PCMStream.addListener("onAudioFrame", (event: any) => {
       const pcm: Uint8Array | undefined = event?.pcm;
@@ -85,9 +98,13 @@ export function createNativeAudioService(args: {
     try {
       playbackStopSub?.remove();
     } catch (_e) {}
+    try {
+      errorSub?.remove();
+    } catch (_e) {}
     audioFrameSub = null;
     ampSub = null;
     playbackStopSub = null;
+    errorSub = null;
   };
 
   const handleIncomingJson = (json: NekoWsIncomingJson) => {
@@ -182,27 +199,62 @@ export function createNativeAudioService(args: {
     const timeoutMs = opts?.timeoutMs ?? 10_000;
     attachRecordingListeners();
 
-    try {
-      // 先请求后端启动 session，再启动录音（也可以并行，但 native 端更倾向先确保会话就绪）
+    return new Promise<void>((resolve, reject) => {
+      // 设置录音错误拒绝器
+      recordingReject = reject;
+
+      const cleanup = () => {
+        recordingReject = null;
+      };
+
+      // 超时处理
+      const timeoutId = setTimeout(() => {
+        cleanup();
+        const error = new Error(`Session start timeout after ${timeoutMs}ms`);
+        setState("error");
+        reject(error);
+      }, timeoutMs);
+
+      // 会话启动成功回调
       const sessionP = waitSessionStarted(timeoutMs);
+
+      sessionP.then(() => {
+        clearTimeout(timeoutId);
+        cleanup();
+
+        try {
+          // 🔥 修复：让 PCMStream.startRecording 的错误通过 Promise 捕获
+          // 原生层会通过 onError 事件发送错误，我们在 attachRecordingListeners 中处理
+          PCMStream.startRecording(
+            args.recordSampleRate ?? 48000,
+            args.recordFrameSize ?? 1536,
+            args.recordTargetRate ?? 16000
+          );
+
+          setState("recording");
+          resolve();
+        } catch (e) {
+          cleanup();
+          setState("error");
+          reject(e);
+        }
+      }).catch((error) => {
+        clearTimeout(timeoutId);
+        cleanup();
+        setState("error");
+        reject(error);
+      });
+
+      // 发送启动会话请求
       try {
         args.client.sendJson({ action: "start_session", input_type: "audio" });
-      } catch (_e) {}
-
-      await sessionP;
-
-      // 让 PCMStream.startRecording 的错误传播到外部 catch（不在内部静默吞掉）
-      PCMStream.startRecording(
-        args.recordSampleRate ?? 48000,
-        args.recordFrameSize ?? 1536,
-        args.recordTargetRate ?? 16000
-      );
-
-      setState("recording");
-    } catch (e) {
-      setState("error");
-      throw e;
-    }
+      } catch (e) {
+        clearTimeout(timeoutId);
+        cleanup();
+        setState("error");
+        reject(e);
+      }
+    });
   };
 
   const stopVoiceSession: AudioService["stopVoiceSession"] = async () => {
