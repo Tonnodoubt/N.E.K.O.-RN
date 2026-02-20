@@ -1,5 +1,13 @@
 # 分支合并策略
 
+> ⚠️ **已归档**：此文档记录的是 2026-02-19 时的分支分析，历史参考用途。
+>
+> 当前状态：`feature/react-frontend-unified` 分支已完成 React Web 前端重构，并与 upstream main 保持同步。
+>
+> 最新的开发计划见 [ROADMAP.md](../ROADMAP.md)
+
+---
+
 > 评估时间：2026-02-19
 > 涉及分支：N.E.K.O 仓库的 `react_rewrite_web` 和 `main`
 

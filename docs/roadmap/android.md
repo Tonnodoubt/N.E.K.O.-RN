@@ -1,25 +1,36 @@
-# Android 端下一步路线图（对齐 N.E.K.O Web 前端体验）
+# Android 端路线图
 
-**文档日期**：2026-01-18（更新）
-**目标**：在 Android（RN 真机）实现与 `@N.E.K.O/docs/frontend` 对齐的核心体验与整体流程闭环。
-
-前置：macOS（zsh）环境搭建（Android SDK / JDK17 / 验证命令）：`../guides/android-env-macos.md`
-
----
-
-## 0. 当前状态（结论）
-
-- **核心链路已跑通**：Live2D（原生）+ WS（realtime）+ 音频上下行（`@project_neko/audio-service` + `react-native-pcm-stream`）+ LipSync + MainManager 协调。
-- **UI 现状**：
-  - `Live2DRightToolbar`：已有 RN 版本（`.native.tsx`），Android 可用。
-  - `ChatContainer`：✅ **已完成 WS 集成**（2026-01-18），支持文本消息流式显示、截图/拍照发送、连接状态指示。
-  - `Modal` / `StatusToast`：当前实现依赖 `react-dom`（Web-only），Android 需要补齐 `.native.tsx` 原生实现，并确保 RN 入口（`index.native.ts`）仅导出该原生版本，避免导出依赖 `react-dom` 的 Web 版本。
+> **最后更新**：2026-02-20
+> **状态**：核心功能已完成，进入管理页面开发阶段
+>
+> 📋 完整开发计划见 [ROADMAP.md](../ROADMAP.md)
 
 ---
 
-## 1. 优先级（按依赖关系排序）
+## 当前状态
 
-### P0：主界面"字幕/聊天"闭环（Android 体验最关键缺口）✅ 已完成
+✅ **核心链路已完成**（真机验证通过）：
+- Live2D 渲染 + WS 通信 + 音频上下行 + 唇同步 + MainManager 协调
+- ChatContainer WS 集成（文本消息流式显示）
+- StatusToast.native.tsx ✅
+- Modal/index.native.tsx ✅
+
+---
+
+## 下一步工作
+
+| 优先级 | 任务 | 状态 |
+|--------|------|------|
+| P1 | 角色管理页面 | ⏳ 待开发 |
+| P1 | 设置页面 | ⏳ 待开发 |
+| P2 | 相机/图片发送 | ⏳ 待开发 |
+| P2 | 后台音频播放 | ⏳ 待开发 |
+
+---
+
+## 历史完成项
+
+### ✅ P0：主界面"字幕/聊天"闭环
 
 - **P0-1**：✅ 把主界面的 WS 文本消息接入 `ChatContainer.native.tsx` 的 UI 展示。
   - 方案：`ChatContainer` 支持受控 props（`externalMessages/onSendMessage/connectionStatus`）。
@@ -34,19 +45,19 @@
     - Ref 模式防止 WebSocket 重连
   - **相关文档**：[WebSocket 稳定性改进总结](../../../N.E.K.O/docs/frontend/SUMMARY-websocket-stability-improvements-2026-01-18.md)（位于 N.E.K.O 仓库）
 
-### P1：Toast/Modal 原生化（让 Android 交互体验可用且一致）
+### ✅ P1：Toast/Modal 原生化
 
-- **P1-1**：实现 `StatusToast.native.tsx`（或 RN 入口导出 RN 版），替代核心路径里的 `Alert.alert`。
-- **P1-2**：实现 `Modal` 的 RN 版（Alert/Confirm/Prompt），保持 `ModalHandle` Promise API 不变。
+- **P1-1**：✅ `StatusToast.native.tsx` 已实现
+- **P1-2**：✅ `Modal/index.native.tsx` 已实现（AlertDialog/ConfirmDialog/PromptDialog）
 
-### P2：Live2D 手势 + Preferences 持久化
+### P2：Live2D 手势 + Preferences 持久化 ⏳
 
-- **P2-1**：JS 层接入拖拽/捏合，把手势映射到 `scale/position`（原生 view 已支持 props 控制）。
-- **P2-2**：把 `useLive2DPreferences` 真正接入 `useLive2D`（当前主界面存在 TODO）。
+- **P2-1**：⏳ JS 层接入拖拽/捏合，把手势映射到 `scale/position`（原生 view 已支持 props 控制）。
+- **P2-2**：⏳ 把 `useLive2DPreferences` 真正接入 `useLive2D`（当前主界面存在 TODO）。
 
-### P3：Settings 菜单流程落地（整体流程功能）
+### P3：Settings 菜单流程落地 ⏳
 
-- **最快路径（建议）**：优先用 WebView 打开后端现有页面（如 `/api_key`、`/chara_manager`、`/memory_browser` 等），先达成“功能可达”，再择机原生化。
+- **方案**：开发原生页面 或 用 WebView 打开后端现有页面
 
 ---
 

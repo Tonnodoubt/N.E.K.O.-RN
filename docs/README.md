@@ -2,6 +2,14 @@
 
 本文档目录用于存放 **N.E.K.O.-RN（React Native / Expo）** 端的设计与规格文档。
 
+---
+
+## 🎯 开发大计划
+
+**[📍 ROADMAP.md](./ROADMAP.md)** — 4 个阶段的开发计划与进度追踪（必读）
+
+---
+
 ## 📚 规范文档体系 (Spec-Driven Docs)
 
 本项目采用 **SDD (Spec-Driven Development)** 规范驱动开发模式。文档按功能模块化划分，作为 AI 与人类协作的"单一真理源"。
@@ -11,7 +19,7 @@
 - **[跨平台组件策略](./strategy/cross-platform-components.md)**：当前跨端实现方式（`.native.tsx`）（⭐）
 - **[快速参考卡片](./reference/quick-reference.md)**：命令/入口/高频坑（速查）
 - **[常见问题排查](./guides/troubleshooting.md)**：开发/构建常见问题与解决方案
-- **[Android 下一步路线图](./roadmap/android.md)**：Android 真机体验对齐 Web 的优先级与验收点（⭐ 推荐按此推进）
+- **[Android 路线图](./roadmap/android.md)**：Android 真机开发进度（⭐）
 
 ### 1. 核心概述 (Core)
 - [系统概述](./core/overview.md)：项目使命、技术能力与技术栈。
@@ -19,7 +27,7 @@
 - **[跨项目集成架构](./arch/cross-project-integration.md)**：N.E.K.O 与 N.E.K.O.-RN 两仓库的协作机制、通信协议、共享包策略与运行时序（⭐）
 - **[RN 项目现状评估](./arch/rn-current-status.md)**：功能完成度详表、服务层/Hooks/Packages 逐项评估（⭐ 2026-02-19）
 - **[RN 移动端开发指南](./arch/rn-development-guide.md)**：从搭环境到出包的完整操作手册，含验证清单与常见问题排查（⭐ 换电脑必读）
-- **[分支合并策略](./arch/branch-merge-strategy.md)**：`react_rewrite_web` 与 `main` 的分歧分析、合并方案与风险评估
+- **[分支合并策略](./arch/branch-merge-strategy.md)**：历史归档 - 2026-02-19 分支分析
 
 ### 2. 详细规格 (Modules)
 - [音频服务](./modules/audio.md)：采样率、上行/下行控制。
