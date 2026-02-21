@@ -1,54 +1,101 @@
 # N.E.K.O.-RN 文档中心
 
-本文档目录用于存放 **N.E.K.O.-RN（React Native / Expo）** 端的设计与规格文档。
+> React Native 移动端开发文档
+>
+> **最新更新**: 2026-02-21
 
 ---
 
-## 🎯 开发大计划
+## 快速导航
 
-**[📍 ROADMAP.md](./ROADMAP.md)** — 4 个阶段的开发计划与进度追踪（必读）
+| 我想... | 请看 |
+|---------|------|
+| 查看开发路线图 | [ROADMAP.md](./ROADMAP.md) |
+| 查看开发进度 | 自己建的进度表 |
+| 搭建开发环境 | [guides/development.md](./guides/development.md) |
+| 排查问题 | [troubleshooting/](./troubleshooting/) |
+| 了解架构 | [arch/design.md](./arch/design.md) |
 
 ---
 
-## 📚 规范文档体系 (Spec-Driven Docs)
+## 核心文档
 
-本项目采用 **SDD (Spec-Driven Development)** 规范驱动开发模式。文档按功能模块化划分，作为 AI 与人类协作的"单一真理源"。
+| 文档 | 说明 |
+|------|------|
+| [ROADMAP.md](./ROADMAP.md) | 开发路线图和功能规划（必读） |
+| [core/overview.md](./core/overview.md) | 项目概述 |
+| [arch/design.md](./arch/design.md) | 架构设计 |
 
-### 0. 开发策略（重要）⭐
-- **[RN 开发策略](./strategy/rn-development.md)**：当前开发策略与组件现状矩阵（⭐）
-- **[跨平台组件策略](./strategy/cross-platform-components.md)**：当前跨端实现方式（`.native.tsx`）（⭐）
-- **[快速参考卡片](./reference/quick-reference.md)**：命令/入口/高频坑（速查）
-- **[常见问题排查](./guides/troubleshooting.md)**：开发/构建常见问题与解决方案
-- **[Android 路线图](./roadmap/android.md)**：Android 真机开发进度（⭐）
+---
 
-### 1. 核心概述 (Core)
-- [系统概述](./core/overview.md)：项目使命、技术能力与技术栈。
-- [架构设计](./arch/design.md)：分层架构、核心设计模式与 Mermaid 图表。
-- **[跨项目集成架构](./arch/cross-project-integration.md)**：N.E.K.O 与 N.E.K.O.-RN 两仓库的协作机制、通信协议、共享包策略与运行时序（⭐）
-- **[RN 项目现状评估](./arch/rn-current-status.md)**：功能完成度详表、服务层/Hooks/Packages 逐项评估（⭐ 2026-02-19）
-- **[RN 移动端开发指南](./arch/rn-development-guide.md)**：从搭环境到出包的完整操作手册，含验证清单与常见问题排查（⭐ 换电脑必读）
-- **[分支合并策略](./arch/branch-merge-strategy.md)**：历史归档 - 2026-02-19 分支分析
+## 目录结构
 
-### 2. 详细规格 (Modules)
-- [音频服务](./modules/audio.md)：采样率、上行/下行控制。
-- [Live2D 服务](./modules/live2d.md)：模型生命周期与口型驱动。
-- [主协调层](./modules/coordination.md)：AI 响应与用户打断业务流。
+```
+docs/
+├── ROADMAP.md              # 开发路线图
+│
+├── arch/                   # 架构文档
+│   ├── design.md          # 架构设计
+│   ├── rn-development-guide.md  # 开发指南
+│   └── ...
+│
+├── guides/                 # 开发指南
+│   ├── development.md     # 开发与验收
+│   ├── android-env-macos.md  # Android 环境
+│   └── upstream-sync.md   # 同步主项目
+│
+├── modules/                # 模块文档
+│   ├── audio.md           # 音频服务
+│   ├── live2d.md          # Live2D 服务
+│   └── coordination.md    # 主协调层
+│
+├── specs/                  # 规格文档
+│   ├── websocket.md       # WebSocket 协议
+│   └── states.md          # 状态机
+│
+├── troubleshooting/        # 故障排查
+│   └── ...
+│
+└── strategy/               # 策略文档
+    └── cross-platform-components.md
+```
 
-### 3. 数据契约 (Specs)
-- [WebSocket 协议](./specs/websocket.md)：JSON 负载与二进制数据格式定义。
-- [状态机](./specs/states.md)：连接状态与会话状态管理。
+---
 
-### 4. 开发指南 (Guides)
-- [开发与验收](./guides/development.md)：硬编码约束、环境配置与验收清单。
-- **[macOS Android 环境搭建（zsh）](./guides/android-env-macos.md)**：Android SDK / JDK 17 /（可选）模拟器与验证命令
-- **[Android 平台运行指南](./platforms/android.md)**：Android 环境配置、构建、运行和调试（⭐ Android 开发者必读）
+## 开发指南
 
-### 5. 上游同步（packages）
-- **[上游 packages 同步指南](./guides/upstream-sync.md)**：如何同步 `@N.E.K.O/frontend/packages/*` 到本仓库 `packages/project-neko-*`
-- [上游公共文档入口（N.E.K.O）](./upstream/frontend-packages.md)：本仓库只引用不复制
+### 环境搭建
 
-## 🛠 文档准则
-1. **先设计后代码**：重大功能前必须先在 `/docs` 中更新相关 Spec。
-2. **模块化维护**：避免在单体文件中堆积逻辑，按功能域进行分割。
-3. **闭环验证**：功能的验收应严格对齐文档中描述的规格。
-4. **渐进式迁移**：优先复用共享 packages，并把关键 UI 通过 `.native.tsx` 落地到 Android 真机，参考 [RN 开发策略](./strategy/rn-development.md)。
+1. [开发与验收](./guides/development.md) - 基础环境配置
+2. [Android 环境 (macOS)](./guides/android-env-macos.md) - Android SDK/JDK 配置
+3. [Android 运行指南](./platforms/android.md) - 构建运行调试
+
+### 模块开发
+
+| 模块 | 文档 |
+|------|------|
+| 音频 | [modules/audio.md](./modules/audio.md) |
+| Live2D | [modules/live2d.md](./modules/live2d.md) |
+| WebSocket | [specs/websocket.md](./specs/websocket.md) |
+
+### 与主项目同步
+
+- [上游 packages 同步](./guides/upstream-sync.md)
+- [跨项目集成架构](./arch/cross-project-integration.md)
+
+---
+
+## 故障排查
+
+| 问题 | 文档 |
+|------|------|
+| 音频录制 | [android-audio-recording-fix.md](./troubleshooting/android-audio-recording-fix.md) |
+| 权限问题 | [permission-auto-redirect-fix.md](./troubleshooting/permission-auto-redirect-fix.md) |
+| 其他问题 | [guides/troubleshooting.md](./guides/troubleshooting.md) |
+
+---
+
+## 相关项目
+
+- **主项目文档**: `../N.E.K.O/docs/`
+- **主项目前端**: `../N.E.K.O/docs/frontend/`
