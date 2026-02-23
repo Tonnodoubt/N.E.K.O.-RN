@@ -11,35 +11,37 @@ D:\myprojects\N.E.K.O
 D:\myprojects\N.E.K.O.-RN
 ```
 
-## 日常启动（最快路径）
+## 日常启动（Mac 单机，当前主流程）
+
+适用场景：后端和 Metro 都在同一台 Mac，手机为 Dev Build。
 
 1. 启动后端（N.E.K.O）
 
 ```
-start_servers.bat
-```
-
-手动方式：
-
-```
-uv sync
-uv run python memory_server.py
 uv run python main_server.py
 ```
 
 2. 启动 Metro（N.E.K.O.-RN）
 
 ```
-npx expo start --dev-client
+npx expo start --dev-client -c
 ```
 
-可用替代：
+3. 手机打开 App → 扫 Metro 终端里的 QR → App 加载完成
+
+4. **电脑浏览器打开**（不需要知道局域网 IP，localhost 就够）
 
 ```
-npm start
+http://localhost:48911/qr
 ```
 
-3. 手机打开已安装的 App，它会自动连接 Metro。
+5. 用**手机系统相机**扫页面上的二维码 → 识别 `nekorn://` deep link → 直接跳主界面并写入后端配置
+
+说明：
+- Metro 只负责加载 JS bundle（Dev Build 专属）
+- `/qr` 页面的二维码只负责”后端地址配置”，两者独立互不干扰
+- `/qr` 页面不建立 WebSocket，Web 前端不会抢占会话
+- `localhost:48911/qr` 中展示的二维码内嵌的是真实局域网 IP，手机扫到的是正确地址
 
 ## 跨机器（Windows 后端 + Mac Metro + Dev Build）
 
@@ -53,26 +55,26 @@ npm start
 start_servers.bat
 ```
 
-2. Windows 打开二维码页（后端自带，无需 Web 前端）
+2. Windows 浏览器打开二维码页
 
 ```
-http://<你的电脑IP>:48911/qr
+http://localhost:48911/qr
 ```
 
 3. Mac 启动 Metro（RN）
 
 ```
 cd N.E.K.O.-RN
-npx expo start --dev-client
+npx expo start --dev-client -c
 ```
 
-4. 手机打开 App → 进入 **QR Scanner** → 扫二维码页
+4. 手机打开 App → 扫 Metro 终端里的 QR → App 加载完成
 
-5. 回到主界面开始对话（文本/语音/Live2D）
+5. 用**手机系统相机**扫 Windows 屏幕上的二维码 → 直接跳主界面并写入配置
 
 说明：
 - Metro 只负责 App 代码热更新
-- 二维码只负责“后端地址配置”
+- 二维码只负责”后端地址配置”
 
 ## 首次环境准备（每台机器只做一次）
 
@@ -100,11 +102,11 @@ npx expo run:android
 
 ## 手机连接后端（手机 -> 电脑）
 
-方式 A：二维码
+方式 A：系统相机扫码（推荐）
 
 ```
-电脑打开 http://<你的电脑IP>:48911/qr
-App 内扫码
+电脑浏览器打开 http://localhost:48911/qr
+手机系统相机扫页面二维码 → 识别 nekorn:// deep link → 直接跳主界面
 ```
 
 方式 B：手动输入
