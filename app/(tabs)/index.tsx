@@ -59,7 +59,7 @@ export default function HomeScreen() {
         </Link>
       </ThemedView>
       <ThemedView style={styles.stepContainer}>
-        <Link href="/qr-scanner">
+        <Link href={{ pathname: "/qr-scanner", params: { returnTo: "/main" } }}>
           <ThemedText type="subtitle">扫码配置（Dev）</ThemedText>
         </Link>
         <ThemedText>

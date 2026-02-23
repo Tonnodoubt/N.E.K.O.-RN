@@ -41,8 +41,8 @@ export function parseDevConnectionConfig(raw: string): Partial<DevConnectionConf
     if (name) out.characterName = name;
 
     // 允许直接从 URL 的 host/port 取值（如 http://1.2.3.4:48911）
-    if (url.hostname) out.host = url.hostname;
-    if (url.port && /^\d+$/.test(url.port)) out.port = Number(url.port);
+    if (!out.host && url.hostname) out.host = url.hostname;
+    if (out.port == null && url.port && /^\d+$/.test(url.port)) out.port = Number(url.port);
 
     if (Object.keys(out).length > 0) return out;
   } catch {

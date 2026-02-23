@@ -53,7 +53,7 @@ export default function QrScannerScreen() {
         returnTo === '/(tabs)/main' ||
         returnTo === '/main'
           ? returnTo
-          : '/explore';
+      : '/main';
 
       (async () => {
         const applied = await devConfig.applyQrRaw(raw);

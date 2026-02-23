@@ -7,6 +7,7 @@ import { useLive2DAgentBackend } from '@/hooks/useLive2DAgentBackend';
 import { useLive2DPreferences } from '@/hooks/useLive2DPreferences';
 import { mainManager } from '@/utils/MainManager';
 import { useFocusEffect } from '@react-navigation/native';
+import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Dimensions, Platform, StyleSheet, Text, View } from 'react-native';
 import { ReactNativeLive2dView } from 'react-native-live2d';
@@ -30,7 +31,55 @@ function generateMessageId(counter: number): string {
 const MainUIScreen: React.FC<MainUIScreenProps> = () => {
 
   const [isPageFocused, setIsPageFocused] = useState(true);
-  const { config } = useDevConnectionConfig();
+  const { config, applyQrRaw } = useDevConnectionConfig();
+  const params = useLocalSearchParams<{
+    qr?: string;
+    host?: string;
+    port?: string;
+    name?: string;
+    characterName?: string;
+  }>();
+  const lastAppliedQrRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const qrParam = typeof params.qr === 'string' ? params.qr : undefined;
+    let raw: string | null = null;
+
+    if (qrParam) {
+      try {
+        raw = decodeURIComponent(qrParam);
+      } catch {
+        raw = qrParam;
+      }
+    } else {
+      const host = typeof params.host === 'string' ? params.host.trim() : '';
+      const portStr = typeof params.port === 'string' ? params.port.trim() : '';
+      const name =
+        typeof params.characterName === 'string'
+          ? params.characterName.trim()
+          : typeof params.name === 'string'
+            ? params.name.trim()
+            : '';
+
+      if (host || portStr || name) {
+        const payload: { host?: string; port?: number; characterName?: string } = {};
+        if (host) payload.host = host;
+        if (portStr && /^\d+$/.test(portStr)) payload.port = Number(portStr);
+        if (name) payload.characterName = name;
+        raw = JSON.stringify(payload);
+      }
+    }
+
+    if (!raw) return;
+    if (lastAppliedQrRef.current === raw) return;
+    lastAppliedQrRef.current = raw;
+
+    applyQrRaw(raw).then((res) => {
+      if (!res.ok) {
+        Alert.alert('二维码内容不可用', res.error);
+      }
+    });
+  }, [applyQrRaw, params.characterName, params.host, params.name, params.port, params.qr]);
 
   // 工具栏状态管理（与 Web 版本一致）
   const [isMobile, setIsMobile] = useState(true); // RN 默认为移动端
