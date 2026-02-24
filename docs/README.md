@@ -10,6 +10,7 @@
 
 | 我想... | 请看 |
 |---------|------|
+| **新成员快速上手** | [guides/onboarding.md](./guides/onboarding.md) |
 | 查看开发路线图 | [ROADMAP.md](./ROADMAP.md) |
 | 查看开发进度 | 自己建的进度表 |
 | 搭建开发环境 | [guides/development.md](./guides/development.md) |
