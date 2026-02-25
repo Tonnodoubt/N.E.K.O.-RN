@@ -486,6 +486,7 @@ export class AudioService {
     }
 
     const data = typeof message === 'string' ? message : JSON.stringify(message);
+    console.log('📤 AudioService.sendMessage 发送数据:', data.substring(0, 200));
     this.wsService.send(data);
   }
 

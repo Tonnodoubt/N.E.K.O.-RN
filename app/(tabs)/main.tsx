@@ -168,9 +168,13 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     port: config.port,
     characterName: config.characterName,
     onMessage: async (event) => {
-      // 二进制音频数据已由 @project_neko/audio-service 自动播放（通过 Realtime binary 事件接管）
-      // 这里仅保留文本消息处理逻辑
-      if (typeof event.data !== 'string') return;
+      // 🔍 调试：检查是否收到二进制数据
+      if (typeof event.data !== 'string') {
+        console.log('🎵 收到二进制数据，大小:', event.data?.byteLength || event.data?.size || 'unknown');
+        return;
+      }
+
+      console.log('📝 收到文本消息:', event.data.substring(0, 100));
 
       // 检查 clientMessageId 用于去重
       let parsedMsg: any = null;
@@ -312,6 +316,102 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     };
   }, [audio.audioService, live2d.live2dService]);
 
+  // ===== 启动时从后端同步当前角色（仅一次） =====
+  const hasSyncedRef = useRef(false);
+
+  useEffect(() => {
+    const syncCurrentCharacter = async () => {
+      // 仅在首次连接时同步，避免重复
+      if (!audio.isConnected || hasSyncedRef.current) return;
+
+      try {
+        hasSyncedRef.current = true; // 标记已同步
+
+        const apiBase = `${buildHttpBaseURL(config)}/api`;
+        const client = createCharactersApiClient(apiBase);
+
+        // 🔥 从后端获取当前角色
+        const res = await client.getCurrentCatgirl();
+        const serverCurrentCatgirl = res.current_catgirl;
+
+        // 如果后端的当前角色与本地配置不一致，更新本地配置
+        if (serverCurrentCatgirl && serverCurrentCatgirl !== config.characterName) {
+          console.log(`🔄 检测到角色不一致，从后端同步: ${config.characterName} -> ${serverCurrentCatgirl}`);
+
+          // 更新本地配置
+          await applyQrRaw(JSON.stringify({
+            host: config.host,
+            port: config.port,
+            characterName: serverCurrentCatgirl,
+          }));
+
+          // 发送 start_session 重新加载 voice_id
+          setTimeout(() => {
+            if (audio.isConnected) {
+              console.log('📤 发送 start_session 以同步角色音色');
+              audio.sendMessage({
+                action: 'start_session',
+                input_type: 'text',
+                new_session: false,
+              });
+            }
+          }, 500);
+        } else {
+          console.log(`✅ 角色已同步: ${config.characterName}`);
+        }
+      } catch (err: any) {
+        console.error('同步当前角色失败:', err);
+        hasSyncedRef.current = false; // 失败后重置，允许下次重试
+      }
+    };
+
+    syncCurrentCharacter();
+  }, [audio.isConnected]); // 🔥 只依赖 isConnected，避免循环
+
+  // ===== 验证配置的角色是否存在 =====
+  useEffect(() => {
+    const validateCharacter = async () => {
+      // 仅在首次连接时验证
+      if (!audio.isConnected) return;
+
+      try {
+        const apiBase = `${buildHttpBaseURL(config)}/api`;
+        const client = createCharactersApiClient(apiBase);
+        const data = await client.getCharacters();
+
+        const availableCharacters = Object.keys(data.猫娘 || {});
+
+        // 检查配置的角色是否存在
+        if (!data.猫娘[config.characterName]) {
+          console.warn(`⚠️ 角色 "${config.characterName}" 不存在`);
+
+          const firstAvailable = availableCharacters[0];
+
+          if (firstAvailable) {
+            Alert.alert(
+              '角色不存在',
+              `配置的角色 "${config.characterName}" 不存在。\n\n可用角色：${availableCharacters.join(', ')}\n\n请通过"角色管理"切换到有效角色。`,
+              [{ text: '知道了' }]
+            );
+          } else {
+            Alert.alert(
+              '无可用角色',
+              '服务器上没有任何角色，请先在 Web 端创建角色。',
+              [{ text: '知道了' }]
+            );
+          }
+        } else {
+          console.log(`✅ 角色验证通过: ${config.characterName}`);
+        }
+      } catch (err: any) {
+        console.error('验证角色失败:', err);
+        // 网络错误等不显示提示，避免打扰用户
+      }
+    };
+
+    validateCharacter();
+  }, [audio.isConnected, config, config.characterName]);
+
   useEffect(() => {
     console.log('live2d.live2dProps', live2d.live2dProps);
   }, [live2d.live2dProps]);
@@ -443,9 +543,84 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       const res = await client.setCurrentCatgirl(name);
 
       if (res.success) {
+        // 更新本地状态
         setCurrentCatgirl(name);
         setCharacterModalVisible(false);
-        Alert.alert('切换成功', `已切换到角色: ${name}`);
+
+        // 🔥 关键：更新 config.characterName 并重新建立连接
+        await applyQrRaw(JSON.stringify({
+          host: config.host,
+          port: config.port,
+          characterName: name,
+        }));
+
+        // 🔥 等待连接重建（分两阶段：等待断开 -> 等待重连）
+        const waitForConnection = (): Promise<boolean> => {
+          return new Promise((resolve) => {
+            let retryCount = 0;
+            const maxRetries = 10; // 10 * 500ms = 5s
+            let phase: 'waiting_disconnect' | 'waiting_connect' = 'waiting_disconnect';
+
+            const check = () => {
+              if (phase === 'waiting_disconnect') {
+                // 阶段1：等待旧连接断开（最多等待 1 秒）
+                if (!audio.isConnected || retryCount >= 2) {
+                  console.log('🔄 旧连接已断开，等待新连接...');
+                  phase = 'waiting_connect';
+                  retryCount = 0;
+                  setTimeout(check, 500);
+                } else {
+                  retryCount++;
+                  setTimeout(check, 500);
+                }
+              } else {
+                // 阶段2：等待新连接建立
+                if (audio.isConnected) {
+                  console.log('✅ 新连接已建立');
+                  resolve(true);
+                } else if (retryCount >= maxRetries) {
+                  console.log('❌ 等待连接超时');
+                  resolve(false);
+                } else {
+                  retryCount++;
+                  setTimeout(check, 500);
+                }
+              }
+            };
+            check();
+          });
+        };
+
+        const connected = await waitForConnection();
+
+        if (connected) {
+          // 🔥 等待额外 300ms，确保 WebSocket 真正准备好（避免状态更新延迟）
+          await new Promise(resolve => setTimeout(resolve, 300));
+
+          // 🔍 调试：检查连接状态
+          console.log('🔍 发送前检查:');
+          console.log('  - audio.isConnected:', audio.isConnected);
+          console.log('  - audio.audioService:', audio.audioService ? '存在' : '不存在');
+
+          // 发送 start_session 以重新加载 voice_id
+          console.log('📤 发送 start_session 以重新加载角色音色');
+          const message = {
+            action: 'start_session',
+            input_type: 'text',
+            new_session: false,
+          };
+          console.log('📤 消息内容:', JSON.stringify(message));
+          audio.sendMessage(message);
+
+          console.log('✅ start_session 已调用');
+
+          Alert.alert('切换成功', `已切换到角色: ${name}\n\n新的语音已生效！`);
+        } else {
+          Alert.alert(
+            '切换成功',
+            `已切换到角色: ${name}\n\n但 WebSocket 连接建立失败，请检查网络后刷新页面。`,
+          );
+        }
       } else {
         Alert.alert('切换失败', res.error || '未知错误');
       }
@@ -454,7 +629,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     } finally {
       setCharacterLoading(false);
     }
-  }, [config]);
+  }, [config, applyQrRaw, audio]);
 
   // 手动打断 AI 播放
   const handleInterrupt = useCallback(() => {
