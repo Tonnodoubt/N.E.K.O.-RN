@@ -12,6 +12,9 @@
 4. [推荐方案详解](#4-推荐方案详解)
 5. [需要修改的文件](#5-需要修改的文件)
 6. [未解决的问题](#6-未解决的问题)
+7. [方案对比总结](#7-方案对比总结)
+8. [推荐落地路径](#8-推荐落地路径)
+9. [实施前置验证项](#9-实施前置验证项)
 
 ---
 
@@ -72,17 +75,45 @@ this.playbackStartSubscription = PCMStream.addListener('onPlaybackStart', (event
 
 ## 3. 实现方案
 
-### 方案 A：JS 层强制保持麦克风 + 振幅 VAD（推荐，快速上线）
+### 方案 A（修正版）：小改原生 + JS 层 VAD（推荐，快速上线）
 
-**原理**：在 `onPlaybackStart` 触发后，JS 层主动调用 `PCMStream.startRecording()` 覆盖原生的自动暂停，并监听麦克风振幅。振幅超过阈值时认为用户在说话，立即打断。
+> **⚠️ 原方案 A 已验证不可行**（见第 6 节 Q1、Q4 调查结论）。原方案假设 JS 层调用 `startRecording()` 可覆盖原生自动暂停，且 `onAmplitudeUpdate` 可用于录音 VAD，两者均不成立。以下为修正版。
 
-**流程**：
+**原理**：在原生层增加一个开关 API 关闭"播放时自动暂停麦克风"的行为，并增加录音振幅事件。JS 层利用录音振幅做 VAD，检测到用户说话时立即打断。
+
+**需要的原生改动（很小）**：
+
+```kotlin
+// 1. 新增 API：控制播放时是否自动暂停麦克风
+fun setMicPauseOnPlayback(enabled: Boolean) {
+    autoMicPauseEnabled = enabled
+}
+
+// 2. 在 pauseMicrophoneForPlayback() 中加判断
+private fun pauseMicrophoneForPlayback() {
+    if (!autoMicPauseEnabled) return  // 新增：开关关闭时跳过暂停
+    if (isRecording && !microphonePausedForPlayback) {
+        microphonePausedForPlayback = true
+        // ...
+    }
+}
+
+// 3. 在录音循环中增加录音振幅事件
+val amplitude = calculateAmplitude(audioData)
+sendEvent("onRecordingAmplitude", mapOf("amplitude" to amplitude))
+```
+
+**JS 层流程**：
 
 ```
+语音会话开始
+    → 调用 PCMStream.setMicPauseOnPlayback(false) 关闭自动暂停
+    → 正常录音...
+
 onPlaybackStart 触发
-    → JS 层调用 startRecording() 重新激活麦克风
-    → 监听 onAmplitudeUpdate 事件
-    → 振幅 > 设定阈值（例如 0.15）
+    → 麦克风继续录音（不再被自动暂停）
+    → 监听 onRecordingAmplitude 事件（录音振幅，非播放振幅）
+    → 录音振幅 > 设定阈值
     → 本地立即调用 stopPlayback()
     → 继续发送音频数据到服务端
     → 服务端收到新音频后发送 user_activity 确认
@@ -90,12 +121,14 @@ onPlaybackStart 触发
 ```
 
 **优点**：
-- 只改 JS 层，无需修改原生代码
-- 实现简单，改动集中
+- 原生改动极小（加一个 flag + 一个振幅事件），不涉及音频架构变更
+- VAD 逻辑在 JS 层，调试方便
+- 耳机场景可直接上线
 
 **缺点**：
 - 手机扬声器场景会有回声：AI 说话的声音被麦克风拾取，可能误触发打断
 - 需要仔细调校振幅阈值
+- 仍需少量原生代码修改
 
 **回声问题的缓解策略**：
 - 播放开始后的前 500ms 内忽略振幅（排除播放启动瞬间的冲击音）
@@ -108,13 +141,23 @@ onPlaybackStart 触发
 
 **原理**：在 Android 原生层开启 `VOICE_COMMUNICATION` 音频模式，启用硬件级声学回声消除（AEC）。同时让原生层在播放期间也持续录音并做 VAD（语音活动检测），一旦检测到人声就通过事件通知 JS 层。
 
-**需要在 `react-native-pcm-stream` 原生模块中增加**：
+> **关于 AEC 的复杂度澄清**：这里说的 AEC 不是自己写回声消除算法（那确实极其复杂，需要声纹采集 + 自适应滤波器），而是利用 Android 系统内置的硬件级 AEC。这和手机打电话开免提时用的是同一套回声消除机制——系统自动处理，不需要自己实现算法。核心改动就是切换音频模式。
+
+**需要在 `react-native-pcm-stream` 原生模块中修改**：
 
 ```kotlin
-// 开启 AEC 的音频模式
+// 1. 切换音频模式（核心，就这一行启用硬件 AEC）
 audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
 
-// 播放期间持续采集麦克风，做能量检测
+// 2. 切换 AudioAttributes（配合音频模式）
+// 当前：USAGE_MEDIA + CONTENT_TYPE_MUSIC（无 AEC）
+// 改为：USAGE_VOICE_COMMUNICATION + CONTENT_TYPE_SPEECH（启用 AEC）
+val attrib = AudioAttributes.Builder()
+    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+    .build()
+
+// 3. 播放期间持续采集麦克风，做能量检测
 // 如果能量超阈值，emit 事件：
 sendEvent("onUserSpeechDetectedDuringPlayback", null)
 ```
@@ -129,13 +172,15 @@ PCMStream.addListener('onUserSpeechDetectedDuringPlayback', () => {
 ```
 
 **优点**：
-- 硬件 AEC 彻底解决回声问题
+- 硬件 AEC 彻底解决回声问题（系统内置，不需要自己实现算法）
 - VAD 精度更高，假阳性率更低
 - 延迟最低（原生层直接处理）
+- 扬声器场景也能正常工作
 
 **缺点**：
 - 需要修改 Android 原生代码
 - 需要维护 native module 的 fork
+- `MODE_IN_COMMUNICATION` 可能影响音频输出质量（系统会优化为通话模式），需要实测
 
 ---
 
@@ -173,21 +218,57 @@ PCMStream.addListener('onUserSpeechDetectedDuringPlayback', () => {
 
 ## 4. 推荐方案详解
 
-**推荐：方案 A 作为快速上线版，方案 B 作为长期目标。**
+**推荐：方案 D 立即兜底，方案 A（修正版）快速上线，方案 B 作为长期目标。**
 
-### 4.1 方案 A 实现细节
+### 4.1 方案 A（修正版）实现细节
 
-#### 状态机
+#### 原生层改动（2 处）
+
+**改动 1**：在 `PCMStreamModule.kt` 增加 `setMicPauseOnPlayback(enabled)` API
+
+```kotlin
+// 新增变量
+@Volatile private var autoMicPauseEnabled = true  // 默认保持原有行为
+
+// 新增 API
+fun setMicPauseOnPlayback(enabled: Boolean) {
+    autoMicPauseEnabled = enabled
+    if (!enabled && microphonePausedForPlayback) {
+        // 如果关闭自动暂停，同时恢复当前被暂停的麦克风
+        microphonePausedForPlayback = false
+    }
+}
+
+// 修改 pauseMicrophoneForPlayback()
+private fun pauseMicrophoneForPlayback() {
+    if (!autoMicPauseEnabled) return  // 开关关闭时跳过
+    if (isRecording && !microphonePausedForPlayback) {
+        microphonePausedForPlayback = true
+        // ...
+    }
+}
+```
+
+**改动 2**：在录音循环中增加 `onRecordingAmplitude` 事件
+
+```kotlin
+// 在录音线程的数据处理循环中，每 ~50ms emit 一次录音振幅
+val amplitude = calculateRmsAmplitude(audioData)
+sendEvent("onRecordingAmplitude", mapOf("amplitude" to amplitude))
+```
+
+#### JS 层状态机
 
 ```
 idle
   │ startVoiceSession()
+  │ PCMStream.setMicPauseOnPlayback(false)  ← 新增
   ▼
 recording ──────────────────────────────────────────────────────┐
   │ onPlaybackStart                                             │
   ▼                                                            │
 recording_with_interrupt_listen                                  │
-  │ 振幅 > 阈值 或 onPlaybackStop                              │
+  │ onRecordingAmplitude > 阈值 或 onPlaybackStop              │
   ▼                                                            │
 recording ◄─────────────────────────────────────────────────────┘
 ```
@@ -197,9 +278,10 @@ recording ◄──────────────────────�
 播放期间麦克风的振幅会受到扬声器声音的干扰，需要动态基线：
 
 ```
-基线建立：onPlaybackStart 后 200ms，采集振幅均值作为"回声基线"
+基线建立：onPlaybackStart 后 200ms，采集 onRecordingAmplitude 均值作为"回声基线"
 打断条件：当前振幅 > 基线 × 3.0 AND 当前振幅 > 0.10（绝对下限）
 冷却期：打断触发后 500ms 内不再重复触发
+耳机场景：无回声，阈值直接设 0.10，无需动态基线
 ```
 
 #### onPlaybackStart 中的关键改动
@@ -212,9 +294,9 @@ this.feedbackControlStatus = '播放中-麦克风已暂停';
 
 需要改为（在 `audioServiceNative.ts` 中）：
 ```typescript
-// 播放开始后，重新激活麦克风以支持打断
-PCMStream.startRecording(recordSampleRate, recordFrameSize, recordTargetRate);
-// 开始监听振幅，准备客户端 VAD
+// 由于已调用 setMicPauseOnPlayback(false)，麦克风不会被自动暂停
+// 开始监听录音振幅，准备客户端 VAD
+this.feedbackControlStatus = '播放中-麦克风保持活跃';
 startInterruptListening();
 ```
 
@@ -245,11 +327,13 @@ startInterruptListening();
 
 ## 5. 需要修改的文件
 
-### 方案 A（JS 层，快速上线）
+### 方案 A 修正版（小改原生 + JS 层 VAD）
 
 | 文件 | 改动内容 | 优先级 |
 |------|---------|-------|
-| `packages/project-neko-audio-service/src/native/audioServiceNative.ts` | 在 `onPlaybackStart` 后重新激活录音；添加振幅 VAD 逻辑；触发打断时调用 `stopPlayback()` | P0 |
+| `packages/react-native-pcm-stream/.../PCMStreamModule.kt` | 新增 `setMicPauseOnPlayback(enabled)` API；新增 `autoMicPauseEnabled` 变量；修改 `pauseMicrophoneForPlayback()` 增加开关判断 | P0 |
+| `packages/react-native-pcm-stream/.../PCMStreamModule.kt` | 在录音循环中增加 `onRecordingAmplitude` 事件 emit | P0 |
+| `packages/project-neko-audio-service/src/native/audioServiceNative.ts` | 会话开始时调用 `setMicPauseOnPlayback(false)`；监听 `onRecordingAmplitude` 做 VAD；触发打断时调用 `stopPlayback()` | P0 |
 | `packages/project-neko-audio-service/src/types.ts` | 添加新的 AudioServiceState（如 `recording_interrupt_listening`）；添加 `onInterrupt` 事件类型 | P1 |
 | `packages/project-neko-audio-service/src/protocol.ts` | 添加客户端主动打断时的状态重置方法 | P1 |
 | `app/(tabs)/main.tsx` | 根据打断状态更新 UI（如显示"正在聆听..."提示） | P2 |
@@ -263,38 +347,165 @@ startInterruptListening();
 
 ---
 
-## 6. 未解决的问题
+## 6. 未解决的问题（已调查）
 
-在开始实现前，需要确认以下问题：
+以下问题已通过代码审查完成调查，结论如下：
 
 **Q1：`react-native-pcm-stream` 是否支持播放时同时录音？**
 
-原生模块目前在播放开始时自动暂停麦克风。这是模块内部的强制行为，还是可以通过参数关闭？如果是强制行为，方案 A 中通过 JS 层调用 `startRecording()` 能否成功覆盖，需要实际测试验证。
+> **结论：不支持。JS 层调用 `startRecording()` 也无法覆盖。**
+>
+> 原生模块 `PCMStreamModule.kt` 使用 `@Volatile microphonePausedForPlayback` 标志位控制。播放开始时，`PCMStreamPlayer.kt` 的 `onPlaybackStart` 回调调用 `pauseMicrophoneForPlayback()`，将此标志设为 `true`。录音线程虽然持续运行，但在循环中检查此标志——为 `true` 时直接 `Thread.sleep(32)` + `continue`，丢弃所有麦克风数据。
+>
+> 即使 JS 层重新调用 `startRecording()`，它只会先 `stopRecordingInternal()` 再启新线程，但标志位依然为 `true`（因为播放仍在进行），新线程同样会进入 sleep 循环。
+>
+> **影响**：原方案 A（纯 JS 层）不可行。修正版方案 A 需要在原生层增加 `setMicPauseOnPlayback(enabled)` 开关 API。
+>
+> 代码位置：
+> - 标志位定义：`PCMStreamModule.kt` L21-23
+> - 自动暂停：`PCMStreamPlayer.kt` L44-51 (`onPlaybackStart` → `pauseMicrophoneForPlayback()`)
+> - 录音循环检查：`PCMStreamModule.kt` L178-183（`if (microphonePausedForPlayback) { sleep; continue }`)
+> - 恢复路径：`onPlaybackCompleted` / `onPlaybackPaused` / `onError` / `stopPlaybackInternal`（4 个恢复点均已实现）
 
 **Q2：当前设备场景是扬声器还是耳机？**
 
-- **耳机**：回声几乎为零，方案 A 可以直接上线，振幅阈值设 0.10 左右即可
-- **扬声器**：必须做动态基线或使用方案 B（AEC），否则 AI 自己的声音会触发打断
+> **决定：先用耳机验证整条链路，后续扬声器场景通过方案 B（硬件 AEC）解决。**
+>
+> 耳机场景回声几乎为零，VAD 阈值可直接设 0.10，无需动态基线。这使得方案 A 修正版在耳机场景下可以直接上线。
+>
+> 扬声器场景的回声误触发问题，动态基线 + 阈值只能缓解不能根治，最终需要方案 B 的硬件 AEC 彻底解决。
 
 **Q3：服务端是否在收到新音频后会正确中断当前响应？**
 
-服务端需要满足：收到用户新音频帧时，能够丢弃当前正在生成的 TTS 任务，发出 `user_activity`，并开始处理新的用户输入。如果服务端不支持，打断只是本地停止播放，没有真正的"AI 停止思考"效果。
+> **结论：客户端侧协议已完整实现，服务端大概率已支持，但需实测验证。**
+>
+> 客户端侧的证据：
+> - `audioServiceNative.ts` L120-123：收到 `user_activity` 后立即调用 `stopPlayback()`
+> - `protocol.ts` 的 `SpeechInterruptController`：
+>   - `onUserActivity(interruptedSpeechId)` → 设 `pendingDecoderReset = true`，标记被打断的 speech_id
+>   - `onAudioChunk(speechId)` → 如果 speech_id 匹配被打断的 → `skipNextBinary = true`（丢弃旧音频）；如果是新 speech_id → 重置解码器，接受新音频
+>   - `getSkipNextBinary()` → `handleIncomingBinary()` 中用此判断是否丢弃二进制数据
+>
+> 设计文档已明确指出"这条路径在代码里是完整的"。真正的阻塞点不是服务端是否支持打断，而是麦克风被静音导致服务端收不到音频、根本无法触发检测。一旦解决麦克风问题，此路径应能直接跑通。建议在耳机测试时一并验证。
 
 **Q4：`onAmplitudeUpdate` 事件在播放期间是否还会触发？**
 
-如果原生层在暂停麦克风的同时也停止发送 `onAmplitudeUpdate`，那么方案 A 的振幅 VAD 方法需要调整为在 JS 层重新调用录音，而不是仅依赖振幅事件。
+> **结论：会触发，但它报告的是播放振幅（用于口型同步），不是录音振幅。不能用于用户语音检测。**
+>
+> `onAmplitudeUpdate` 来自 `PCMStreamPlayer.kt` L396-402，是对输出的播放 PCM 数据计算 RMS 振幅，约每 16ms 触发一次，用于 Live2D 口型同步。它与麦克风录音完全无关。
+>
+> **影响**：原方案 A 设计中"监听 `onAmplitudeUpdate` 做 VAD"的思路有误。修正版方案 A 需要在原生录音循环中新增 `onRecordingAmplitude` 事件来报告录音侧振幅。
+
+---
+
+## 7. 方案对比总结
+
+| 方案 | 核心思路 | 改动范围 | 回声处理 | 落地速度 |
+|------|---------|---------|---------|---------|
+| **A 修正版: 小改原生 + JS VAD** | 原生加开关关闭自动暂停 + 录音振幅事件，JS 层做 VAD | 原生小改 + JS 层 | 动态基线 + 阈值（耳机场景足够） | 较快 |
+| **B: 原生 AEC + VAD** | Android 原生开启硬件回声消除，原生层做 VAD | 需改原生模块 | 硬件 AEC（彻底） | 中等 |
+| **C: 服务端 AEC** | 客户端始终上传音频，服务端自己做回声消除和 VAD | 依赖服务端 | 服务端处理 | 慢（依赖后端） |
+| **D: 手动按钮** | UI 上加打断按钮 | 仅 UI 层 | 无需 | 最快 |
+
+> **注**：原方案 A（纯 JS 层）已验证不可行——JS 调 `startRecording()` 无法覆盖原生自动暂停，且 `onAmplitudeUpdate` 是播放振幅而非录音振幅。上表中的"A 修正版"是在原方案基础上增加了必要的原生改动。
+
+---
+
+## 8. 推荐落地路径
+
+**D → A（修正版） → B，逐步递进。**
+
+### 第一步：方案 D 兜底（P0，立即可做）
+
+- 在 AI 播放时显示一个打断按钮，点击调用 `audioService.stopPlayback()`
+- 改动极小，纯 UI 层，可以立即上线，保证用户至少有办法打断
+- 即使后续自动打断上线，手动按钮仍有保留价值（嘈杂环境、VAD 误判等场景）
+- 涉及文件：`app/(tabs)/main.tsx`，在 `Live2DRightToolbar` 或 `ChatContainer` 添加按钮
+
+### 第二步：方案 A 修正版快速上线（P1，需小改原生）
+
+> ⚠️ 原方案 A（纯 JS 层）已验证不可行（见第 6 节 Q1、Q4 调查结论），修正版需要两处小的原生改动。
+
+**原生改动（工作量小）**：
+
+| 改动 | 文件 | 内容 |
+|------|------|------|
+| 1. 加开关 API | `PCMStreamModule.kt` | 暴露 `setMicPauseOnPlayback(enabled)` 方法，控制 `microphonePausedForPlayback` 的自动设置行为 |
+| 2. 加录音振幅事件 | `PCMStreamModule.kt` | 在录音循环中增加录音振幅计算，emit `onRecordingAmplitude` 事件 |
+
+**JS 层改动**：
+- 语音会话开始时调用 `PCMStream.setMicPauseOnPlayback(false)` 关闭自动暂停
+- 监听 `onRecordingAmplitude`（不是 `onAmplitudeUpdate`）做 VAD
+- 检测到用户说话 → 调用 `stopPlayback()`
+
+**适用场景**：耳机场景可直接上线（无回声问题）。扬声器场景需要动态基线调参，效果可能不够稳定。
+
+### 第三步：方案 B 长期目标（P2，扬声器场景）
+
+- 修改 `react-native-pcm-stream` 原生模块，开启 `MODE_IN_COMMUNICATION` + 硬件 AEC
+- 彻底解决扬声器回声问题，VAD 精度最高、延迟最低
+- 当前原生代码使用 `USAGE_MEDIA` + `CONTENT_TYPE_MUSIC`（`PCMStreamPlayer.kt` L107-110），无硬件 AEC
+
+### 不推荐优先考虑的方案
+
+**方案 C（服务端 AEC）**：增加上行流量（播放时也在上传麦克风数据）、延迟更高（需要一个网络往返）、且依赖后端改动。客户端可控性低，不建议优先。
+
+---
+
+## 9. 实施前置验证项（已完成代码审查，部分需实测）
+
+通过代码审查已确认大部分问题，剩余需实测验证的标注如下：
+
+### 验证 1：播放期间能否重开麦克风（对应 Q1）— ✅ 已确认
+
+**结论：不能。** 原生层使用 `microphonePausedForPlayback` 标志位强制互斥，JS 层无法覆盖。
+
+**解决方案**：在原生层增加 `setMicPauseOnPlayback(enabled)` API，允许 JS 层关闭自动暂停行为。改动量小，不涉及音频架构变更。
+
+### 验证 2：播放期间振幅事件是否触发（对应 Q4）— ✅ 已确认
+
+**结论：`onAmplitudeUpdate` 会触发，但它是播放振幅（用于口型同步），不是录音振幅。**
+
+`onAmplitudeUpdate` 来自 `PCMStreamPlayer.kt` 的播放数据 RMS 计算，与麦克风无关。
+
+**解决方案**：在录音循环中新增 `onRecordingAmplitude` 事件，report 录音侧的 RMS 振幅。
+
+### 验证 3：服务端打断行为（对应 Q3）— ⏳ 需实测
+
+**代码审查结论：客户端侧协议完整，服务端大概率支持。**
+
+客户端已实现完整的 `user_activity` → `SpeechInterruptController` → 丢弃旧音频 → 接受新音频的流程。设计文档确认"这条路径在代码里是完整的"。
+
+**仍需实测确认**：服务端收到用户新音频帧后是否能正确丢弃当前 TTS、发出 `user_activity`、开始处理新输入。建议在耳机测试方案 A 修正版时一并验证。
+
+### 验证 4：耳机/扬声器检测（对应 Q2）— ✅ 已决定
+
+**决定：先耳机，后扬声器。**
+
+- 耳机场景：无回声，方案 A 修正版可直接上线
+- 扬声器场景：后续通过方案 B（硬件 AEC）解决
 
 ---
 
 ## 附：相关文件速查
 
 ```
-services/android.pcmstream.native.ts      — Android 录音/播放核心
+原生模块（需改动）：
+packages/react-native-pcm-stream/android/src/main/java/expo/modules/pcmstream/
+  PCMStreamModule.kt                    — 录音核心（microphonePausedForPlayback 标志位在此）
+  PCMStreamPlayer.kt                    — 播放核心（onPlaybackStart 自动暂停麦克风在此）
+
+TypeScript 服务层：
+services/android.pcmstream.native.ts      — Android 录音/播放 TS 封装
 packages/project-neko-audio-service/
   src/native/audioServiceNative.ts        — 语音会话管理、打断协调
   src/protocol.ts                         — SpeechInterruptController
   src/types.ts                            — 接口定义
+
+应用层：
 hooks/useAudio.ts                         — React Hook 集成层
 app/(tabs)/main.tsx                       — 主界面，状态驱动 UI
+
+文档：
 docs/specs/websocket.md                   — WebSocket 消息协议
 ```

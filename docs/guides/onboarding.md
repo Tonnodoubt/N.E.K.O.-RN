@@ -28,7 +28,7 @@ N.E.K.O.-RN 是一个 **React Native 移动端应用**，核心功能是：
 
 | 工具 | 版本要求 | 验证命令 |
 |------|---------|---------|
-| Node.js | `>=20` 或 `>=22` | `node -v` |
+| Node.js | `>=20` | `node -v` |
 | Android Studio | 最新版 | - |
 | JDK | **17**（不能用其他版本） | `java -version` |
 | adb | 随 Android Studio 安装 | `adb version` |
@@ -52,18 +52,41 @@ export PATH="$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin"
 export PATH="$PATH:$ANDROID_SDK_ROOT/emulator"
 ```
 
+写完记得 `source ~/.zshrc`。
+
 ---
 
 ## 第三步：把项目跑起来
 
-### 3.1 克隆
+### 3.1 克隆（submodule 必须一起拉）
 
 ```bash
-git clone --recurse-submodules <仓库地址>
+git clone --recurse-submodules <仓库地址> -b RN
 cd N.E.K.O.-RN
 ```
 
-> `--recurse-submodules` 很重要，`packages/` 下的原生模块是 git submodule，不带这个参数会缺少原生代码。
+> ⚠️ **`--recurse-submodules` 非常关键。**
+> `packages/react-native-pcm-stream` 和 `packages/react-native-live2d` 是 git submodule，
+> 不带这个参数克隆下来是**空目录**，编译会直接报错。
+
+如果已经克隆但忘了带该参数，补跑：
+
+```bash
+git submodule update --init --recursive
+```
+
+克隆完成后，验证 pcm-stream 在正确的分支：
+
+```bash
+git -C packages/react-native-pcm-stream branch
+# 应该显示 * fix-audio-echo
+```
+
+如果显示的不是 `fix-audio-echo`，手动切：
+
+```bash
+git -C packages/react-native-pcm-stream checkout fix-audio-echo
+```
 
 ### 3.2 安装依赖
 
@@ -71,42 +94,69 @@ cd N.E.K.O.-RN
 npm install
 ```
 
-### 3.3 第一次构建开发版 APK（约 10 分钟，只做一次）
+### 3.3 生成原生工程（首次必做，之后改原生代码时重做）
 
 ```bash
-# 生成原生工程
 npx expo prebuild --platform android --clean
-npm install  # prebuild 后再装一次，确保原生依赖同步
-
-# 本地构建 APK（需要 Android Studio 环境）
-npx eas build --profile development --platform android --local
+npm install   # prebuild 后再装一次，确保原生依赖同步
 ```
 
-构建完成后把 APK 安装到手机：
+> 这一步会生成 `android/` 目录（包含 Gradle 工程）。
+
+### 3.4 本地编译 APK
 
 ```bash
-adb install build-*.apk
+cd android
+./gradlew assembleDebug
+cd ..
 ```
 
-### 3.4 日常开发（无需重新构建 APK）
+APK 输出在：`android/app/build/outputs/apk/debug/app-debug.apk`
+
+安装到手机：
+
+```bash
+adb install android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+或者直接用项目脚本（会自动卸载旧版再装）：
+
+```bash
+bash scripts/install-apk.sh
+```
+
+### 3.5 日常开发（无需重新编译 APK）
 
 ```bash
 # 启动 Metro 开发服务器
-npx expo start --dev-client
+npm start
 ```
 
-手机打开刚安装的 N.E.K.O 开发版 App → 扫码 → 连接成功。
+手机打开刚安装的 N.E.K.O. App → 扫码 → 连接成功。
 
-之后改 TypeScript 代码，**保存即生效**，无需重新构建。
+之后改 TypeScript/JavaScript 代码，**保存即生效**，无需重新编译 APK。
 
-### 3.5 何时需要重新构建 APK
+### 3.6 何时需要重新编译 APK
 
-| 需要重新构建 | 不需要 |
+| 需要重新编译 | 不需要 |
 |------------|-------|
-| 修改 `android/` 原生代码 | 修改 `app/`、`components/`、`hooks/` |
+| 修改 `android/` 原生代码（Kotlin） | 修改 `app/`、`components/`、`hooks/` |
 | 修改 `packages/react-native-*`（原生模块） | 修改 `packages/project-neko-*`（纯 JS 包） |
 | `package.json` 新增原生依赖 | 修改 `services/`、`utils/` |
-| 修改 `app.config.ts` | 修改 `packages/project-neko-*` |
+| 修改 `app.config.ts` | 修改样式文件 |
+
+重新编译（不需要重新 prebuild）：
+
+```bash
+cd android && ./gradlew assembleDebug && cd ..
+bash scripts/install-apk.sh
+```
+
+如果遇到奇怪的编译问题，用完整重建脚本（清缓存 + 重编 + 装机）：
+
+```bash
+bash scripts/force-rebuild.sh
+```
 
 ---
 
@@ -137,6 +187,8 @@ N.E.K.O.-RN/
 ├── utils/
 │   └── MainManager.ts          # ⭐ 主协调层（连接 Audio + Live2D）
 │
+├── android/                    # 原生 Android 工程（由 prebuild 生成，不要手改）
+│
 └── packages/                   # 内部包（部分是 git submodule）
     ├── project-neko-audio-service/   # ⭐ 语音会话核心逻辑
     │   └── src/
@@ -144,8 +196,8 @@ N.E.K.O.-RN/
     │       └── protocol.ts                   # 打断状态机
     ├── project-neko-components/      # 跨平台 UI 组件库
     ├── project-neko-realtime/        # WebSocket 封装
-    ├── react-native-live2d/          # Live2D 原生模块（submodule）
-    └── react-native-pcm-stream/      # 音频原生模块（submodule）
+    ├── react-native-live2d/          # Live2D 原生模块（submodule → main）
+    └── react-native-pcm-stream/      # 音频原生模块（submodule → fix-audio-echo）
 ```
 
 ### 数据流：一次语音对话的完整链路
@@ -187,8 +239,6 @@ WebSocket 连接管理。改连接逻辑看这里。
 
 ## 第六步：项目当前状态
 
-参考 [ROADMAP.md](../ROADMAP.md) 了解完整规划。
-
 ### 已完成（可以直接用）
 
 - Live2D 角色加载、点击交互、口型同步
@@ -197,36 +247,42 @@ WebSocket 连接管理。改连接逻辑看这里。
 - WebSocket 自动重连、心跳保活
 - QR 扫码快速连接后端
 
-### 进行中（P0，优先开发）
+### 正在修复（P0，阻塞内测）
 
-- **语音打断**：AI 说话时用户可以开口打断（设计文档：[specs/voice-interrupt.md](../specs/voice-interrupt.md)）
-- **后台音频播放**：App 切后台时音频不中断
+- **语音打断 bug**：AI 说话时打断后有音频残留，麦克风存在死锁问题
+  - 设计文档：[specs/voice-interrupt.md](../specs/voice-interrupt.md)
 
-### 待开始
+### 接下来要做
 
-- 角色管理页面（对齐主项目功能）
-- iOS 平台支持
-- 设置页完善
+- 角色切换（轻量选择器）
+- 图片发送（相册 + 拍照）
+- 后台音频（切 App 不断话）
 
 ---
 
 ## 第七步：常用开发命令
 
 ```bash
-# 启动开发服务器（日常最常用）
-npx expo start --dev-client
+# 日常启动开发服务器
+npm start
 
 # 清缓存启动（遇到奇怪问题先试这个）
 npx expo start --dev-client --clear
+
+# 本地编译 APK
+cd android && ./gradlew assembleDebug && cd ..
+
+# 编译 + 安装一步完成
+cd android && ./gradlew assembleDebug && cd .. && bash scripts/install-apk.sh
+
+# 完整重建（清缓存 + 重编 + 装机）
+bash scripts/force-rebuild.sh
 
 # 类型检查（提交前跑一下）
 npm run typecheck
 
 # 同步主项目的 packages（有上游更新时用）
 npm run sync:neko-packages
-
-# 查看同步内容但不执行
-npm run sync:neko-packages:dry
 ```
 
 ---
@@ -251,11 +307,48 @@ npm run sync:neko-packages:dry
 
 ## 常见问题
 
-### Q：`npm install` 后 Metro 报找不到原生模块？
+### Q：克隆后编译报找不到原生模块？
+
+十有八九是 submodule 没拉下来：
+
+```bash
+git submodule update --init --recursive
+# 验证
+git -C packages/react-native-pcm-stream branch
+# 应显示 * fix-audio-echo
+```
+
+### Q：音频有问题（播放异常 / 截断 / 回声）？
+
+确认 `react-native-pcm-stream` 在 `fix-audio-echo` 分支，这个分支包含关键音频修复：
+
+```bash
+git -C packages/react-native-pcm-stream log --oneline -3
+# 第一行应该是 fix: 修复 AI 语音最后几个字被截断并误识别为用户输入的问题
+```
+
+如果不是，切过去再重新编译 APK：
+
+```bash
+git -C packages/react-native-pcm-stream checkout fix-audio-echo
+cd android && ./gradlew assembleDebug && cd ..
+bash scripts/install-apk.sh
+```
+
+### Q：Metro 报找不到模块？
 
 ```bash
 npx expo prebuild --platform android --clean
 npm install
+```
+
+### Q：修改了 `packages/react-native-*` 下的原生代码没生效？
+
+原生模块需要重新编译 APK：
+
+```bash
+cd android && ./gradlew assembleDebug && cd ..
+bash scripts/install-apk.sh
 ```
 
 ### Q：手机扫码后连不上开发服务器？
@@ -264,20 +357,15 @@ npm install
 2. 检查系统防火墙是否放通 8081 端口
 3. 换 tunnel 模式：`npx expo start --dev-client --tunnel`
 
-### Q：修改了 `packages/react-native-*` 下的原生代码没生效？
+### Q：Gradle 编译报 JDK 版本错误？
 
-这些是原生模块，需要重新构建 APK：
-```bash
-npx expo prebuild --platform android --clean
-npx eas build --profile development --platform android --local
-```
-
-### Q：`git submodule` 相关报错？
+必须用 JDK 17，检查：
 
 ```bash
-git submodule init
-git submodule update
+java -version   # 应显示 17.x
 ```
+
+如果不是，在 Android Studio → Settings → Build Tools → Gradle → Gradle JDK 里切换到 17。
 
 ---
 

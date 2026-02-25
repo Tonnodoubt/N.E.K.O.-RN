@@ -20,7 +20,9 @@ npm install
 # Android（真机，本地出 APK）
 npx expo prebuild --platform android --clean
 npm i
-npx eas build --profile development --platform android --local
+cd android && ./gradlew assembleDebug && cd ..
+# APK 在 android/app/build/outputs/apk/debug/app-debug.apk
+bash scripts/install-apk.sh
 
 # Metro
 npm start

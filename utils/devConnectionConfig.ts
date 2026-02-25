@@ -5,9 +5,9 @@ export type DevConnectionConfig = {
 };
 
 export const DEFAULT_DEV_CONNECTION_CONFIG: DevConnectionConfig = {
-  host: '127.0.0.1',
-  port: 48911,
-  characterName: 'test',
+  host: process.env.EXPO_PUBLIC_DEV_HOST || '192.168.77.252',
+  port: Number(process.env.EXPO_PUBLIC_DEV_PORT) || 48911,
+  characterName: process.env.EXPO_PUBLIC_DEV_CHARACTER || 'test',
 };
 
 export function parseDevConnectionConfig(raw: string): Partial<DevConnectionConfig> | null {
