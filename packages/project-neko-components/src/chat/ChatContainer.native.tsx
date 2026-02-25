@@ -108,6 +108,7 @@ export default function ChatContainer({
   disabled = false,
   statusText,
   cameraEnabled = false, // 相机功能默认禁用，需要集成 react-native-image-picker 后启用
+  renderFloatingOverlay,
 }: ChatContainerProps = {}) {
   const t = useT();
 
@@ -544,6 +545,16 @@ export default function ChatContainer({
               </View>
             </View>
           </TouchableWithoutFeedback>
+
+          {/* 浮动覆盖层插槽（如打断按钮）：绝对定位在 Modal 内，pointer-events 穿透空白区域 */}
+          {renderFloatingOverlay && (
+            <View
+              style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+              pointerEvents="box-none"
+            >
+              {renderFloatingOverlay()}
+            </View>
+          )}
         </View>
       </TouchableWithoutFeedback>
     </Modal>

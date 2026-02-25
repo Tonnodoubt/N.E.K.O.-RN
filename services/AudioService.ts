@@ -65,6 +65,9 @@ export class AudioService {
   private isRecording: boolean = false;
   private lastSpeechDetectedAt: number = 0;
   private lastKnownOutputAmp: number = 0;
+  // AI 语音句间停顿时保持 isPlaying=true，停顿超过此时长才认为播放结束
+  private lastOutputAmpPositiveAt: number = 0;
+  private static readonly PLAYBACK_HOLD_MS = 1500;
 
   constructor(config: AudioServiceConfig) {
     this.config = config;
@@ -192,6 +195,9 @@ export class AudioService {
 
         (this.audioService as any).on('outputAmplitude', ({ amplitude }: any) => {
           this.lastKnownOutputAmp = typeof amplitude === 'number' ? amplitude : 0;
+          if (this.lastKnownOutputAmp > 0.01) {
+            this.lastOutputAmpPositiveAt = Date.now();
+          }
         });
       }
 
@@ -446,6 +452,9 @@ export class AudioService {
       return;
     }
     this.audioService.stopPlayback();
+    // 立即重置 hold 计时器，让按钮马上消失
+    this.lastKnownOutputAmp = 0;
+    this.lastOutputAmpPositiveAt = 0;
     console.log('🧹 已停止播放并清空队列（audio-service）');
   }
 
@@ -461,6 +470,8 @@ export class AudioService {
     // 精确打断由 audio-service 在收到 user_activity/audio_chunk 时自动执行；
     // 这里保留外部主动打断入口（UI/业务触发）
     this.audioService.stopPlayback();
+    this.lastKnownOutputAmp = 0;
+    this.lastOutputAmpPositiveAt = 0;
     this.lastSpeechDetectedAt = Date.now();
     console.log('🎤 主动打断：stopPlayback()');
   }
@@ -490,7 +501,8 @@ export class AudioService {
       sendCount: 0,
       tempBufferLength: 0,
       isStreaming: this.isRecording,
-      isPlaying: this.lastKnownOutputAmp > 0.01,
+      isPlaying: this.lastKnownOutputAmp > 0.01 ||
+        (now - this.lastOutputAmpPositiveAt < AudioService.PLAYBACK_HOLD_MS),
       feedbackControlStatus: Platform.OS === 'web' ? 'WebAudio' : 'PCMStream',
       isSpeechDetected: recentlyDetected,
     };

@@ -1,3 +1,5 @@
+import type React from 'react';
+
 export type ChatMessage = {
   id: string;
   role: "system" | "user" | "assistant";
@@ -77,4 +79,10 @@ export interface ChatContainerProps {
    * 默认为 false（相机功能需要集成 react-native-image-picker 或 expo-image-picker）
    */
   cameraEnabled?: boolean;
+
+  /**
+   * 浮动覆盖层渲染函数（RN 专用）
+   * 用于在 Modal 展开态内部渲染浮动元素（如打断按钮），使其能显示在聊天面板上方
+   */
+  renderFloatingOverlay?: () => React.ReactNode;
 }

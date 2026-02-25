@@ -456,6 +456,11 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     }
   }, [config]);
 
+  // 手动打断 AI 播放
+  const handleInterrupt = useCallback(() => {
+    audio.clearAudioQueue();
+  }, [audio.clearAudioQueue]);
+
   // 确保 text session 已启动（与 Web 端一致的 Legacy 协议）
   const ensureTextSession = useCallback(async (): Promise<boolean> => {
     // 如果已经有活跃的 text session，直接返回
@@ -673,6 +678,20 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
           connectionStatus={connectionStatus}
           onSendMessage={handleSendMessage}
           disabled={!audio.isConnected}
+          renderFloatingOverlay={() =>
+            audio.audioStats.isPlaying && audio.isConnected && !toolbarGoodbyeMode ? (
+              <View style={styles.interruptButtonWrapper} pointerEvents="box-none">
+                <TouchableOpacity
+                  style={styles.interruptButton}
+                  onPress={handleInterrupt}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.interruptIcon}>■</Text>
+                  <Text style={styles.interruptLabel}>打断</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null
+          }
         />
       </View>
 
@@ -728,6 +747,20 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
+
+      {/* 手动打断按钮：聊天面板收起时的绝对定位浮层（展开时由 renderFloatingOverlay 接管） */}
+      {audio.audioStats.isPlaying && audio.isConnected && !toolbarGoodbyeMode && (
+        <View style={styles.interruptButtonWrapper} pointerEvents="box-none">
+          <TouchableOpacity
+            style={styles.interruptButton}
+            onPress={handleInterrupt}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.interruptIcon}>■</Text>
+            <Text style={styles.interruptLabel}>打断</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
@@ -769,6 +802,34 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 100,
+    elevation: 100,
+  },
+  interruptButtonWrapper: {
+    position: 'absolute',
+    bottom: 100,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 200,
+    elevation: 200,
+  },
+  interruptButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(220, 50, 50, 0.85)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 24,
+    gap: 6,
+  },
+  interruptIcon: {
+    color: '#fff',
+    fontSize: 14,
+  },
+  interruptLabel: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   characterModalOverlay: {
     flex: 1,
