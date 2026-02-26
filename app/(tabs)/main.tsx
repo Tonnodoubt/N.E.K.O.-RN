@@ -133,6 +133,19 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
             await setConfig({ ...config, characterName: res.current_catgirl });
           }
           await syncLive2dModel(res.current_catgirl);
+
+          // 发送 start_session 以同步角色音色
+          setTimeout(() => {
+            if (audio.isConnected) {
+              console.log('📤 发送 start_session 以同步角色音色');
+              audio.sendMessage({
+                action: 'start_session',
+                input_type: 'text',
+                audio_format: 'PCM_48000HZ_MONO_16BIT',
+                new_session: false,
+              });
+            }
+          }, 500);
         }
       } catch {
         // 网络不通时降级：用本地缓存初始化 UI
@@ -216,6 +229,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     host: config.host,
     port: config.port,
     characterName: config.characterName,
+    isSwitchingRef: isSwitchingCharacterRef,  // 传入角色切换标志，用于在切换期间忽略错误
     onMessage: async (event) => {
       // 二进制音频数据已由 @project_neko/audio-service 自动播放（通过 Realtime binary 事件接管）
       // 这里仅保留文本消息处理逻辑
@@ -288,6 +302,8 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         setCharacterLoading(true);
         isSwitchingCharacterRef.current = true;
         setCurrentCatgirl(result.characterName);
+        // 角色切换时重置 text session 状态，确保下次发送消息时重新初始化 session
+        setIsTextSessionActive(false);
         await setConfig({ ...config, characterName: result.characterName });
         await syncLive2dModel(result.characterName);
       }
@@ -296,10 +312,25 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       if (connected) {
         chat.addMessage('已连接到服务器', 'system');
         if (isSwitchingCharacterRef.current) {
-          isSwitchingCharacterRef.current = false;
+          // 发送 start_session 以重新加载角色音色
+          console.log('📤 发送 start_session 以重新加载角色音色');
+          audio.sendMessage({
+            action: 'start_session',
+            input_type: 'text',
+            audio_format: 'PCM_48000HZ_MONO_16BIT',
+            new_session: false,
+          });
+          console.log('✅ start_session 已调用');
+
+          // 延迟重置角色切换标志，给旧连接足够时间清理
+          // 旧 WebSocket 关闭时可能会延迟触发 error 事件，需要延迟重置标志
+          setTimeout(() => {
+            isSwitchingCharacterRef.current = false;
+            console.log('🔄 角色切换标志已重置');
+          }, 2000);  // 延迟 2 秒
           setCharacterLoading(false);
           setIsChatForceCollapsed(false);
-          Alert.alert('切换成功', `已切换到角色: ${config.characterName}`);
+          Alert.alert('切换成功', `已切换到角色: ${config.characterName}\n\n新的语音已生效！`);
         }
       } else {
         chat.addMessage('与服务器断开连接', 'system');
@@ -310,7 +341,10 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   });
 
   // 将 audio.connectionStatus 映射到 ConnectionStatus 类型
-  const connectionStatus: ConnectionStatus = audio.isConnected ? 'open' : 'closed';
+  // 在角色切换期间，保持 'open' 状态，避免显示断开错误
+  const connectionStatus: ConnectionStatus = isSwitchingCharacterRef.current
+    ? 'open'
+    : (audio.isConnected ? 'open' : 'closed');
 
   const live2d = useLive2D({
     modelName: live2dModel.name,
@@ -567,10 +601,11 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       sessionStartedResolverRef.current = resolve;
 
       // 发送 start_session（Legacy 协议）
-      console.log('📤 发送 start_session(input_type: text)');
+      console.log('📤 发送 start_session(input_type: text, audio_format: PCM_48000HZ_MONO_16BIT)');
       audio.sendMessage({
         action: 'start_session',
         input_type: 'text',
+        audio_format: 'PCM_48000HZ_MONO_16BIT',
         new_session: false,
       });
 
