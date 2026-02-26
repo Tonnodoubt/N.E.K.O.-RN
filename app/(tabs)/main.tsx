@@ -352,6 +352,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
               audio.sendMessage({
                 action: 'start_session',
                 input_type: 'text',
+                audio_format: 'PCM_48000HZ_MONO_16BIT',
                 new_session: false,
               });
             }
@@ -607,6 +608,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
           const message = {
             action: 'start_session',
             input_type: 'text',
+            audio_format: 'PCM_48000HZ_MONO_16BIT',
             new_session: false,
           };
           console.log('📤 消息内容:', JSON.stringify(message));
@@ -664,10 +666,11 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       sessionStartedResolverRef.current = resolve;
 
       // 发送 start_session（Legacy 协议）
-      console.log('📤 发送 start_session(input_type: text)');
+      console.log('📤 发送 start_session(input_type: text, audio_format: PCM_48000HZ_MONO_16BIT)');
       audio.sendMessage({
         action: 'start_session',
         input_type: 'text',
+        audio_format: 'PCM_48000HZ_MONO_16BIT',
         new_session: false,
       });
 
