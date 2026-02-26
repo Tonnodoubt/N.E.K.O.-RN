@@ -827,7 +827,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       </Modal>
 
       {/* 手动打断按钮：聊天面板收起时的绝对定位浮层（展开时由 renderFloatingOverlay 接管） */}
-      {audio.audioStats.isPlaying && audio.isConnected && !toolbarGoodbyeMode && (
+      {isChatForceCollapsed && audio.audioStats.isPlaying && audio.isConnected && !toolbarGoodbyeMode && (
         <View style={styles.interruptButtonWrapper} pointerEvents="box-none">
           <TouchableOpacity
             style={styles.interruptButton}
