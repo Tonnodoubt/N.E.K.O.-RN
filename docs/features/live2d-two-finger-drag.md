@@ -351,9 +351,9 @@ const dragGesture = useMemo(() => {
     .onUpdate((e) => {
       const start = dragStartPositionRef.current;
       if (!start) return;
-      // 大幅降低灵敏度：手指移动整个屏幕距离，模型仅移动 0.3 个逻辑单位
-      // 乘数越小灵敏度越低，0.3 = 低灵敏度（需要大幅度拖动才能移动模型）
-      const sensitivity = 0.3;
+      // 大幅降低灵敏度：手指移动整个屏幕距离，模型仅移动 0.005 个逻辑单位
+      // 乘数越小灵敏度越低，0.005 = 低灵敏度（需要大幅度拖动才能移动模型）
+      const sensitivity = 0.005;
       const newX = clampPos(start.x + (e.translationX / screenWidth) * sensitivity);
       const newY = clampPos(start.y - (e.translationY / screenHeight) * sensitivity);
       // 更新当前位置 ref，供下次拖动使用
