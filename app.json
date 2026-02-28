@@ -2,7 +2,7 @@
   "expo": {
     "name": "N.E.K.O.-RN",
     "slug": "neko-rn",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "nekorn",
@@ -18,7 +18,7 @@
         "NSCameraUsageDescription": "需要使用相机扫描二维码进行开发配置"
       },
       "bundleIdentifier": "com.neko.app",
-      "buildNumber": "1"
+      "buildNumber": "1.1.0"
     },
     "android": {
       "adaptiveIcon": {
@@ -38,7 +38,7 @@
       ],
       "usesCleartextTraffic": false,
       "package": "com.neko.app",
-      "versionCode": 1
+      "versionCode": 2
     },
     "web": {
       "output": "static",
