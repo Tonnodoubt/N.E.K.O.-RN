@@ -84,7 +84,7 @@ modelY = startModelY - (translationY / screenHeight) * sensitivity   ← 注意�
 
 **Android**：[ReactNativeLive2dView.kt](../../packages/react-native-live2d/android/src/main/java/expo/modules/live2d/ReactNativeLive2dView.kt):878 的 `onTouchEvent` 返回 `true`，消费所有触摸事件。
 
-**解决方案**：在 Live2D View **之上**叠加透明 overlay 承载手势，overlay 不设置 `pointerEvents`（默认 `auto`）。RNGH v2 的 Pan 手势在未激活期间不独占事件，单指短按可以穿透到 Live2D View 的 native touch handler；双指长按激活后才独占后续事件。
+**解决方案**：使用 `GestureDetector` 包裹整个 `live2dContainer`（包含 `ReactNativeLive2dView`），而不是叠加透明层。RNGH 会正确处理手势检测和事件传递：单指触摸由 Live2D View 的 native `onTouchEvent` 处理（眼睛跟随），双指手势由 GestureDetector 检测。
 
 ### onTap 副作用
 
