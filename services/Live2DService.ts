@@ -96,6 +96,7 @@ export class Live2DService {
   private modelBaseUrl: string;
   private core: CoreLive2DService;
   private lastLoadingFlag: boolean | null = null;
+  private hasWarnedAboutSetViewPosition: boolean = false;
 
   constructor(config: Live2DServiceConfig) {
     this.config = {
@@ -403,28 +404,50 @@ export class Live2DService {
    * 设置缩放
    */
   setScale(scale: number): void {
-    console.log('🔍 设置缩放:', scale);
-    void this.core.setTransform({ scale } as Transform);
+    // 直接调用 native module，不走 setTransform → React 重渲染链路
+    // 避免频繁缩放触发 live2dProps 重建导致模型闪烁
+    try {
+      if (typeof ReactNativeLive2dModule.setViewScale === 'function') {
+        ReactNativeLive2dModule.setViewScale(scale);
+      } else {
+        // Fallback: 使用旧的 setTransform 方法
+        console.warn('⚠️ [Live2DService] setViewScale is not a function, using fallback');
+        void this.core.setTransform({ scale } as Transform);
+      }
+    } catch (e) {
+      console.error('❌ [Live2DService] setViewScale error:', e);
+      // Fallback: 使用旧的 setTransform 方法
+      void this.core.setTransform({ scale } as Transform);
+    }
+    // 同步更新内部状态，供 getTransformState() 读取
+    this.transformState.scale = scale;
   }
 
   /**
    * 设置位置
    */
   setPosition(x: number, y: number): void {
-    console.log('📍 [Live2DService] setPosition:', x, y);
     // 直接调用 native module，不走 setTransform → React 重渲染链路
     // 避免每帧拖动触发 live2dProps 重建导致模型消失
     try {
       if (typeof ReactNativeLive2dModule.setViewPosition === 'function') {
         ReactNativeLive2dModule.setViewPosition(x, y);
-        console.log('✅ [Live2DService] setViewPosition called successfully');
+        // 成功时不打印日志，避免拖动时每帧产生 log spam
       } else {
-        console.error('❌ [Live2DService] setViewPosition is not a function');
+        // 仅首次打印警告，避免每帧重复
+        if (!this.hasWarnedAboutSetViewPosition) {
+          console.warn('⚠️ [Live2DService] setViewPosition is not a function, using fallback');
+          this.hasWarnedAboutSetViewPosition = true;
+        }
         // Fallback: 使用旧的 setTransform 方法
         void this.core.setTransform({ position: { x, y } } as Transform);
       }
     } catch (e) {
-      console.error('❌ [Live2DService] setViewPosition error:', e);
+      // 仅首次打印错误，避免每帧重复
+      if (!this.hasWarnedAboutSetViewPosition) {
+        console.error('❌ [Live2DService] setViewPosition error:', e);
+        this.hasWarnedAboutSetViewPosition = true;
+      }
       // Fallback: 使用旧的 setTransform 方法
       void this.core.setTransform({ position: { x, y } } as Transform);
     }

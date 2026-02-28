@@ -22,7 +22,7 @@ iOS 端暂不实现，本文档仅涉及 Android。
 
 `react-native-gesture-handler` v2 要求整个应用根节点被 `GestureHandlerRootView` 包裹，否则所有手势均不生效。
 
-当前 [app/_layout.tsx](../../app/_layout.tsx) **尚未包裹**，需修改：
+当前 [app/_layout.tsx](../../app/_layout.tsx) **已完成包裹**，实现如下：
 
 ```tsx
 // app/_layout.tsx
@@ -58,7 +58,7 @@ projection.translateRelative(userOffsetX, userOffsetY)
 
 GestureHandler 的 `translationY` 向下为正，native 坐标系 Y 向上为正，**必须取反**：
 
-```
+```text
 // sensitivity = 1.0（可调整，值越小灵敏度越低）
 modelX = startModelX + (translationX / screenWidth) * sensitivity
 modelY = startModelY - (translationY / screenHeight) * sensitivity   ← 注意负号
@@ -141,9 +141,32 @@ companion object {
     // ... 现有常量 ...
 
     // 当前活跃的 View 实例（弱引用，避免内存泄漏）
-    private var currentInstance: java.lang.ref.WeakReference<ReactNativeLive2dView>? = null
+    // 使用 AtomicReference 确保多线程安全（Module 函数在 JS 线程调用，View 生命周期在 UI 线程）
+    private val currentInstanceRef = java.util.concurrent.atomic.AtomicReference<java.lang.ref.WeakReference<ReactNativeLive2dView>?>(null)
 
-    fun getCurrentInstance(): ReactNativeLive2dView? = currentInstance?.get()
+    /**
+     * 获取当前活跃的 Live2D View 实例
+     */
+    fun getCurrentInstance(): ReactNativeLive2dView? = currentInstanceRef.get()?.get()
+
+    /**
+     * 设置当前活跃的 View 实例（内部使用）
+     */
+    internal fun setCurrentInstance(view: ReactNativeLive2dView?) {
+        currentInstanceRef.set(if (view != null) java.lang.ref.WeakReference(view) else null)
+    }
+
+    /**
+     * 清除当前实例（仅当传入的 view 是当前实例时才清除）
+     */
+    internal fun clearCurrentInstance(view: ReactNativeLive2dView) {
+        val expected = currentInstanceRef.get()
+        expected?.get()?.let { current ->
+            if (current === view) {
+                currentInstanceRef.compareAndSet(expected, null)
+            }
+        }
+    }
 }
 ```
 
@@ -152,18 +175,18 @@ companion object {
 ```kotlin
 override fun onAttachedToWindow() {
     super.onAttachedToWindow()
-    currentInstance = java.lang.ref.WeakReference(this)
+    setCurrentInstance(this)
     // ... 现有逻辑 ...
 }
 
 override fun onDetachedFromWindow() {
     super.onDetachedFromWindow()
-    if (currentInstance?.get() === this) currentInstance = null
+    clearCurrentInstance(this)
     // ... 现有逻辑 ...
 }
 ```
 
-#### 2. [ReactNativeLive2dModule.kt](../../packages/react-native-live2d/android/src/main/java/expo/modules/live2d/ReactNativeLive2dModule.kt) — 新增 setViewPosition
+#### 2. [ReactNativeLive2dModule.kt](../../packages/react-native-live2d/android/src/main/java/expo/modules/live2d/ReactNativeLive2dModule.kt) — 新增 setViewPosition 和 setViewScale
 
 在 `getMouthValue` Function 之后、模块定义结束前添加：
 
@@ -184,7 +207,26 @@ Function("setViewPosition") { x: Float, y: Float ->
         Log.e(TAG, "Failed to setViewPosition: ${e.message}")
     }
 }
+
+/**
+ * 直接设置模型缩放（绕过 React prop 链路，避免触发重渲染）
+ * 用于高频调用场景（如双指缩放）
+ */
+Function("setViewScale") { scale: Float ->
+    try {
+        val view = ReactNativeLive2dView.getCurrentInstance()
+        if (view != null) {
+            view.setScale(scale)  // 内部已有 queueEvent + requestRender
+        } else {
+            Log.w(TAG, "setViewScale: no active ReactNativeLive2dView instance")
+        }
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to setViewScale: ${e.message}")
+    }
+}
 ```
+
+> **注意**：`LAppView.kt:496` 已有 `setViewScale` 方法，只需在 Module 中暴露即可。
 
 #### 3. [ReactNativeLive2d.types.ts](../../packages/react-native-live2d/src/ReactNativeLive2d.types.ts) — 新增类型声明
 
@@ -195,15 +237,25 @@ Function("setViewPosition") { x: Float, y: Float ->
  * 直接设置模型位置（绕过 React prop 链路，用于拖动等高频场景）
  */
 setViewPosition(x: number, y: number): void;
+
+/**
+ * 直接设置模型缩放（绕过 React prop 链路，用于缩放等高频场景）
+ */
+setViewScale(scale: number): void;
 ```
 
-#### 4. [Live2DService.ts](../../services/Live2DService.ts) — setPosition 改为 native 直达
+#### 4. [Live2DService.ts](../../services/Live2DService.ts) — setPosition/setScale 改为 native 直达
 
 ```typescript
 // 修改前
 setPosition(x: number, y: number): void {
   console.log('📍 设置位置:', x, y);
   void this.core.setTransform({ position: { x, y } } as Transform);
+}
+
+setScale(scale: number): void {
+  console.log('🔍 设置缩放:', scale);
+  void this.core.setTransform({ scale } as Transform);
 }
 
 // 修改后
@@ -213,9 +265,16 @@ setPosition(x: number, y: number): void {
   // 同步更新内部状态，供 getTransformState() 读取
   this.transformState.position = { x, y };
 }
+
+setScale(scale: number): void {
+  // 直接调用 native module，不走 setTransform → React 重渲染链路
+  ReactNativeLive2dModule.setViewScale(scale);
+  // 同步更新内部状态，供 getTransformState() 读取
+  this.transformState.scale = scale;
+}
 ```
 
-> `resetTransform` 中的位置重置仍走 `setTransform`（低频，不在拖动热路径上），无需修改。
+> `resetTransform` 中的位置/缩放重置仍走 `setTransform`（低频，不在热路径上），无需修改。
 
 ---
 
@@ -355,37 +414,74 @@ const live2dGesture = useMemo(() => {
 
 ### 5. JSX 结构
 
+**关键设计**：GestureDetector 必须包裹整个 `live2dContainer`，而不是叠加透明层。
+
+这样设计的原因：
+1. **单指注视**：Live2D View 的 `onTouchEvent` 直接处理单指触摸，实现眼睛跟随
+2. **双指手势**：GestureDetector 检测双指手势，不干扰单指触摸事件
+
 ```tsx
-<View style={styles.live2dContainer}>
-  {isPageFocused && (
-    <ReactNativeLive2dView
-      style={styles.live2dView}
-      {...live2d.live2dPropsForLipSync}
-      onTap={handleLive2DTap}
-    />
-  )}
-  {!isPageFocused && (
-    <View style={styles.pausedContainer}>
-      <Text style={styles.pausedText}>
-        {live2d.live2dProps.modelPath ? 'Live2D 已暂停' : '页面未激活'}
-      </Text>
-    </View>
-  )}
-
-  {/* 手势层：覆盖在 Live2D View 之上，不设 pointerEvents（默认 auto） */}
+// Android 端：GestureDetector 包裹整个容器
+{Platform.OS === 'android' ? (
   <GestureDetector gesture={live2dGesture}>
-    <View style={StyleSheet.absoluteFill} />
-  </GestureDetector>
+    <View style={styles.live2dContainer}>
+      {/* Live2D View - 单指触摸由 native onTouchEvent 处理 */}
+      {isPageFocused && (
+        <ReactNativeLive2dView
+          style={styles.live2dView}
+          {...live2d.live2dPropsForLipSync}
+          onTap={handleLive2DTap}
+        />
+      )}
 
-  {(isDraggingModel || isScalingModel) && (
-    <View style={styles.dragIndicator} pointerEvents="none">
-      <Text style={styles.dragIndicatorText}>
-        {isDraggingModel && isScalingModel ? '拖动/缩放中' : isDraggingModel ? '拖动中' : '缩放中'}
-      </Text>
+      {/* 失去焦点时的显示 */}
+      {!isPageFocused && (
+        <View style={styles.pausedContainer}>
+          <Text style={styles.pausedText}>
+            {live2d.live2dProps.modelPath ? 'Live2D 已暂停' : '页面未激活'}
+          </Text>
+        </View>
+      )}
+
+      {/* 拖动/缩放指示器 */}
+      {(isDraggingModel || isScalingModel) && (
+        <View style={styles.dragIndicator} pointerEvents="none">
+          <Text style={styles.dragIndicatorText}>
+            {isDraggingModel && isScalingModel ? '拖动/缩放中' : isDraggingModel ? '拖动中' : '缩放中'}
+          </Text>
+        </View>
+      )}
     </View>
-  )}
-</View>
+  </GestureDetector>
+) : (
+  // iOS 端：暂不支持双指手势，直接渲染容器
+  <View style={styles.live2dContainer}>
+    {isPageFocused && (
+      <ReactNativeLive2dView
+        style={styles.live2dView}
+        {...live2d.live2dPropsForLipSync}
+        onTap={handleLive2DTap}
+      />
+    )}
+    {!isPageFocused && (
+      <View style={styles.pausedContainer}>
+        <Text style={styles.pausedText}>
+          {live2d.live2dProps.modelPath ? 'Live2D 已暂停' : '页面未激活'}
+        </Text>
+      </View>
+    )}
+  </View>
+)}
 ```
+
+> **为什么不使用透明叠加层？**
+>
+> 之前尝试在 Live2D View 之上叠加透明 View 承载手势，但这会导致：
+> - `pointerEvents="auto"`：双指手势工作，但单指触摸被拦截
+> - `pointerEvents="box-none"`：单指触摸穿透，但双指手势也无法检测
+> - `pointerEvents="none"`：所有触摸穿透，双指手势不工作
+>
+> 正确方案是让 GestureDetector 包裹整个容器，RNGH 会正确处理手势检测和事件传递。
 
 ### 6. 新增样式
 
@@ -412,11 +508,55 @@ dragIndicatorText: {
 
 ## 与现有手势的兼容
 
-| 手势 | 指针数 | 激活条件 | 冲突风险 |
-|------|--------|----------|----------|
-| tap（`onTap`） | 1 | ACTION_DOWN | 低（双指长按仅触发 1 次 tap） |
-| Live2D 内置 drag（头部跟随） | 1 | 任意单指移动 | 无（指针数不同） |
-| 双指长按拖动 | 2 | 长按 500ms | — |
+### 手势兼容表
+
+| 手势 | 指针数 | 激活条件 | 实现方式 | 冲突风险 |
+|------|--------|----------|----------|----------|
+| tap（`onTap`） | 1 | ACTION_DOWN | Native `onTouchEvent` | 无 |
+| 单指注视（眼睛跟随） | 1 | 触摸/移动 | Native `onTouchEvent` → `LAppDelegate.onTouchBegan/Moved/End` | 无 |
+| 双指长按拖动 | 2 | 长按 500ms | RNGH `Gesture.Pan().minPointers(2)` | 无 |
+| 双指缩放 | 2 | 捏合/张开 | RNGH `Gesture.Pinch()` | 无 |
+
+### 单指注视实现原理
+
+单指注视功能由 Native 层直接处理，不经过 RNGH：
+
+1. **触摸事件流**：
+   ```
+   用户触摸屏幕
+     → Android dispatchTouchEvent
+     → ReactNativeLive2dView.onTouchEvent (返回 true)
+     → LAppDelegate.onTouchBegan/Moved/End
+     → LAppView.onTouchesBegan/Moved/Ended
+     → Live2D SDK 设置视线参数
+   ```
+
+2. **关键代码**（`ReactNativeLive2dView.kt:912-946`）：
+   ```kotlin
+   override fun onTouchEvent(event: MotionEvent): Boolean {
+       val x = event.x
+       val y = event.y
+
+       when (event.action) {
+           MotionEvent.ACTION_DOWN -> {
+               delegate.onTouchBegan(x, y)  // 开始注视
+               dispatchEvent("onTap", mapOf("x" to x, "y" to y))
+           }
+           MotionEvent.ACTION_MOVE -> {
+               delegate.onTouchMoved(x, y)  // 眼睛跟随
+           }
+           MotionEvent.ACTION_UP -> {
+               delegate.onTouchEnd(x, y)    // 结束注视
+           }
+       }
+       return true  // 消费触摸事件
+   }
+   ```
+
+3. **与 RNGH 的协作**：
+   - RNGH 的 `Gesture.Pan().minPointers(2)` 只在双指时激活
+   - 单指触摸不会被 Pan 手势拦截
+   - 单指事件正常传递到 Native View 的 `onTouchEvent`
 
 ---
 
@@ -433,9 +573,64 @@ dragIndicatorText: {
 | [app/_layout.tsx](../../app/_layout.tsx) | 新增 `GestureHandlerRootView` 包裹 |
 | [app/(tabs)/main.tsx](../../app/(tabs)/main.tsx) | 手势定义、状态变量、JSX 结构、样式 |
 | [ReactNativeLive2dView.kt](../../packages/react-native-live2d/android/src/main/java/expo/modules/live2d/ReactNativeLive2dView.kt) | companion object 暴露 `getCurrentInstance()`，`onAttachedToWindow`/`onDetachedFromWindow` 注册/清除 |
-| [ReactNativeLive2dModule.kt](../../packages/react-native-live2d/android/src/main/java/expo/modules/live2d/ReactNativeLive2dModule.kt) | 新增 `Function("setViewPosition")` |
-| [ReactNativeLive2d.types.ts](../../packages/react-native-live2d/src/ReactNativeLive2d.types.ts) | `Live2DModule` 新增 `setViewPosition` 声明 |
-| [Live2DService.ts](../../services/Live2DService.ts) | `setPosition` 改为调用 `ReactNativeLive2dModule.setViewPosition`，不走 `setTransform` |
+| [ReactNativeLive2dModule.kt](../../packages/react-native-live2d/android/src/main/java/expo/modules/live2d/ReactNativeLive2dModule.kt) | 新增 `setViewPosition`/`setViewScale` Function |
+| [ReactNativeLive2d.types.ts](../../packages/react-native-live2d/src/ReactNativeLive2d.types.ts) | `Live2DModule` 新增 `setViewPosition`/`setViewScale` 声明 |
+| [Live2DService.ts](../../services/Live2DService.ts) | `setPosition`/`setScale` 改为调用 native module，不走 `setTransform` |
+
+---
+
+## 相关功能：单指注视
+
+除双指手势外，Android 端还实现了**单指注视**功能（模型眼睛跟随手指）：
+
+### 自动处理（默认行为）
+
+单指注视功能由 Native View 的 `onTouchEvent` **自动处理**，**无需 JS 侧任何代码**：
+
+```kotlin
+// ReactNativeLive2dView.kt:912-946
+override fun onTouchEvent(event: MotionEvent): Boolean {
+    val x = event.x
+    val y = event.y
+
+    when (event.action) {
+        MotionEvent.ACTION_DOWN -> {
+            delegate.onTouchBegan(x, y)
+            dispatchEvent("onTap", mapOf("x" to x, "y" to y))
+        }
+        MotionEvent.ACTION_MOVE -> {
+            delegate.onTouchMoved(x, y)
+        }
+        MotionEvent.ACTION_UP -> {
+            delegate.onTouchEnd(x, y)
+        }
+    }
+    return true  // 消费触摸事件
+}
+```
+
+当用户单指触摸 Live2D View 时，Native 层自动：
+1. `onTouchEvent` 捕获触摸事件
+2. 调用 `LAppDelegate.onTouchBegan/Moved/End`
+3. 通过 `LAppView.onTouchesBegan/Moved/Ended` 设置 Live2D 视线参数
+4. 模型眼睛自动跟随手指
+
+### 与 RNGH 双指手势的协作
+
+| 手势 | 指针数 | 激活条件 | 处理方式 |
+|------|--------|----------|----------|
+| 单指注视 | 1 | 任意触摸 | Native `onTouchEvent` 自动处理 |
+| tap（`onTap`） | 1 | ACTION_DOWN | Native `onTouchEvent` 触发事件 |
+| 双指拖动 | 2 | 长按 500ms | RNGH `Gesture.Pan().minPointers(2)` |
+| 双指缩放 | 2 | 捏合/张开 | RNGH `Gesture.Pinch()` |
+
+**关键点**：RNGH 的 `Pan().minPointers(2)` 只在双指时激活，单指触摸不会被 RNGH 拦截，正常传递到 Native View 的 `onTouchEvent`。
+
+### 实现位置
+
+- [ReactNativeLive2dView.kt:912-946](../../packages/react-native-live2d/android/src/main/java/expo/modules/live2d/ReactNativeLive2dView.kt) — `onTouchEvent` 处理
+- [LAppDelegate.kt:419-455](../../packages/react-native-live2d/android/src/main/java/com/live2d/kotlin/LAppDelegate.kt) — `onTouchBegan/Moved/End` 方法
+- [LAppView.kt](../../packages/react-native-live2d/android/src/main/java/com/live2d/kotlin/LAppView.kt) — `onTouchesBegan/Moved/Ended` 调用 Live2D SDK
 
 ---
 
@@ -443,7 +638,7 @@ dragIndicatorText: {
 
 - [LAppLive2DManager.kt](../../packages/react-native-live2d/android/src/main/java/com/live2d/kotlin/LAppLive2DManager.kt) — `setUserPosition` / 坐标系定义
 - [LAppDefine.kt](../../packages/react-native-live2d/android/src/main/java/com/live2d/kotlin/LAppDefine.kt) — `LogicalView = ±1`、`MaxLogicalView = ±2`
-- [ReactNativeLive2dView.kt](../../packages/react-native-live2d/android/src/main/java/expo/modules/live2d/ReactNativeLive2dView.kt) — `onTouchEvent`、`setPosition` 实现
+- [ReactNativeLive2dView.kt](../../packages/react-native-live2d/android/src/main/java/expo/modules/live2d/ReactNativeLive2dView.kt) — `onTouchEvent`、`setPosition`/`setScale` 实现
 - [ReactNativeLive2dModule.kt](../../packages/react-native-live2d/android/src/main/java/expo/modules/live2d/ReactNativeLive2dModule.kt) — Props/Events/Functions
 - [hooks/useLive2D.ts](../../hooks/useLive2D.ts) — Live2D 状态与控制
-- [services/Live2DService.ts](../../services/Live2DService.ts) — `setPosition` / `resetTransform`
+- [services/Live2DService.ts](../../services/Live2DService.ts) — `setPosition`/`setScale`/`resetTransform`

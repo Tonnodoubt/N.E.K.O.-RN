@@ -367,6 +367,12 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
           isSwitchingCharacterRef.current = false;
           setCharacterLoading(false);
           setIsChatForceCollapsed(false);
+          // 清除之前的错误提示（如果有）
+          setSwitchError(null);
+          if (switchErrorTimerRef.current) {
+            clearTimeout(switchErrorTimerRef.current);
+            switchErrorTimerRef.current = null;
+          }
           setSwitchedCharacterName(result.characterName);
           if (switchedNameTimerRef.current) clearTimeout(switchedNameTimerRef.current);
           switchedNameTimerRef.current = setTimeout(() => setSwitchedCharacterName(null), 2500);
@@ -411,6 +417,12 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
           if (characterLoadingTimerRef.current) {
             clearTimeout(characterLoadingTimerRef.current);
             characterLoadingTimerRef.current = null;
+          }
+          // 清除之前的错误提示（如果有）
+          setSwitchError(null);
+          if (switchErrorTimerRef.current) {
+            clearTimeout(switchErrorTimerRef.current);
+            switchErrorTimerRef.current = null;
           }
           const name = currentCatgirlRef.current;
           setSwitchedCharacterName(name);
@@ -615,6 +627,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   }, []);
 
   // 双指缩放手势（捏合/张开）
+  // 注意：Pinch 手势本身就需要双指，无需 minPointers
   const pinchGesture = useMemo(() => {
     return Gesture.Pinch()
       .runOnJS(true)
@@ -636,7 +649,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 组合手势：同时支持拖动和缩放
+  // 组合手势：双指拖动 + 缩放同时识别
   const live2dGesture = useMemo(() => {
     return Gesture.Simultaneous(dragGesture, pinchGesture);
   }, [dragGesture, pinchGesture]);
@@ -661,6 +674,10 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       } catch {
         setVoicePrepareStatus(null);
         setToolbarMicEnabled(false);
+        // 显示与角色切换失败一致的底部错误横幅
+        setSwitchError('语音系统准备失败');
+        if (switchErrorTimerRef.current) clearTimeout(switchErrorTimerRef.current);
+        switchErrorTimerRef.current = setTimeout(() => setSwitchError(null), 3000);
       }
     } else {
       mainManager.stopRecording();
@@ -910,38 +927,58 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   return (
     <View style={styles.container}>
       {/* Live2D 舞台区域 */}
-      <View style={styles.live2dContainer}>
-        {/* 页面获得焦点时渲染 Live2D */}
-        {isPageFocused && (
-          <ReactNativeLive2dView
-            style={styles.live2dView}
-            {...live2d.live2dPropsForLipSync}
-            onTap={handleLive2DTap}
-          />
-        )}
-
-        {/* 失去焦点时的显示 */}
-        {!isPageFocused && (
-          <View style={styles.pausedContainer}>
-            <Text style={styles.pausedText}>
-              {live2d.live2dProps.modelPath ? 'Live2D 已暂停' : '页面未激活'}
-            </Text>
-          </View>
-        )}
-
-        {/* 手势层：覆盖在 Live2D View 之上，不设 pointerEvents（默认 auto） */}
+      {/* Android 端：GestureDetector 包裹整个容器，同时支持单指注视（原生处理）和双指手势 */}
+      {/* iOS 端：直接渲染容器，暂不支持双指手势 */}
+      {Platform.OS === 'android' ? (
         <GestureDetector gesture={live2dGesture}>
-          <View style={StyleSheet.absoluteFill} />
-        </GestureDetector>
+          <View style={styles.live2dContainer}>
+            {/* 页面获得焦点时渲染 Live2D */}
+            {isPageFocused && (
+              <ReactNativeLive2dView
+                style={styles.live2dView}
+                {...live2d.live2dPropsForLipSync}
+                onTap={handleLive2DTap}
+              />
+            )}
 
-        {(isDraggingModel || isScalingModel) && (
-          <View style={styles.dragIndicator} pointerEvents="none">
-            <Text style={styles.dragIndicatorText}>
-              {isDraggingModel && isScalingModel ? '拖动/缩放中' : isDraggingModel ? '拖动中' : '缩放中'}
-            </Text>
+            {/* 失去焦点时的显示 */}
+            {!isPageFocused && (
+              <View style={styles.pausedContainer}>
+                <Text style={styles.pausedText}>
+                  {live2d.live2dProps.modelPath ? 'Live2D 已暂停' : '页面未激活'}
+                </Text>
+              </View>
+            )}
+
+            {(isDraggingModel || isScalingModel) && (
+              <View style={styles.dragIndicator} pointerEvents="none">
+                <Text style={styles.dragIndicatorText}>
+                  {isDraggingModel && isScalingModel ? '拖动/缩放中' : isDraggingModel ? '拖动中' : '缩放中'}
+                </Text>
+              </View>
+            )}
           </View>
-        )}
-      </View>
+        </GestureDetector>
+      ) : (
+        <View style={styles.live2dContainer}>
+          {/* iOS 端暂不支持双指手势 */}
+          {isPageFocused && (
+            <ReactNativeLive2dView
+              style={styles.live2dView}
+              {...live2d.live2dPropsForLipSync}
+              onTap={handleLive2DTap}
+            />
+          )}
+
+          {!isPageFocused && (
+            <View style={styles.pausedContainer}>
+              <Text style={styles.pausedText}>
+                {live2d.live2dProps.modelPath ? 'Live2D 已暂停' : '页面未激活'}
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* 
         【跨平台组件】Live2DRightToolbar 右侧工具栏
@@ -1075,7 +1112,6 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
                     );
                   })}
                 </ScrollView>
-                <Text style={styles.characterModalSubtitle2}></Text>
               </View>
             </TouchableWithoutFeedback>
           </View>
