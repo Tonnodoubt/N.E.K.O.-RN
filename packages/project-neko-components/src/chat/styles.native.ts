@@ -310,4 +310,30 @@ export const styles = StyleSheet.create({
   screenshotButtonTextDisabled: {
     color: '#d9d9d9',
   },
+
+  // ===== 相册按钮 =====
+  galleryButton: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderWidth: 1,
+    borderColor: '#44b7fe',
+    paddingVertical: 12,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  galleryButtonDisabled: {
+    borderColor: '#d9d9d9',
+  },
+
+  galleryButtonText: {
+    fontSize: 13,
+    color: '#44b7fe',
+    fontWeight: '500',
+  },
+
+  galleryButtonTextDisabled: {
+    color: '#d9d9d9',
+  },
 });

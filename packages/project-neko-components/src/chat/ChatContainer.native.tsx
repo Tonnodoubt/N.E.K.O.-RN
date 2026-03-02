@@ -108,8 +108,12 @@ export default function ChatContainer({
   disabled = false,
   statusText,
   cameraEnabled = false,
+  onPickImage,
+  onTakePhoto: onTakePhotoProp,
   renderFloatingOverlay,
   forceCollapsed,
+  externalPendingImages,
+  onClearExternalPendingImages,
 }: ChatContainerProps = {}) {
   const t = useT();
 
@@ -188,6 +192,19 @@ export default function ChatContainer({
       setCollapsed(true);
     }
   }, [forceCollapsed, setCollapsed]);
+
+  // 处理外部传入的待发送图片（如从相册选择的图片）
+  useEffect(() => {
+    if (externalPendingImages && externalPendingImages.length > 0) {
+      setPendingScreenshots((prev) => {
+        const combined = [...prev, ...externalPendingImages];
+        // 限制最多 5 张
+        return combined.slice(0, MAX_SCREENSHOTS);
+      });
+      // 清除外部图片（已添加到内部状态）
+      onClearExternalPendingImages?.();
+    }
+  }, [externalPendingImages, onClearExternalPendingImages, setPendingScreenshots]);
 
   // 初始化欢迎消息（仅非受控模式）
   React.useEffect(() => {
@@ -269,6 +286,12 @@ export default function ChatContainer({
       return;
     }
 
+    // 如果提供了外部拍照回调，使用它
+    if (onTakePhotoProp) {
+      onTakePhotoProp();
+      return;
+    }
+
     // 相机功能已启用，检查相机权限（Android）
     if (Platform.OS === 'android') {
       try {
@@ -295,49 +318,6 @@ export default function ChatContainer({
       }
     }
 
-    // TODO: 当 cameraEnabled 为 true 时，集成 react-native-image-picker 或 expo-image-picker
-    // 在集成后，移除此 Alert 并启用下方注释的代码
-    Alert.alert(
-      tOrDefault(t, 'chat.camera.title', '相机功能'),
-      tOrDefault(
-        t,
-        'chat.camera.integration_pending',
-        '相机权限已获取，但拍照功能尚未完全集成。\n\n请参考 react-native-image-picker 文档完成集成。'
-      ),
-      [{ text: tOrDefault(t, 'chat.camera.ok', '确定') }]
-    );
-
-    /*
-    // 示例：使用 react-native-image-picker
-    try {
-      const result = await launchCamera({
-        mediaType: 'photo',
-        quality: 0.8,
-        maxWidth: 1280,
-        maxHeight: 720,
-        includeBase64: true,
-      });
-
-      if (result.didCancel) return;
-      if (result.errorCode) {
-        console.error('[ChatContainer] Camera error:', result.errorMessage);
-        Alert.alert('拍照失败', result.errorMessage || '未知错误');
-        return;
-      }
-
-      const asset = result.assets?.[0];
-      if (asset?.base64) {
-        const base64 = `data:${asset.type || 'image/jpeg'};base64,${asset.base64}`;
-        setPendingScreenshots(prev => [
-          ...prev,
-          { id: `photo-${Date.now()}`, base64 },
-        ]);
-      }
-    } catch (err) {
-      console.error('[ChatContainer] Camera error:', err);
-      Alert.alert('拍照失败', '无法访问相机');
-    }
-    */
   };
 
   // 渲染单个消息
@@ -528,8 +508,40 @@ export default function ChatContainer({
                     </Text>
                   </TouchableOpacity>
 
-                  {/* 拍照按钮 - 仅在 cameraEnabled 且支持 onSendMessage 的受控模式或非受控模式下显示 */}
-                  {cameraEnabled && (onSendMessage || !sendHandler) && (
+                  {/* 相册按钮 - 仅在提供了 onPickImage 回调时显示 */}
+                  {onPickImage && (
+                    <TouchableOpacity
+                      style={[
+                        styles.galleryButton,
+                        disabled && styles.galleryButtonDisabled,
+                      ]}
+                      onPress={() => {
+                        // 检查截图数量限制
+                        if (pendingScreenshots.length >= MAX_SCREENSHOTS) {
+                          Alert.alert(
+                            tOrDefault(t, 'chat.gallery.title', '相册'),
+                            tOrDefault(t, 'chat.gallery.maxReached', `最多只能添加 ${MAX_SCREENSHOTS} 张图片`)
+                          );
+                          return;
+                        }
+                        onPickImage();
+                      }}
+                      activeOpacity={0.7}
+                      disabled={disabled}
+                    >
+                      <Text
+                        style={[
+                          styles.galleryButtonText,
+                          disabled && styles.galleryButtonTextDisabled,
+                        ]}
+                      >
+                        {tOrDefault(t, 'chat.gallery.button', '🖼️')}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {/* 拍照按钮 - 仅在提供了 onTakePhoto 回调时显示 */}
+                  {onTakePhotoProp && (
                     <TouchableOpacity
                       style={[
                         styles.screenshotButton,
