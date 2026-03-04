@@ -254,11 +254,18 @@ export const styles = StyleSheet.create({
 
   buttonGroup: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     gap: 8,
   },
 
-  sendButton: {
+  leftButtonGroup: {
+    flexDirection: 'row',
+    gap: 8,
     flex: 1,
+  },
+
+  sendButton: {
+    width: 80,
     backgroundColor: '#44b7fe',
     paddingVertical: 12,
     borderRadius: 6,
@@ -334,6 +341,32 @@ export const styles = StyleSheet.create({
   },
 
   galleryButtonTextDisabled: {
+    color: '#d9d9d9',
+  },
+
+  // ===== 图片按钮（合并相册+拍照）=====
+  imageButton: {
+    width: 80,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderWidth: 1,
+    borderColor: '#44b7fe',
+    paddingVertical: 12,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  imageButtonDisabled: {
+    borderColor: '#d9d9d9',
+  },
+
+  imageButtonText: {
+    fontSize: 14,
+    color: '#44b7fe',
+    fontWeight: '500',
+  },
+
+  imageButtonTextDisabled: {
     color: '#d9d9d9',
   },
 });

@@ -320,6 +320,41 @@ export default function ChatContainer({
 
   };
 
+  // 合并的图片操作按钮 - 弹出选项菜单
+  const handleImageAction = () => {
+    if (disabled) return;
+
+    // 检查截图数量限制
+    if (pendingScreenshots.length >= MAX_SCREENSHOTS) {
+      Alert.alert(
+        tOrDefault(t, 'chat.image.title', '图片'),
+        tOrDefault(t, 'chat.image.maxReached', `最多只能添加 ${MAX_SCREENSHOTS} 张图片`)
+      );
+      return;
+    }
+
+    const options: string[] = [];
+    if (onPickImage) options.push(tOrDefault(t, 'chat.image.gallery', '从相册选择'));
+    if (onTakePhotoProp) options.push(tOrDefault(t, 'chat.image.camera', '拍照'));
+    options.push(tOrDefault(t, 'common.cancel', '取消'));
+
+    Alert.alert(
+      tOrDefault(t, 'chat.image.title', '添加图片'),
+      undefined,
+      options.map((option, index) => ({
+        text: option,
+        style: index === options.length - 1 ? 'cancel' : 'default',
+        onPress: () => {
+          if (index === 0 && onPickImage) {
+            onPickImage();
+          } else if (index === 1 && onTakePhotoProp) {
+            handleTakePhoto();
+          }
+        },
+      }))
+    );
+  };
+
   // 渲染单个消息
   const renderMessage = (msg: ChatMessage) => {
     const isUser = msg.role === 'user';
@@ -489,6 +524,29 @@ export default function ChatContainer({
                 />
 
                 <View style={styles.buttonGroup}>
+                  {/* 左侧：图片按钮（合并相册+拍照） */}
+                  {(onPickImage || onTakePhotoProp) && (
+                    <TouchableOpacity
+                      style={[
+                        styles.imageButton,
+                        disabled && styles.imageButtonDisabled,
+                      ]}
+                      onPress={handleImageAction}
+                      activeOpacity={0.7}
+                      disabled={disabled}
+                    >
+                      <Text
+                        style={[
+                          styles.imageButtonText,
+                          disabled && styles.imageButtonTextDisabled,
+                        ]}
+                      >
+                        {tOrDefault(t, 'chat.image.button', '📎')}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {/* 右侧：发送按钮 */}
                   <TouchableOpacity
                     style={[
                       styles.sendButton,
@@ -507,60 +565,6 @@ export default function ChatContainer({
                       {tOrDefault(t, 'chat.send', '发送')}
                     </Text>
                   </TouchableOpacity>
-
-                  {/* 相册按钮 - 仅在提供了 onPickImage 回调时显示 */}
-                  {onPickImage && (
-                    <TouchableOpacity
-                      style={[
-                        styles.galleryButton,
-                        disabled && styles.galleryButtonDisabled,
-                      ]}
-                      onPress={() => {
-                        // 检查截图数量限制
-                        if (pendingScreenshots.length >= MAX_SCREENSHOTS) {
-                          Alert.alert(
-                            tOrDefault(t, 'chat.gallery.title', '相册'),
-                            tOrDefault(t, 'chat.gallery.maxReached', `最多只能添加 ${MAX_SCREENSHOTS} 张图片`)
-                          );
-                          return;
-                        }
-                        onPickImage();
-                      }}
-                      activeOpacity={0.7}
-                      disabled={disabled}
-                    >
-                      <Text
-                        style={[
-                          styles.galleryButtonText,
-                          disabled && styles.galleryButtonTextDisabled,
-                        ]}
-                      >
-                        {tOrDefault(t, 'chat.gallery.button', '🖼️')}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-
-                  {/* 拍照按钮 - 仅在提供了 onTakePhoto 回调时显示 */}
-                  {onTakePhotoProp && (
-                    <TouchableOpacity
-                      style={[
-                        styles.screenshotButton,
-                        disabled && styles.screenshotButtonDisabled,
-                      ]}
-                      onPress={handleTakePhoto}
-                      activeOpacity={0.7}
-                      disabled={disabled}
-                    >
-                      <Text
-                        style={[
-                          styles.screenshotButtonText,
-                          disabled && styles.screenshotButtonTextDisabled,
-                        ]}
-                      >
-                        {tOrDefault(t, 'chat.screenshot.button', '拍照')}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
                 </View>
               </View>
             </View>
