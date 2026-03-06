@@ -17,7 +17,7 @@
 
 - 运行与环境：`../platforms/android.md`
 - macOS 环境搭建（Android SDK / JDK17 / zsh）：`../guides/android-env-macos.md`
-- 下一步优先级：`../roadmap/android.md`
+- 下一步优先级：`../ROADMAP.md`
 - 集成验收：`../testing/integration.md`
 - 组件现状矩阵：`../strategy/rn-development.md`
 - 常见问题排查：`../guides/troubleshooting.md`

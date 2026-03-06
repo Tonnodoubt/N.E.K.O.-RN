@@ -1,42 +1,129 @@
 # N.E.K.O.-RN 文档中心
 
-本文档目录用于存放 **N.E.K.O.-RN（React Native / Expo）** 端的设计与规格文档。
+> React Native 移动端开发文档
+>
+> **最新更新**: 2026-02-21
 
-## 📚 规范文档体系 (Spec-Driven Docs)
+---
 
-本项目采用 **SDD (Spec-Driven Development)** 规范驱动开发模式。文档按功能模块化划分，作为 AI 与人类协作的"单一真理源"。
+## 快速导航
 
-### 0. 开发策略（重要）⭐
-- **[RN 开发策略](./strategy/rn-development.md)**：当前开发策略与组件现状矩阵（⭐）
-- **[跨平台组件策略](./strategy/cross-platform-components.md)**：当前跨端实现方式（`.native.tsx`）（⭐）
-- **[快速参考卡片](./reference/quick-reference.md)**：命令/入口/高频坑（速查）
-- **[常见问题排查](./guides/troubleshooting.md)**：开发/构建常见问题与解决方案
-- **[Android 下一步路线图](./roadmap/android.md)**：Android 真机体验对齐 Web 的优先级与验收点（⭐ 推荐按此推进）
+| 我想... | 请看 |
+|---------|------|
+| **新成员快速上手** | [guides/onboarding.md](./guides/onboarding.md) |
+| 查看开发路线图 | [ROADMAP.md](./ROADMAP.md) |
+| 查看开发进度 | 自己建的进度表 |
+| 搭建开发环境 | [guides/onboarding.md](./guides/onboarding.md) |
+| 排查问题 | [troubleshooting/](./troubleshooting/) |
+| 了解架构 | [arch/design.md](./arch/design.md) |
 
-### 1. 核心概述 (Core)
-- [系统概述](./core/overview.md)：项目使命、技术能力与技术栈。
-- [架构设计](./arch/design.md)：分层架构、核心设计模式与 Mermaid 图表。
+---
 
-### 2. 详细规格 (Modules)
-- [音频服务](./modules/audio.md)：采样率、上行/下行控制。
-- [Live2D 服务](./modules/live2d.md)：模型生命周期与口型驱动。
-- [主协调层](./modules/coordination.md)：AI 响应与用户打断业务流。
+## 核心文档
 
-### 3. 数据契约 (Specs)
-- [WebSocket 协议](./specs/websocket.md)：JSON 负载与二进制数据格式定义。
-- [状态机](./specs/states.md)：连接状态与会话状态管理。
+| 文档 | 说明 |
+|------|------|
+| [ROADMAP.md](./ROADMAP.md) | 开发路线图和功能规划（必读） |
+| [core/overview.md](./core/overview.md) | 项目概述 |
+| [arch/design.md](./arch/design.md) | 架构设计 |
 
-### 4. 开发指南 (Guides)
-- [开发与验收](./guides/development.md)：硬编码约束、环境配置与验收清单。
-- **[macOS Android 环境搭建（zsh）](./guides/android-env-macos.md)**：Android SDK / JDK 17 /（可选）模拟器与验证命令
-- **[Android 平台运行指南](./platforms/android.md)**：Android 环境配置、构建、运行和调试（⭐ Android 开发者必读）
+---
 
-### 5. 上游同步（packages）
-- **[上游 packages 同步指南](./guides/upstream-sync.md)**：如何同步 `@N.E.K.O/frontend/packages/*` 到本仓库 `packages/project-neko-*`
-- [上游公共文档入口（N.E.K.O）](./upstream/frontend-packages.md)：本仓库只引用不复制
+## 目录结构
 
-## 🛠 文档准则
-1. **先设计后代码**：重大功能前必须先在 `/docs` 中更新相关 Spec。
-2. **模块化维护**：避免在单体文件中堆积逻辑，按功能域进行分割。
-3. **闭环验证**：功能的验收应严格对齐文档中描述的规格。
-4. **渐进式迁移**：优先复用共享 packages，并把关键 UI 通过 `.native.tsx` 落地到 Android 真机，参考 [RN 开发策略](./strategy/rn-development.md)。
+```
+docs/
+├── README.md               # 本文档
+├── ROADMAP.md              # 开发路线图
+│
+├── arch/                   # 架构文档
+│   ├── design.md           # 架构设计
+│   ├── rn-development-guide.md  # RN 开发指南
+│   └── cross-project-integration.md  # 跨项目集成
+│
+├── guides/                 # 开发指南
+│   ├── onboarding.md       # 新成员上手指南
+│   ├── android-env-macos.md  # Android 环境 (macOS)
+│   ├── upstream-sync.md    # 同步主项目
+│   └── troubleshooting.md  # 故障排查指南
+│
+├── modules/                # 模块文档
+│   ├── audio.md            # 音频服务
+│   ├── live2d.md           # Live2D 服务
+│   ├── coordination.md     # 主协调层
+│   ├── audio-playback-analysis.md    # 音频播放分析
+│   └── message-flow-analysis.md      # 消息流分析
+│
+├── specs/                  # 规格文档
+│   ├── websocket.md        # WebSocket 协议
+│   ├── states.md           # 状态机
+│   └── voice-interrupt.md  # 语音打断规格
+│
+├── features/               # 功能文档
+│   ├── character-management.md
+│   ├── image-messaging.md
+│   ├── live2d-two-finger-drag.md
+│   └── ...
+│
+├── troubleshooting/        # 故障排查与修复记录
+│   ├── android-audio-recording-fix.md
+│   ├── permission-auto-redirect-fix.md
+│   ├── fix-character-switch-chat.md
+│   └── ...
+│
+├── solutions/              # 解决方案
+│   ├── p2p-solution.md
+│   └── frp-reverse-proxy.md
+│
+├── strategy/               # 策略文档
+│   ├── cross-platform-components.md
+│   └── rn-development.md
+│
+├── reference/              # 参考文档
+│   ├── quick-reference.md
+│   └── startup-flow.md
+│
+└── releases/               # 发布记录
+    └── v1.1.0-phase1-*.md
+```
+
+---
+
+## 开发指南
+
+### 环境搭建
+
+1. [开发与验收](./guides/development.md) - 基础环境配置
+2. [Android 环境 (macOS)](./guides/android-env-macos.md) - Android SDK/JDK 配置
+3. [Android 运行指南](./platforms/android.md) - 构建运行调试
+
+### 模块开发
+
+| 模块 | 文档 |
+|------|------|
+| 音频 | [modules/audio.md](./modules/audio.md) |
+| Live2D | [modules/live2d.md](./modules/live2d.md) |
+| WebSocket | [specs/websocket.md](./specs/websocket.md) |
+
+### 与主项目同步
+
+- [上游 packages 同步](./guides/upstream-sync.md)
+- [跨项目集成架构](./arch/cross-project-integration.md)
+
+---
+
+## 故障排查
+
+| 类别 | 文档 |
+|------|------|
+| 故障排查索引 | [troubleshooting/README.md](./troubleshooting/README.md) |
+| 通用排查指南 | [guides/troubleshooting.md](./guides/troubleshooting.md) |
+| 音频录制问题 | [troubleshooting/android-audio-recording-fix.md](./troubleshooting/android-audio-recording-fix.md) |
+| 权限问题 | [troubleshooting/permission-auto-redirect-fix.md](./troubleshooting/permission-auto-redirect-fix.md) |
+
+---
+
+## 相关项目
+
+- **主项目文档**: `../N.E.K.O/docs/`
+- **主项目前端**: `../N.E.K.O/docs/frontend/`

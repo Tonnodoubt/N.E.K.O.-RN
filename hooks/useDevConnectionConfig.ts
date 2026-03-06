@@ -7,7 +7,7 @@ import {
 import { clearStoredDevConnectionConfig, getStoredDevConnectionConfig, setStoredDevConnectionConfig } from '@/services/DevConnectionStorage';
 
 export type ApplyQrResult =
-  | { ok: true; config: DevConnectionConfig }
+  | { ok: true; config: DevConnectionConfig; isP2p?: boolean }
   | { ok: false; error: string };
 
 export function useDevConnectionConfig(): {
@@ -58,8 +58,9 @@ export function useDevConnectionConfig(): {
     async (raw: string): Promise<ApplyQrResult> => {
       const parsed = parseDevConnectionConfig(raw);
       if (!parsed) return { ok: false, error: '二维码内容不可解析（请扫 JSON / URL / host:port 格式）' };
+      const isP2p = !!parsed.p2p;
       const next = await setConfig((prev) => ({ ...prev, ...parsed }));
-      return { ok: true, config: next };
+      return { ok: true, config: next, isP2p };
     },
     [setConfig]
   );

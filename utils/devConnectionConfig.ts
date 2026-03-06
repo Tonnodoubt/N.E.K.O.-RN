@@ -2,12 +2,16 @@ export type DevConnectionConfig = {
   host: string;
   port: number;
   characterName: string;
+  // P2P 连接配置（可选）- v2: 只需要 token，走标准 WebSocket
+  p2p?: {
+    token: string;
+  };
 };
 
 export const DEFAULT_DEV_CONNECTION_CONFIG: DevConnectionConfig = {
-  host: '192.168.88.54',
-  port: 48911,
-  characterName: 'test',
+  host: process.env.EXPO_PUBLIC_DEV_HOST || '192.168.1.8',
+  port: Number(process.env.EXPO_PUBLIC_DEV_PORT) || 48911,
+  characterName: process.env.EXPO_PUBLIC_DEV_CHARACTER || 'test',
 };
 
 export function parseDevConnectionConfig(raw: string): Partial<DevConnectionConfig> | null {
@@ -15,10 +19,23 @@ export function parseDevConnectionConfig(raw: string): Partial<DevConnectionConf
   if (!text) return null;
 
   // 1) JSON: {"host":"x","port":48911,"characterName":"test"}
+  //    或 P2P 格式: {"lan_ip":"x","port":48920,"token":"xxx"}
   try {
     const obj = JSON.parse(text) as any;
     if (obj && typeof obj === 'object') {
       const out: Partial<DevConnectionConfig> = {};
+
+      // 检测 P2P 格式（包含 lan_ip 和 token）- v2 架构
+      if (typeof obj.lan_ip === 'string' && obj.lan_ip.trim() && typeof obj.token === 'string') {
+        // v2: 直接连接代理端口，URL 中包含 token
+        out.host = obj.lan_ip.trim();
+        out.port = typeof obj.port === 'number' ? obj.port : 48920;
+        out.characterName = obj.character || obj.name || 'test';  // 从二维码获取角色名
+        out.p2p = { token: obj.token };  // 只需要 token
+        return out;
+      }
+
+      // 普通格式
       if (typeof obj.host === 'string' && obj.host.trim()) out.host = obj.host.trim();
       if (typeof obj.port === 'number' && Number.isFinite(obj.port)) out.port = obj.port;
       if (typeof obj.characterName === 'string' && obj.characterName.trim()) out.characterName = obj.characterName.trim();
@@ -41,8 +58,8 @@ export function parseDevConnectionConfig(raw: string): Partial<DevConnectionConf
     if (name) out.characterName = name;
 
     // 允许直接从 URL 的 host/port 取值（如 http://1.2.3.4:48911）
-    if (url.hostname) out.host = url.hostname;
-    if (url.port && /^\d+$/.test(url.port)) out.port = Number(url.port);
+    if (!out.host && url.hostname) out.host = url.hostname;
+    if (out.port == null && url.port && /^\d+$/.test(url.port)) out.port = Number(url.port);
 
     if (Object.keys(out).length > 0) return out;
   } catch {
@@ -79,4 +96,14 @@ export function buildHttpBaseURL(config: Pick<DevConnectionConfig, 'host' | 'por
   const host = String(config.host || '').trim();
   const port = Number(config.port);
   return `http://${host}:${port}`;
+}
+
+/**
+ * 给任意 URL 追加 P2P token query 参数。
+ * 非 P2P 模式（token 为空）时原样返回。
+ */
+export function appendP2PToken(url: string, token?: string): string {
+  if (!token) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}token=${token}`;
 }

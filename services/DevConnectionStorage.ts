@@ -16,10 +16,32 @@ function sanitizePartial(input: any): Partial<DevConnectionConfig> {
   if (isNonEmptyString(input?.host)) out.host = input.host.trim();
   if (isValidPort(input?.port)) out.port = input.port;
   if (isNonEmptyString(input?.characterName)) out.characterName = input.characterName.trim();
+
+  // 支持 P2P 配置 (v2: 只需要 token)
+  if (input?.p2p && typeof input.p2p === 'object') {
+    const p2p = input.p2p;
+    if (isNonEmptyString(p2p.token)) {
+      out.p2p = {
+        token: p2p.token,
+      };
+    }
+  }
+
   return out;
 }
 
 export async function getStoredDevConnectionConfig(): Promise<DevConnectionConfig> {
+  // 环境变量优先：如果设置了任一环境变量，直接使用，忽略 AsyncStorage
+  const envConfig: Partial<DevConnectionConfig> = {};
+  if (process.env.EXPO_PUBLIC_DEV_HOST) envConfig.host = process.env.EXPO_PUBLIC_DEV_HOST;
+  if (process.env.EXPO_PUBLIC_DEV_PORT) envConfig.port = Number(process.env.EXPO_PUBLIC_DEV_PORT);
+  if (process.env.EXPO_PUBLIC_DEV_CHARACTER) envConfig.characterName = process.env.EXPO_PUBLIC_DEV_CHARACTER;
+
+  if (Object.keys(envConfig).length > 0) {
+    return { ...DEFAULT_DEV_CONNECTION_CONFIG, ...envConfig };
+  }
+
+  // 无环境变量时，从 AsyncStorage 读取
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_DEV_CONNECTION_CONFIG;

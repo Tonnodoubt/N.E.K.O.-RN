@@ -25,6 +25,8 @@ export interface Live2DServiceConfig {
   backendPort: number;
   backendScheme?: 'http' | 'https';
   live2dPath?: string;
+  /** 若提供，直接使用该 URL 作为 model3.json 远端地址，跳过自动拼接 */
+  modelUrl?: string;
   onModelLoaded?: () => void;
   onModelError?: (error: string) => void;
   onLoadingStateChange?: (isLoading: boolean) => void;
@@ -94,6 +96,8 @@ export class Live2DService {
   private modelBaseUrl: string;
   private core: CoreLive2DService;
   private lastLoadingFlag: boolean | null = null;
+  private hasWarnedAboutSetViewPosition: boolean = false;
+  private hasWarnedAboutSetViewScale: boolean = false;
 
   constructor(config: Live2DServiceConfig) {
     this.config = {
@@ -345,7 +349,8 @@ export class Live2DService {
       return;
     }
 
-    const remoteModelUrl = `${this.modelBaseUrl}/${this.config.modelName}.model3.json`;
+    const remoteModelUrl = this.config.modelUrl
+      ?? `${this.modelBaseUrl}/${this.config.modelName}.model3.json`;
     await this.core.loadModel({ uri: remoteModelUrl, source: 'url', id: this.config.modelName });
   }
 
@@ -400,16 +405,61 @@ export class Live2DService {
    * 设置缩放
    */
   setScale(scale: number): void {
-    console.log('🔍 设置缩放:', scale);
-    void this.core.setTransform({ scale } as Transform);
+    // 直接调用 native module，不走 setTransform → React 重渲染链路
+    // 避免频繁缩放触发 live2dProps 重建导致模型闪烁
+    try {
+      if (typeof ReactNativeLive2dModule.setViewScale === 'function') {
+        ReactNativeLive2dModule.setViewScale(scale);
+      } else {
+        // 仅首次打印警告，避免每帧重复
+        if (!this.hasWarnedAboutSetViewScale) {
+          console.warn('⚠️ [Live2DService] setViewScale is not a function, using fallback');
+          this.hasWarnedAboutSetViewScale = true;
+        }
+        void this.core.setTransform({ scale } as Transform);
+      }
+    } catch (e) {
+      // 仅首次打印错误，避免每帧重复
+      if (!this.hasWarnedAboutSetViewScale) {
+        console.error('❌ [Live2DService] setViewScale error:', e);
+        this.hasWarnedAboutSetViewScale = true;
+      }
+      void this.core.setTransform({ scale } as Transform);
+    }
+    // 同步更新内部状态，供 getTransformState() 读取
+    this.transformState.scale = scale;
   }
 
   /**
    * 设置位置
    */
   setPosition(x: number, y: number): void {
-    console.log('📍 设置位置:', x, y);
-    void this.core.setTransform({ position: { x, y } } as Transform);
+    // 直接调用 native module，不走 setTransform → React 重渲染链路
+    // 避免每帧拖动触发 live2dProps 重建导致模型消失
+    try {
+      if (typeof ReactNativeLive2dModule.setViewPosition === 'function') {
+        ReactNativeLive2dModule.setViewPosition(x, y);
+        // 成功时不打印日志，避免拖动时每帧产生 log spam
+      } else {
+        // 仅首次打印警告，避免每帧重复
+        if (!this.hasWarnedAboutSetViewPosition) {
+          console.warn('⚠️ [Live2DService] setViewPosition is not a function, using fallback');
+          this.hasWarnedAboutSetViewPosition = true;
+        }
+        // Fallback: 使用旧的 setTransform 方法
+        void this.core.setTransform({ position: { x, y } } as Transform);
+      }
+    } catch (e) {
+      // 仅首次打印错误，避免每帧重复
+      if (!this.hasWarnedAboutSetViewPosition) {
+        console.error('❌ [Live2DService] setViewPosition error:', e);
+        this.hasWarnedAboutSetViewPosition = true;
+      }
+      // Fallback: 使用旧的 setTransform 方法
+      void this.core.setTransform({ position: { x, y } } as Transform);
+    }
+    // 同步更新内部状态，供 getTransformState() 读取
+    this.transformState.position = { x, y };
   }
 
   /**
@@ -521,10 +571,17 @@ export class Live2DService {
   destroy(): void {
     console.log('🧹 Live2DService 销毁中...');
 
-    // 卸载模型
-    if (this.modelState.isReady) {
-      this.unloadModel();
-    }
+    // 先清空所有回调，防止 unloadModel/dispose 触发的异步状态事件
+    // 污染新 service 的 React state（覆盖掉 useLive2D 的 reset）
+    this.config.onModelStateChange = undefined;
+    this.config.onLoadingStateChange = undefined;
+    this.config.onTransformStateChange = undefined;
+    this.config.onAnimationStateChange = undefined;
+    this.config.onModelLoaded = undefined;
+    this.config.onModelError = undefined;
+
+    // 无论 isReady/isLoading 状态，都强制卸载，避免旧模型残留
+    this.unloadModel();
 
     // 重置状态
     this.isInitialized = false;

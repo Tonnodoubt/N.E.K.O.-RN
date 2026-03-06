@@ -2,7 +2,13 @@ import { Directory, File, Paths } from 'expo-file-system';
 
 function resolveUrl(baseUrl: string, relativePath: string): string {
   try {
-    return new URL(relativePath, baseUrl).toString();
+    const resolved = new URL(relativePath, baseUrl);
+    // 保留 base URL 的 query 参数（如 P2P token），new URL() 会丢弃它们
+    const base = new URL(baseUrl);
+    base.searchParams.forEach((v, k) => {
+      if (!resolved.searchParams.has(k)) resolved.searchParams.set(k, v);
+    });
+    return resolved.toString();
   } catch {
     if (baseUrl.endsWith('/')) return baseUrl + relativePath;
     return baseUrl + '/' + relativePath;
@@ -25,12 +31,34 @@ async function downloadFileTo(dstPath: string, srcUrl: string): Promise<void> {
   const dstDir = dstPath.substring(0, dstPath.lastIndexOf('/') + 1);
   await ensureDirAsync(dstDir);
   try {
+    // 提取文件名（处理包含子目录的相对路径，如 Nahida_1080.1024/texture_00.png）
+    const lastSlashIndex = dstPath.lastIndexOf('/');
+    const fileName = dstPath.substring(lastSlashIndex + 1);
+
     const dstFolder = new Directory(dstDir);
-    const dst = new Directory(dstFolder.uri);
-    const output = await File.downloadFileAsync(srcUrl, dst);
-    console.log(`loaded file: ${output.uri}`)
+    const output = await File.downloadFileAsync(srcUrl, dstFolder);
+
+    // 如果下载的文件名与目标文件名不同，需要重命名
+    // expo-file-system 的 downloadFileAsync 使用 URL 中的文件名，不是 dstPath 中的
+    const expectedUri = `${dstDir}${fileName}`;
+    if (output.uri !== expectedUri) {
+      // 文件被下载到了错误的位置，需要移动
+      const downloadedFile = new File(output.uri);
+      const targetFile = new File(expectedUri);
+
+      // 如果目标文件已存在，先删除
+      if (await targetFile.exists) {
+        await targetFile.delete();
+      }
+
+      // 移动文件到正确位置
+      await downloadedFile.moveAsync(targetFile);
+      console.log(`moved file: ${output.uri} => ${expectedUri}`);
+    } else {
+      console.log(`loaded file: ${output.uri}`);
+    }
   } catch (error) {
-    // console.log(`loaded file error: ${error}`)
+    console.log(`loaded file error: ${error}`)
   }
 }
 

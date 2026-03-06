@@ -31,6 +31,10 @@ yarn-error.*
 .DS_Store
 *.pem
 
+# Vim
+*.swp
+*.swo
+
 # local env files
 .env*.local
 
@@ -38,9 +42,15 @@ yarn-error.*
 *.tsbuildinfo
 
 app-example
-
+ß
 # generated native folders
 /ios
 /android
 
 *.apk
+
+# IDE
+.idea/
+
+
+

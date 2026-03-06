@@ -53,13 +53,33 @@ export default function QrScannerScreen() {
         returnTo === '/(tabs)/main' ||
         returnTo === '/main'
           ? returnTo
-          : '/explore';
+      : '/main';
 
       (async () => {
         const applied = await devConfig.applyQrRaw(raw);
         if (!applied.ok) {
           Alert.alert('二维码内容不可用', `${applied.error}\n\n内容：${raw.slice(0, 256)}`);
           setScanned(false);
+          return;
+        }
+
+        // P2P 连接成功提示 (v2 架构)
+        if (applied.isP2p) {
+          Alert.alert(
+            'P2P 连接配置成功',
+            `局域网 IP: ${applied.config.host}\n端口: ${applied.config.port}\n角色: ${applied.config.characterName}\n\n请确保手机和电脑在同一 WiFi 下。`,
+            [
+              {
+                text: '确定',
+                onPress: () => {
+                  router.replace({
+                    pathname: target,
+                    params: { qr: encodeURIComponent(raw), p2p: 'true' },
+                  });
+                },
+              },
+            ]
+          );
           return;
         }
 
