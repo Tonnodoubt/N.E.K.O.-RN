@@ -1,18 +1,47 @@
 import { StyleSheet, View, TouchableOpacity, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { useIsFocused } from '@react-navigation/native';
 import { useDevConnectionConfig } from '@/hooks/useDevConnectionConfig';
+import { hasUserStoredConfig } from '@/services/DevConnectionStorage';
+import { sessionStore } from '@/utils/sessionStore';
+
+type ConnectionStatus = 'online' | 'offline';
+
+const STATUS_MAP: Record<ConnectionStatus, { color: string; text: string }> = {
+  online:  { color: '#40c5f1', text: '就绪' },
+  offline: { color: '#ff4d4d', text: '未连接' },
+};
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { config, isLoaded } = useDevConnectionConfig();
+  const { config, isLoaded, reload } = useDevConnectionConfig();
+
+  const isFocused = useIsFocused();
+  const [isConnected, setIsConnected] = useState(sessionStore.isConnected);
+  const [isUserConfigured, setIsUserConfigured] = useState(false);
+
+  // 订阅 WebSocket 连接状态变化
+  useEffect(() => sessionStore.subscribe(setIsConnected), []);
+
+  // 每次页面获得焦点时同步配置状态（扫码/手动配置后返回首页可立即更新）
+  useEffect(() => {
+    if (!isLoaded || !isFocused) return;
+    hasUserStoredConfig().then(setIsUserConfigured);
+    reload();
+  }, [isLoaded, isFocused, reload]);
+
+  const status: ConnectionStatus = isConnected ? 'online' : 'offline';
+  const { color: statusColor, text: statusText } = STATUS_MAP[status];
+  const showIp = isUserConfigured && isConnected;
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         {/* 标题区域 */}
         <View style={styles.header}>
-          <Text style={styles.title}>Project N.E.K.O.</Text>
+           <Text style={styles.title}>Project N.E.K.O.</Text>
         </View>
 
         {/* 快捷功能 */}
@@ -43,23 +72,25 @@ export default function HomeScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>服务器连接</Text>
 
-          {isLoaded && (
-            <View style={styles.configCard}>
-              <View style={styles.configRow}>
-                <Text style={styles.configLabel}>配置已加载</Text>
-                <View style={styles.statusIndicator}>
-                  <View style={styles.statusDot} />
-                  <Text style={styles.statusText}>已就绪</Text>
-                </View>
+          <View style={styles.configCard}>
+            <View style={styles.configRow}>
+              <Text style={styles.configLabel}>当前连接</Text>
+              <View style={styles.statusIndicator}>
+                <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+                <Text style={[styles.statusText, { color: statusColor }]}>{statusText}</Text>
               </View>
+            </View>
+            {showIp ? (
               <Text style={styles.configValue}>
                 {config.host}:{config.port}
               </Text>
-              <Text style={styles.configSubtext}>
-                角色: {config.characterName}
-              </Text>
-            </View>
-          )}
+            ) : isUserConfigured ? (
+              <Text style={styles.configValueOffline}>已配置，等待连接…</Text>
+            ) : (
+              <Text style={styles.configValueOffline}>扫码或手动配置以连接</Text>
+            )}
+            <Text style={styles.configSubtext}>角色: {config.characterName}</Text>
+          </View>
 
           <View style={styles.configButtons}>
             <TouchableOpacity
@@ -186,6 +217,11 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: 'monospace',
     fontWeight: '600',
+  },
+  configValueOffline: {
+    color: '#555',
+    fontSize: 14,
+    fontStyle: 'italic',
   },
   configSubtext: {
     color: '#666',

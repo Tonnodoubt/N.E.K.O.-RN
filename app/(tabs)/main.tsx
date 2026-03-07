@@ -14,6 +14,7 @@ import { useCameraStream } from '@/hooks/useCameraStream';
 import { CameraView } from 'expo-camera';
 import { ImageMessageService } from '@/services/imageMessage';
 import { mainManager } from '@/utils/MainManager';
+import { sessionStore } from '@/utils/sessionStore';
 import { VoicePrepareOverlay } from '@/components/VoicePrepareOverlay';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams } from 'expo-router';
@@ -503,6 +504,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       }
     },
     onConnectionChange: (connected) => {
+      sessionStore.set(connected);
       if (connected) {
         // 连接成功，显示 Toast 提示
         if (wasInBackgroundRef.current) {

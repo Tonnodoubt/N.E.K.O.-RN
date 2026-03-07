@@ -78,3 +78,20 @@ export async function clearStoredDevConnectionConfig(): Promise<void> {
   }
 }
 
+/** 用户是否存有显式配置（扫码/手动保存后才为 true）。环境变量覆盖时视为已配置。 */
+export async function hasUserStoredConfig(): Promise<boolean> {
+  if (
+    process.env.EXPO_PUBLIC_DEV_HOST ||
+    process.env.EXPO_PUBLIC_DEV_PORT ||
+    process.env.EXPO_PUBLIC_DEV_CHARACTER
+  ) {
+    return true;
+  }
+  try {
+    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    return raw !== null;
+  } catch {
+    return false;
+  }
+}
+

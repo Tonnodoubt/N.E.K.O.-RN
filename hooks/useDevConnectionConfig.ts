@@ -16,6 +16,7 @@ export function useDevConnectionConfig(): {
   setConfig: (next: Partial<DevConnectionConfig> | ((prev: DevConnectionConfig) => DevConnectionConfig)) => Promise<DevConnectionConfig>;
   applyQrRaw: (raw: string) => Promise<ApplyQrResult>;
   clear: () => Promise<void>;
+  reload: () => Promise<void>;
 } {
   const [config, _setConfig] = useState<DevConnectionConfig>(DEFAULT_DEV_CONNECTION_CONFIG);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -71,6 +72,13 @@ export function useDevConnectionConfig(): {
     configRef.current = DEFAULT_DEV_CONNECTION_CONFIG;
   }, []);
 
-  return { config, isLoaded, setConfig, applyQrRaw, clear };
+  /** 从 AsyncStorage 重新加载配置（用于其他页面写入后同步到当前实例）。 */
+  const reload = useCallback(async () => {
+    const stored = await getStoredDevConnectionConfig();
+    _setConfig(stored);
+    configRef.current = stored;
+  }, []);
+
+  return { config, isLoaded, setConfig, applyQrRaw, clear, reload };
 }
 
