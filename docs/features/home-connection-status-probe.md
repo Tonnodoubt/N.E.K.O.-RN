@@ -75,7 +75,7 @@ export const sessionStore = {
   set(connected: boolean): void {
     if (_connected === connected) return;
     _connected = connected;
-    _listeners.forEach((l) => l(connected));
+    _listeners.forEach((l) => { l(connected); });
   },
 
   subscribe(listener: Listener): () => void {

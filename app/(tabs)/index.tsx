@@ -218,9 +218,6 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     fontWeight: '600',
   },
-  configValueDimmed: {
-    opacity: 0.4,
-  },
   configValueOffline: {
     color: '#555',
     fontSize: 14,
