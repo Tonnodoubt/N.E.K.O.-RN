@@ -8,7 +8,7 @@ export type Live2DRightToolbarButtonId = "mic" | "screen" | "agent" | "settings"
 
 export type Live2DRightToolbarPanel = "agent" | "settings" | null;
 
-export type Live2DSettingsToggleId = "mergeMessages" | "allowInterrupt" | "proactiveChat" | "proactiveVision";
+export type Live2DSettingsToggleId = "mergeMessages" | "allowInterrupt" | "proactiveChat" | "proactiveVision" | "darkMode";
 
 export type Live2DAgentToggleId = "master" | "keyboard" | "mcp" | "userPlugin";
 
@@ -17,6 +17,7 @@ export interface Live2DSettingsState {
   allowInterrupt: boolean;
   proactiveChat: boolean;
   proactiveVision: boolean;
+  darkMode: boolean;
 }
 
 export interface Live2DAgentState {
