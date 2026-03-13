@@ -17,6 +17,7 @@ import {
   Switch,
   Text,
   TouchableWithoutFeedback,
+  useColorScheme,
 } from 'react-native';
 import { useT } from '../i18n';
 import {
@@ -32,7 +33,7 @@ import type {
   Live2DSettingsMenuId,
   Live2DSettingsToggleId,
 } from './types';
-import { styles } from './styles.native';
+import { createToolbarStyles } from './styles.native';
 
 export * from './types';
 
@@ -58,6 +59,8 @@ export function Live2DRightToolbar({
   onSettingsMenuClick,
 }: Live2DRightToolbarProps) {
   const t = useT();
+  const colorScheme = useColorScheme();
+  const styles = createToolbarStyles(colorScheme === 'dark');
 
   // 使用共享的面板切换逻辑
   const { togglePanel } = usePanelToggle(openPanel, onOpenPanelChange);

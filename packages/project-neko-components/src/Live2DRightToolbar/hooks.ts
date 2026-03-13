@@ -198,6 +198,11 @@ export function useSettingsToggleRows(
         label: tOrDefault(t, 'settings.toggles.proactiveVision', '自主视觉'),
         checked: settings.proactiveVision,
       },
+      {
+        id: 'darkMode' as const,
+        label: tOrDefault(t, 'settings.toggles.darkMode', '暗色模式'),
+        checked: settings.darkMode,
+      },
     ],
     [settings, t]
   );

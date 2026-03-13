@@ -7,13 +7,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -23,6 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useDevConnectionConfig } from '@/hooks/useDevConnectionConfig';
 import { createConfigApiClient, type CoreConfig, type ApiProvider } from '@/services/api/config';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
 // Icons as text
 const Icons = {
@@ -35,10 +34,61 @@ const Icons = {
   refresh: '🔄',
 };
 
+// 亮色/暗色主题色板（参照主项目 theme.css 与 dark-mode.css）
+const LIGHT = {
+  container:          '#e3f4ff',
+  header:             '#f0f8ff',
+  headerBorder:       '#b3e5fc',
+  card:               '#f0f8ff',
+  input:              '#fff',
+  inputBorder:        '#b3e5fc',
+  textPrimary:        '#1a1a2e',
+  textLabel:          '#555',
+  textMuted:          '#777',
+  sectionTitle:       '#0d6e92',
+  accent:             '#40c5f1',
+  accentText:         '#1a1a2e',
+  pickerOptionBg:     '#f0f8ff',
+  pickerOptionBorder: '#b3e5fc',
+  infoSeparator:      '#b3e5fc',
+  infoLabel:          '#555',
+  infoValue:          '#1a1a2e',
+  loadingText:        '#1a1a2e',
+  inputText:          '#1a1a2e',
+  placeholder:        '#999',
+};
+
+const DARK = {
+  container:          '#1a1a2e',
+  header:             '#1a1a2e',
+  headerBorder:       '#333',
+  card:               '#16213e',
+  input:              '#1a1a2e',
+  inputBorder:        '#333',
+  textPrimary:        '#fff',
+  textLabel:          '#aaa',
+  textMuted:          '#888',
+  sectionTitle:       '#fff',
+  accent:             '#00d9ff',
+  accentText:         '#1a1a2e',
+  pickerOptionBg:     '#1a1a2e',
+  pickerOptionBorder: '#333',
+  infoSeparator:      '#333',
+  infoLabel:          '#888',
+  infoValue:          '#fff',
+  loadingText:        '#fff',
+  inputText:          '#fff',
+  placeholder:        '#666',
+};
+
 export default function SettingsScreen() {
   const router = useRouter();
   const { config } = useDevConnectionConfig();
   const apiBase = `http://${config.host}:${config.port}`;
+
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const t = isDark ? DARK : LIGHT;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -106,37 +156,30 @@ export default function SettingsScreen() {
     setCoreConfig(prev => ({ ...prev, [field]: value }));
   };
 
-  // Find provider name by id
-  const getProviderName = (id: string | undefined, providers: ApiProvider[]) => {
-    if (!id) return 'Unknown';
-    const provider = providers.find(p => p.id === id);
-    return provider?.name || id;
-  };
-
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: t.container }]}>
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading settings...</Text>
+          <Text style={[styles.loadingText, { color: t.loadingText }]}>Loading settings...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: t.container }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { backgroundColor: t.header, borderBottomColor: t.headerBorder }]}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Text style={styles.backButtonText}>{Icons.back}</Text>
+            <Text style={[styles.backButtonText, { color: t.accent }]}>{Icons.back}</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>API Settings</Text>
+          <Text style={[styles.headerTitle, { color: t.textPrimary }]}>API Settings</Text>
           <TouchableOpacity onPress={loadConfig} style={styles.refreshButton}>
-            <Text style={styles.refreshButtonText}>{Icons.refresh}</Text>
+            <Text style={[styles.refreshButtonText, { color: t.accent }]}>{Icons.refresh}</Text>
           </TouchableOpacity>
         </View>
 
@@ -163,25 +206,27 @@ export default function SettingsScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionIcon}>{Icons.key}</Text>
-              <Text style={styles.sectionTitle}>Core API</Text>
+              <Text style={[styles.sectionTitle, { color: t.sectionTitle }]}>Core API</Text>
             </View>
-            <View style={styles.card}>
+            <View style={[styles.card, { backgroundColor: t.card }]}>
               <View style={styles.field}>
-                <Text style={styles.label}>API Provider</Text>
+                <Text style={[styles.label, { color: t.textLabel }]}>API Provider</Text>
                 <View style={styles.pickerContainer}>
                   {coreProviders.map((provider, index) => (
                     <TouchableOpacity
                       key={provider.id || `core-${index}`}
                       style={[
                         styles.pickerOption,
-                        coreConfig.coreApi === provider.id && styles.pickerOptionSelected,
+                        { backgroundColor: t.pickerOptionBg, borderColor: t.pickerOptionBorder },
+                        coreConfig.coreApi === provider.id && { backgroundColor: t.accent, borderColor: t.accent },
                       ]}
                       onPress={() => updateField('coreApi', provider.id)}
                     >
                       <Text
                         style={[
                           styles.pickerOptionText,
-                          coreConfig.coreApi === provider.id && styles.pickerOptionTextSelected,
+                          { color: t.textPrimary },
+                          coreConfig.coreApi === provider.id && { color: t.accentText, fontWeight: 'bold' },
                         ]}
                       >
                         {provider.name}
@@ -192,12 +237,13 @@ export default function SettingsScreen() {
               </View>
 
               <View style={styles.field}>
-                <Text style={styles.label}>API Key</Text>
+                <Text style={[styles.label, { color: t.textLabel }]}>API Key</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { backgroundColor: t.input, borderColor: t.inputBorder, color: t.inputText }]}
                   value={coreConfig.api_key || ''}
                   onChangeText={(text) => updateField('api_key', text)}
                   placeholder="Enter API key"
+                  placeholderTextColor={t.placeholder}
                   secureTextEntry
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -210,25 +256,27 @@ export default function SettingsScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionIcon}>{Icons.settings}</Text>
-              <Text style={styles.sectionTitle}>Assist API (Memory/Voice)</Text>
+              <Text style={[styles.sectionTitle, { color: t.sectionTitle }]}>Assist API (Memory/Voice)</Text>
             </View>
-            <View style={styles.card}>
+            <View style={[styles.card, { backgroundColor: t.card }]}>
               <View style={styles.field}>
-                <Text style={styles.label}>Assist API Provider</Text>
+                <Text style={[styles.label, { color: t.textLabel }]}>Assist API Provider</Text>
                 <View style={styles.pickerContainer}>
                   {assistProviders.map((provider, index) => (
                     <TouchableOpacity
                       key={provider.id || `assist-${index}`}
                       style={[
                         styles.pickerOption,
-                        coreConfig.assistApi === provider.id && styles.pickerOptionSelected,
+                        { backgroundColor: t.pickerOptionBg, borderColor: t.pickerOptionBorder },
+                        coreConfig.assistApi === provider.id && { backgroundColor: t.accent, borderColor: t.accent },
                       ]}
                       onPress={() => updateField('assistApi', provider.id)}
                     >
                       <Text
                         style={[
                           styles.pickerOptionText,
-                          coreConfig.assistApi === provider.id && styles.pickerOptionTextSelected,
+                          { color: t.textPrimary },
+                          coreConfig.assistApi === provider.id && { color: t.accentText, fontWeight: 'bold' },
                         ]}
                       >
                         {provider.name}
@@ -244,73 +292,31 @@ export default function SettingsScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionIcon}>{Icons.key}</Text>
-              <Text style={styles.sectionTitle}>Provider API Keys</Text>
+              <Text style={[styles.sectionTitle, { color: t.sectionTitle }]}>Provider API Keys</Text>
             </View>
-            <View style={styles.card}>
-              <View style={styles.field}>
-                <Text style={styles.label}>Qwen (Alibaba Cloud)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={coreConfig.assistApiKeyQwen || ''}
-                  onChangeText={(text) => updateField('assistApiKeyQwen', text)}
-                  placeholder="sk-..."
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-              </View>
-
-              <View style={styles.field}>
-                <Text style={styles.label}>OpenAI</Text>
-                <TextInput
-                  style={styles.input}
-                  value={coreConfig.assistApiKeyOpenai || ''}
-                  onChangeText={(text) => updateField('assistApiKeyOpenai', text)}
-                  placeholder="sk-..."
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-              </View>
-
-              <View style={styles.field}>
-                <Text style={styles.label}>GLM (Zhipu)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={coreConfig.assistApiKeyGlm || ''}
-                  onChangeText={(text) => updateField('assistApiKeyGlm', text)}
-                  placeholder="..."
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-              </View>
-
-              <View style={styles.field}>
-                <Text style={styles.label}>Step (阶跃星辰)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={coreConfig.assistApiKeyStep || ''}
-                  onChangeText={(text) => updateField('assistApiKeyStep', text)}
-                  placeholder="..."
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-              </View>
-
-              <View style={styles.field}>
-                <Text style={styles.label}>Silicon Flow (硅基流动)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={coreConfig.assistApiKeySilicon || ''}
-                  onChangeText={(text) => updateField('assistApiKeySilicon', text)}
-                  placeholder="..."
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-              </View>
+            <View style={[styles.card, { backgroundColor: t.card }]}>
+              {[
+                { label: 'Qwen (Alibaba Cloud)', field: 'assistApiKeyQwen' as keyof CoreConfig },
+                { label: 'OpenAI',               field: 'assistApiKeyOpenai' as keyof CoreConfig },
+                { label: 'Gemini (Google)',       field: 'assistApiKeyGemini' as keyof CoreConfig },
+                { label: 'GLM (Zhipu)',           field: 'assistApiKeyGlm' as keyof CoreConfig },
+                { label: 'Step (阶跃星辰)',        field: 'assistApiKeyStep' as keyof CoreConfig },
+                { label: 'Silicon Flow (硅基流动)', field: 'assistApiKeySilicon' as keyof CoreConfig },
+              ].map(({ label, field }) => (
+                <View key={field} style={styles.field}>
+                  <Text style={[styles.label, { color: t.textLabel }]}>{label}</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: t.input, borderColor: t.inputBorder, color: t.inputText }]}
+                    value={(coreConfig[field] as string) || ''}
+                    onChangeText={(text) => updateField(field, text)}
+                    placeholder="sk-..."
+                    placeholderTextColor={t.placeholder}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
+              ))}
             </View>
           </View>
 
@@ -318,16 +324,17 @@ export default function SettingsScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionIcon}>{Icons.settings}</Text>
-              <Text style={styles.sectionTitle}>MCP Token</Text>
+              <Text style={[styles.sectionTitle, { color: t.sectionTitle }]}>MCP Token</Text>
             </View>
-            <View style={styles.card}>
+            <View style={[styles.card, { backgroundColor: t.card }]}>
               <View style={styles.field}>
-                <Text style={styles.label}>MCP Router Token</Text>
+                <Text style={[styles.label, { color: t.textLabel }]}>MCP Router Token</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { backgroundColor: t.input, borderColor: t.inputBorder, color: t.inputText }]}
                   value={coreConfig.mcpToken || ''}
                   onChangeText={(text) => updateField('mcpToken', text)}
                   placeholder="Optional"
+                  placeholderTextColor={t.placeholder}
                   secureTextEntry
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -340,32 +347,30 @@ export default function SettingsScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionIcon}>{Icons.info}</Text>
-              <Text style={styles.sectionTitle}>Server Info</Text>
+              <Text style={[styles.sectionTitle, { color: t.sectionTitle }]}>Server Info</Text>
             </View>
-            <View style={styles.card}>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Host</Text>
-                <Text style={styles.infoValue}>{config.host}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Port</Text>
-                <Text style={styles.infoValue}>{config.port}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Character</Text>
-                <Text style={styles.infoValue}>{config.characterName}</Text>
-              </View>
+            <View style={[styles.card, { backgroundColor: t.card }]}>
+              {[
+                { label: 'Host',      value: config.host },
+                { label: 'Port',      value: String(config.port) },
+                { label: 'Character', value: config.characterName },
+              ].map(({ label, value }) => (
+                <View key={label} style={[styles.infoRow, { borderBottomColor: t.infoSeparator }]}>
+                  <Text style={[styles.infoLabel, { color: t.infoLabel }]}>{label}</Text>
+                  <Text style={[styles.infoValue, { color: t.infoValue }]}>{value}</Text>
+                </View>
+              ))}
             </View>
           </View>
 
           {/* Save Button */}
           <View style={styles.saveContainer}>
             <TouchableOpacity
-              style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+              style={[styles.saveButton, { backgroundColor: t.accent }, saving && styles.saveButtonDisabled]}
               onPress={handleSave}
               disabled={saving}
             >
-              <Text style={styles.saveButtonText}>
+              <Text style={[styles.saveButtonText, { color: t.accentText }]}>
                 {saving ? 'Saving...' : 'Save Settings'}
               </Text>
             </TouchableOpacity>
@@ -379,7 +384,6 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a1a2e',
   },
   keyboardView: {
     flex: 1,
@@ -390,7 +394,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    color: '#fff',
     fontSize: 16,
   },
   header: {
@@ -399,18 +402,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#333',
   },
   backButton: {
     padding: 8,
   },
   backButtonText: {
-    color: '#00d9ff',
     fontSize: 24,
   },
   headerTitle: {
     flex: 1,
-    color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
     textAlign: 'center',
@@ -419,7 +419,6 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   refreshButtonText: {
-    color: '#00d9ff',
     fontSize: 20,
   },
   errorBox: {
@@ -465,12 +464,10 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     flex: 1,
-    color: '#fff',
     fontSize: 16,
     fontWeight: '600',
   },
   card: {
-    backgroundColor: '#16213e',
     borderRadius: 12,
     padding: 16,
   },
@@ -478,18 +475,14 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   label: {
-    color: '#aaa',
     fontSize: 12,
     marginBottom: 6,
   },
   input: {
-    backgroundColor: '#1a1a2e',
     borderRadius: 8,
     padding: 12,
-    color: '#fff',
     fontSize: 16,
     borderWidth: 1,
-    borderColor: '#333',
   },
   pickerContainer: {
     flexDirection: 'row',
@@ -497,38 +490,24 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   pickerOption: {
-    backgroundColor: '#1a1a2e',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: '#333',
-  },
-  pickerOptionSelected: {
-    backgroundColor: '#00d9ff',
-    borderColor: '#00d9ff',
   },
   pickerOptionText: {
-    color: '#fff',
     fontSize: 14,
-  },
-  pickerOptionTextSelected: {
-    color: '#1a1a2e',
-    fontWeight: 'bold',
   },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#333',
   },
   infoLabel: {
-    color: '#888',
     fontSize: 14,
   },
   infoValue: {
-    color: '#fff',
     fontSize: 14,
   },
   saveContainer: {
@@ -536,7 +515,6 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   saveButton: {
-    backgroundColor: '#00d9ff',
     borderRadius: 8,
     padding: 16,
     alignItems: 'center',
@@ -545,7 +523,6 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   saveButtonText: {
-    color: '#1a1a2e',
     fontSize: 16,
     fontWeight: 'bold',
   },

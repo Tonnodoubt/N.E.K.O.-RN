@@ -15,13 +15,14 @@ import { useCameraStream } from '@/hooks/useCameraStream';
 import { CameraView } from 'expo-camera';
 import { ImageMessageService } from '@/services/imageMessage';
 import { mainManager } from '@/utils/MainManager';
+import { sessionStore } from '@/utils/sessionStore';
 import { VoicePrepareOverlay } from '@/components/VoicePrepareOverlay';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert, AppState, Dimensions, Image, Modal, Platform, ScrollView,
+  Alert, AppState, Appearance, Dimensions, Image, Modal, Platform, ScrollView,
   StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View,
 } from 'react-native';
 import { ReactNativeLive2dView } from 'react-native-live2d';
@@ -264,6 +265,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     allowInterrupt: true,
     proactiveChat: false,
     proactiveVision: false,
+    darkMode: false,
   });
 
   // 消息去重：跟踪已发送消息的 clientMessageId（使用 Map 存储时间戳，支持 TTL 清理）
@@ -513,6 +515,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       }
     },
     onConnectionChange: (connected) => {
+      sessionStore.set(connected);
       if (connected) {
         // 连接成功，显示 Toast 提示
         if (wasInBackgroundRef.current) {
@@ -799,6 +802,9 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   // 工具栏事件处理（与 Web 版本一致）
   const handleToolbarSettingsChange = useCallback((id: Live2DSettingsToggleId, next: boolean) => {
     setToolbarSettings((prev) => ({ ...prev, [id]: next }));
+    if (id === 'darkMode') {
+      Appearance.setColorScheme(next ? 'dark' : 'light');
+    }
   }, []);
 
   const handleToolbarAgentChange = useCallback((id: Live2DAgentToggleId, next: boolean) => {

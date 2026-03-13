@@ -16,8 +16,9 @@ export function useDevConnectionConfig(): {
   isLoaded: boolean;
   setConfig: (next: Partial<DevConnectionConfig> | ((prev: DevConnectionConfig) => DevConnectionConfig)) => Promise<DevConnectionConfig>;
   applyQrRaw: (raw: string) => Promise<ApplyQrResult>;
-  refreshFromCloud: () => Promise<boolean>;  // 新增：从云端刷新
+  refreshFromCloud: () => Promise<boolean>;  // 从云端刷新
   clear: () => Promise<void>;
+  reload: () => Promise<void>;  // 重新加载配置
 } {
   const [config, _setConfig] = useState<DevConnectionConfig>(DEFAULT_DEV_CONNECTION_CONFIG);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -73,6 +74,13 @@ export function useDevConnectionConfig(): {
     configRef.current = DEFAULT_DEV_CONNECTION_CONFIG;
   }, []);
 
+  /** 从 AsyncStorage 重新加载配置（用于其他页面写入后同步到当前实例）。 */
+  const reload = useCallback(async () => {
+    const stored = await getStoredDevConnectionConfig();
+    _setConfig(stored);
+    configRef.current = stored;
+  }, []);
+
   /**
    * 从云端刷新设备信息（如果配置中有 deviceId）
    */
@@ -103,6 +111,6 @@ export function useDevConnectionConfig(): {
     }
   }, [setConfig]);
 
-  return { config, isLoaded, setConfig, applyQrRaw, refreshFromCloud, clear };
+  return { config, isLoaded, setConfig, applyQrRaw, refreshFromCloud, clear, reload };
 }
 
