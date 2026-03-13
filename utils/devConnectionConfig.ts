@@ -2,9 +2,22 @@ export type DevConnectionConfig = {
   host: string;
   port: number;
   characterName: string;
-  // P2P 连接配置（可选）- v2: 只需要 token，走标准 WebSocket
+  // P2P 连接配置（v3: 三层回退）
   p2p?: {
     token: string;
+    deviceId?: string;              // 设备 ID（用于云端查询）
+
+    // 第1层：LAN 直连
+    lanIp?: string;                 // 局域网 IP
+    lanPort?: number;               // 局域网端口
+
+    // 第2层：STUN 打洞
+    stunIp?: string;                // STUN 公网 IP
+    stunPort?: number;              // STUN 公网端口
+
+    // 第3层：FRP 中转
+    frpIp?: string;                 // FRP 中转 IP
+    frpPort?: number;               // FRP 中转端口
   };
 };
 
@@ -25,13 +38,29 @@ export function parseDevConnectionConfig(raw: string): Partial<DevConnectionConf
     if (obj && typeof obj === 'object') {
       const out: Partial<DevConnectionConfig> = {};
 
-      // 检测 P2P 格式（包含 lan_ip 和 token）- v2 架构
+      // 检测 P2P 格式（包含 lan_ip 和 token）- v3 架构：三层回退
       if (typeof obj.lan_ip === 'string' && obj.lan_ip.trim() && typeof obj.token === 'string') {
-        // v2: 直接连接代理端口，URL 中包含 token
         out.host = obj.lan_ip.trim();
         out.port = typeof obj.port === 'number' ? obj.port : 48920;
-        out.characterName = obj.character || obj.name || 'test';  // 从二维码获取角色名
-        out.p2p = { token: obj.token };  // 只需要 token
+        out.characterName = obj.character || obj.name || 'test';
+
+        // v3: 完整的三层连接信息
+        out.p2p = {
+          token: obj.token,
+          deviceId: obj.device_id,
+
+          // 第1层：LAN 直连
+          lanIp: obj.lan_ip.trim(),
+          lanPort: obj.port || 48920,
+
+          // 第2层：STUN 打洞
+          stunIp: obj.stun_ip,
+          stunPort: obj.stun_port,
+
+          // 第3层：FRP 中转
+          frpIp: obj.frp_ip,
+          frpPort: obj.frp_port,
+        };
         return out;
       }
 

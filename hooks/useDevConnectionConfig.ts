@@ -5,6 +5,7 @@ import {
   type DevConnectionConfig,
 } from '@/utils/devConnectionConfig';
 import { clearStoredDevConnectionConfig, getStoredDevConnectionConfig, setStoredDevConnectionConfig } from '@/services/DevConnectionStorage';
+import { queryDeviceInfo } from '@/services/CloudRegistryService';
 
 export type ApplyQrResult =
   | { ok: true; config: DevConnectionConfig; isP2p?: boolean }
@@ -15,6 +16,7 @@ export function useDevConnectionConfig(): {
   isLoaded: boolean;
   setConfig: (next: Partial<DevConnectionConfig> | ((prev: DevConnectionConfig) => DevConnectionConfig)) => Promise<DevConnectionConfig>;
   applyQrRaw: (raw: string) => Promise<ApplyQrResult>;
+  refreshFromCloud: () => Promise<boolean>;  // 新增：从云端刷新
   clear: () => Promise<void>;
 } {
   const [config, _setConfig] = useState<DevConnectionConfig>(DEFAULT_DEV_CONNECTION_CONFIG);
@@ -71,6 +73,36 @@ export function useDevConnectionConfig(): {
     configRef.current = DEFAULT_DEV_CONNECTION_CONFIG;
   }, []);
 
-  return { config, isLoaded, setConfig, applyQrRaw, clear };
+  /**
+   * 从云端刷新设备信息（如果配置中有 deviceId）
+   */
+  const refreshFromCloud = useCallback(async (): Promise<boolean> => {
+    const currentConfig = configRef.current;
+
+    // 如果没有 P2P 配置或 deviceId，跳过
+    if (!currentConfig.p2p?.deviceId) {
+      console.log('[useDevConnectionConfig] 没有 deviceId，跳过云端刷新');
+      return false;
+    }
+
+    try {
+      console.log(`[useDevConnectionConfig] 从云端刷新设备信息: ${currentConfig.p2p.deviceId}`);
+      const latest = await queryDeviceInfo(currentConfig.p2p.deviceId);
+
+      if (latest) {
+        await setConfig(latest);
+        console.log('[useDevConnectionConfig] 云端刷新成功');
+        return true;
+      } else {
+        console.log('[useDevConnectionConfig] 云端查询失败');
+        return false;
+      }
+    } catch (e) {
+      console.error('[useDevConnectionConfig] 云端刷新异常:', e);
+      return false;
+    }
+  }, [setConfig]);
+
+  return { config, isLoaded, setConfig, applyQrRaw, refreshFromCloud, clear };
 }
 
