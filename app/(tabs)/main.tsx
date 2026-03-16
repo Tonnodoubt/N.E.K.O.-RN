@@ -19,6 +19,7 @@ import { sessionStore } from '@/utils/sessionStore';
 import { VoicePrepareOverlay } from '@/components/VoicePrepareOverlay';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -56,6 +57,7 @@ function generateMessageId(counter: number): string {
 }
 
 const MainUIScreen: React.FC<MainUIScreenProps> = () => {
+  const { t } = useTranslation();
 
   const [isPageFocused, setIsPageFocused] = useState(true);
 
@@ -179,7 +181,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
 
     applyQrRaw(raw).then((res) => {
       if (!res.ok) {
-        Alert.alert('二维码内容不可用', res.error);
+        Alert.alert(t('qrScanner.invalidCode'), res.error);
       }
     });
   }, [applyQrRaw, params.characterName, params.host, params.name, params.port, params.qr]);
@@ -315,7 +317,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   const { agent, onAgentChange, refreshAgentState } = useLive2DAgentBackend({
     apiBase: `http://${config.host}:${config.port}`,
     showToast: (message, duration) => {
-      Alert.alert('提示', message);
+      Alert.alert(t('common.alert'), message);
     },
     openPanel: toolbarOpenPanel === 'agent' ? 'agent' : null,
   });
@@ -913,7 +915,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
 
           const names = Object.keys(data.猫娘 || {});
           if (names.length === 0) {
-            Alert.alert('角色管理', '暂无可用角色');
+            Alert.alert(t('characterManager.title'), t('characterManager.empty'));
             return;
           }
 
@@ -922,7 +924,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
           setToolbarOpenPanel(null);
           setCharacterModalVisible(true);
         } catch (err: any) {
-          Alert.alert('获取角色列表失败', err.message || '网络错误');
+          Alert.alert(t('characterManager.title'), err.message || t('connection.errors.networkError'));
         } finally {
           setCharacterLoading(false);
         }
@@ -981,7 +983,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       return;
     }
 
-    Alert.alert('功能提示', `即将打开: ${id}`);
+    Alert.alert(t('common.alert'), `即将打开: ${id}`);
   }, [config, toolbarMicEnabled, mainManager, chat, audio, syncLive2dModel]);
 
   const handleSwitchCharacter = useCallback(async (name: string) => {
@@ -1015,11 +1017,11 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         }, 15000);
       } else {
         setCharacterLoading(false);
-        Alert.alert('切换失败', res.error || '未知错误');
+        Alert.alert(t('main.character.switchError'), res.error || t('common.error'));
       }
     } catch (err: any) {
       setCharacterLoading(false);
-      Alert.alert('切换失败', err.message || '网络错误');
+      Alert.alert(t('main.character.switchError'), err.message || t('connection.errors.networkError'));
     }
   }, [config, toolbarMicEnabled]);
 
@@ -1096,14 +1098,14 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   // 使用 stream_data action 和 clientMessageId 与 N.E.K.O 协议一致
   const handleSendMessage = useCallback(async (text: string, images?: string[]) => {
     if (!audio.isConnected) {
-      Alert.alert('提示', '未连接到服务器');
+      Alert.alert(t('common.alert'), t('connection.status.disconnected'));
       return;
     }
 
     // 确保 text session 已启动（与 Web 端一致）
     const sessionOk = await ensureTextSession();
     if (!sessionOk) {
-      Alert.alert('提示', '会话初始化失败，请重试');
+      Alert.alert(t('common.alert'), t('connection.status.reconnecting'));
       return;
     }
 
@@ -1392,7 +1394,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
               <View style={styles.characterModalContent}>
                 {/* Header — 对应 neko-header 蓝色背景 */}
                 <View style={styles.characterModalHeader}>
-                  <Text style={styles.characterModalTitle}>角色管理</Text>
+                  <Text style={styles.characterModalTitle}>{t('characterManager.title')}</Text>
                   <TouchableOpacity
                     style={styles.characterModalCloseBtn}
                     onPress={() => setCharacterModalVisible(false)}
@@ -1402,7 +1404,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
                   </TouchableOpacity>
                 </View>
                 <Text style={styles.characterModalSubtitle}>
-                  <Text style={styles.characterModalSubtitleLabel}>当前: </Text><Text style={styles.characterModalSubtitleHighlight}>{currentCatgirl || '未设置'}</Text>
+                  <Text style={styles.characterModalSubtitleLabel}>{t('settings.language.current')}: </Text><Text style={styles.characterModalSubtitleHighlight}>{currentCatgirl || t('main.character.noCharacters')}</Text>
                 </Text>
                 <ScrollView style={styles.characterModalList} showsVerticalScrollIndicator={false}>
                   {characterList.map((name) => {
@@ -1430,7 +1432,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
                         </Text>
                         {isCurrent ? (
                           <View style={styles.characterModalBadgeWrap}>
-                            <Text style={styles.characterModalBadge}>当前</Text>
+                            <Text style={styles.characterModalBadge}>{t('main.character.current')}</Text>
                           </View>
                         ) : (
                           <View style={styles.characterModalBadgePlaceholder} />
@@ -1457,7 +1459,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
             <TouchableWithoutFeedback>
               <View style={[styles.characterModalContent, styles.voiceBlockModalContent]}>
                 <View style={[styles.characterModalHeader, styles.voiceBlockModalHeader]}>
-                  <Text style={styles.characterModalTitle}>无法切换角色</Text>
+                  <Text style={styles.characterModalTitle}>{t('main.character.voiceBlockTitle')}</Text>
                   <TouchableOpacity
                     style={styles.characterModalCloseBtn}
                     onPress={() => setVoiceBlockModalVisible(false)}
@@ -1467,13 +1469,13 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
                   </TouchableOpacity>
                 </View>
                 <Text style={styles.voiceBlockModalBody}>
-                  语音模式下无法切换角色，请先停止语音对话后再切换。
+                  {t('main.voice.cannotSwitchCharacter')}
                 </Text>
                 <TouchableOpacity
                   style={styles.voiceBlockModalBtn}
                   onPress={() => setVoiceBlockModalVisible(false)}
                 >
-                  <Text style={styles.voiceBlockModalBtnText}>好的</Text>
+                  <Text style={styles.voiceBlockModalBtnText}>{t('common.ok')}</Text>
                 </TouchableOpacity>
               </View>
             </TouchableWithoutFeedback>
@@ -1485,14 +1487,14 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       {characterLoading && (
         <View style={styles.switchingOverlay}>
           <ActivityIndicator size="large" color="#40c5f1" />
-          <Text style={styles.switchingText}>正在切换角色...</Text>
+          <Text style={styles.switchingText}>{t('main.character.switching')}</Text>
         </View>
       )}
 
       {/* 切换成功提示条 */}
       {switchedCharacterName !== null && (
         <View style={styles.switchingSuccessBanner} pointerEvents="none">
-          <Text style={styles.switchingSuccessText}>已切换为 {switchedCharacterName}</Text>
+          <Text style={styles.switchingSuccessText}>{t('main.character.switched', { name: switchedCharacterName })}</Text>
         </View>
       )}
 
@@ -1554,24 +1556,24 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
             onStartShouldSetResponder={() => true}
           >
             <Text style={{ color: '#40c5f1', fontSize: 18, fontWeight: 'bold', marginBottom: 15 }}>
-              🔧 调试信息
+              🔧 {t('main.debug.title')}
             </Text>
             <ScrollView>
               <Text style={{ color: '#fff', fontSize: 12, fontFamily: 'monospace', marginBottom: 10 }}>
-                {`连接状态: ${udpConnection.status}
-层级: ${udpConnection.layer || '未连接'}
-端点: ${udpConnection.endpoint ? `${udpConnection.endpoint.ip}:${udpConnection.endpoint.port}` : '无'}
+                {`${t('connection.status.connected')}: ${udpConnection.status}
+${t('main.debug.p2pLayer')}: ${udpConnection.layer || t('connection.status.disconnected')}
+${t('serverInfo.host')}: ${udpConnection.endpoint ? `${udpConnection.endpoint.ip}:${udpConnection.endpoint.port}` : t('common.unavailable')}
 
-当前配置:
-Host: ${config.host}:${config.port}
-Character: ${config.characterName || '未设置'}
+${t('settings.sections.serverInfo')}:
+${t('serverInfo.host')}: ${config.host}:${config.port}
+${t('serverInfo.character')}: ${config.characterName || t('main.character.noCharacters')}
 `}
               </Text>
               <Text style={{ color: '#40c5f1', fontSize: 12, fontWeight: 'bold', marginBottom: 4 }}>
-                连接日志：
+                {t('main.debug.connection')}：
               </Text>
               <Text style={{ color: '#ccc', fontSize: 11, fontFamily: 'monospace' }}>
-                {udpConnection.logs.length > 0 ? udpConnection.logs.join('\n') : '（暂无日志）'}
+                {udpConnection.logs.length > 0 ? udpConnection.logs.join('\n') : t('common.warning')}
               </Text>
             </ScrollView>
             <TouchableOpacity
@@ -1584,7 +1586,7 @@ Character: ${config.characterName || '未设置'}
               }}
               onPress={() => setDebugPanelVisible(false)}
             >
-              <Text style={{ color: '#fff', fontWeight: 'bold' }}>关闭</Text>
+              <Text style={{ color: '#fff', fontWeight: 'bold' }}>{t('common.close')}</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>

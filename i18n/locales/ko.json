@@ -1,0 +1,169 @@
+{
+  "common": {
+    "load": "로드",
+    "save": "저장",
+    "cancel": "취소",
+    "confirm": "확인",
+    "ok": "확인",
+    "delete": "삭제",
+    "edit": "편집",
+    "loading": "로드 중...",
+    "error": "오류",
+    "success": "성공",
+    "close": "닫기",
+    "back": "뒤로",
+    "retry": "다시 시도",
+    "settings": "설정",
+    "clear": "지우기",
+    "scan": "스캔",
+    "config": "설정"
+  },
+  "home": {
+    "title": "Project N.E.K.O.",
+    "shortcuts": "바로가기",
+    "apiSettings": "API 설정",
+    "characterManager": "캐릭터 관리",
+    "serverConnection": "서버 연결",
+    "status": {
+      "online": "준비 완료",
+      "offline": "연결 안됨",
+      "configured": "설정됨, 연결 대기 중...",
+      "unconfigured": "QR 스캔 또는 수동 설정으로 연결하세요"
+    },
+    "actions": {
+      "manualConfig": "수동 설정",
+      "qrConfig": "QR 스캔",
+      "currentRole": "캐릭터"
+    }
+  },
+  "main": {
+    "chat": {
+      "title": "채팅",
+      "placeholder": "메시지를 입력하세요...",
+      "send": "보내기",
+      "collapse": "접기",
+      "expand": "펼치기"
+    },
+    "agent": {
+      "enabled": "Agent 모드 활성화됨",
+      "disabled": "Agent 모드 비활성화됨",
+      "connecting": "Agent 서버 연결 중...",
+      "offline": "Agent 서버 실행 중 아님",
+      "unavailable": "기능 사용 불가",
+      "checking": "확인 중..."
+    },
+    "character": {
+      "switching": "캐릭터 전환 중...",
+      "loading": "모델 로드 중...",
+      "switched": "{{name}}로 전환됨",
+      "switchError": "캐릭터 전환 실패",
+      "select": "캐릭터 선택",
+      "noCharacters": "사용 가능한 캐릭터 없음"
+    },
+    "voice": {
+      "start": "음성 시작",
+      "stop": "음성 중지",
+      "rest": "휴식",
+      "preparing": "준비 중...",
+      "ready": "준비 완료",
+      "blocked": "음성 입력 차단됨"
+    },
+    "debug": {
+      "title": "디버그 정보",
+      "toggle": "표시/숨기기",
+      "connection": "연결 정보",
+      "p2pLayer": "P2P 연결 레이어"
+    }
+  },
+  "settings": {
+    "title": "설정",
+    "sections": {
+      "api": "API 설정",
+      "provider": "제공자 선택",
+      "p2p": "P2P 설정",
+      "language": "언어 설정",
+      "serverInfo": "서버 정보"
+    },
+    "language": {
+      "title": "언어 설정",
+      "select": "언어 선택",
+      "current": "현재 언어",
+      "languages": {
+        "zh-CN": "简体中文",
+        "zh-TW": "繁体中文",
+        "en": "English",
+        "ja": "日本語",
+        "ko": "한국어",
+        "ru": "Русский"
+      },
+      "restartRequired": "언어 변경을 위해 앱 재시작 필요"
+    },
+    "api": {
+      "coreProvider": "코어 API 제공자",
+      "assistProvider": "어시스턴트 API 제공자",
+      "save": "설정 저장",
+      "saving": "저장 중...",
+      "saved": "설정 저장됨",
+      "refresh": "설정 새로고침",
+      "apiKey": "API 키",
+      "endpoint": "사용자 정의 엔드포인트",
+      "enterKey": "API 키를 입력하세요"
+    },
+    "p2p": {
+      "title": "P2P 설정",
+      "token": "P2P 토큰",
+      "qrCode": "P2P QR 코드"
+    },
+    "serverInfo": {
+      "host": "호스트 주소",
+      "port": "포트",
+      "character": "현재 캐릭터"
+    }
+  },
+  "connection": {
+    "status": {
+      "connected": "연결됨",
+      "disconnected": "연결 안됨",
+      "reconnecting": "재연결 중...",
+      "restored": "연결 복구됨"
+    },
+    "errors": {
+      "timeout": "연결 시간 초과",
+      "refused": "연결 거부됨",
+      "networkError": "네트워크 오류",
+      "invalidConfig": "잘못된 설정"
+    }
+  },
+  "toast": {
+    "connectionRestored": "연결 복구됨",
+    "switchedCharacter": "{{name}}로 전환됨",
+    "settingsSaved": "설정 저장됨",
+    "errorOccurred": "오류 발생: {{error}}"
+  },
+  "qrScanner": {
+    "title": "QR 코드 스캔",
+    "permissionDenied": "QR 코드 스캔을 위해 카메라 권한 필요",
+    "scanError": "스캔 실패, 다시 시도하세요",
+    "invalidCode": "잘못된 QR 코드",
+    "back": "뒤로"
+  },
+  "serverConfig": {
+    "title": "서버 설정",
+    "host": "호스트 주소",
+    "port": "포트",
+    "character": "캐릭터 이름",
+    "save": "설정 저장",
+    "cancel": "취소",
+    "hostPlaceholder": "예: 192.168.1.100",
+    "portPlaceholder": "예: 48911",
+    "characterPlaceholder": "예: mao_pro"
+  },
+  "characterManager": {
+    "title": "캐릭터 관리",
+    "select": "캐릭터 선택",
+    "switch": "캐릭터 전환",
+    "loading": "로드 중...",
+    "error": "캐릭터 목록 로드 실패",
+    "empty": "사용 가능한 캐릭터 없음"
+  }
+}

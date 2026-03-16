@@ -1,0 +1,177 @@
+{
+  "common": {
+    "load": "Load",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "ok": "OK",
+    "delete": "Delete",
+    "edit": "Edit",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "close": "Close",
+    "back": "Back",
+    "retry": "Retry",
+    "settings": "Settings",
+    "clear": "Clear",
+    "scan": "Scan",
+    "config": "Config"
+  },
+
+  "home": {
+    "title": "Project N.E.K.O.",
+    "shortcuts": "Shortcuts",
+    "apiSettings": "API Settings",
+    "characterManager": "Characters",
+    "serverConnection": "Server Connection",
+    "status": {
+      "online": "Ready",
+      "offline": "Disconnected",
+      "configured": "Configured, waiting for connection...",
+      "unconfigured": "Scan QR or configure manually to connect"
+    },
+    "actions": {
+      "manualConfig": "Manual Config",
+      "qrConfig": "Scan QR",
+      "currentRole": "Character"
+    }
+  },
+
+  "main": {
+    "chat": {
+      "title": "Chat",
+      "placeholder": "Enter message...",
+      "send": "Send",
+      "collapse": "Collapse",
+      "expand": "Expand"
+    },
+    "agent": {
+      "enabled": "Agent mode enabled",
+      "disabled": "Agent mode disabled",
+      "connecting": "Connecting to Agent server...",
+      "offline": "Agent server not running",
+      "unavailable": "Feature unavailable",
+      "checking": "Checking..."
+    },
+    "character": {
+      "switching": "Switching character...",
+      "loading": "Loading model...",
+      "switched": "Switched to {{name}}",
+      "switchError": "Failed to switch character",
+      "select": "Select Character",
+      "noCharacters": "No characters available"
+    },
+    "voice": {
+      "start": "Start Voice",
+      "stop": "Stop Voice",
+      "rest": "Rest",
+      "preparing": "Preparing...",
+      "ready": "Ready",
+      "blocked": "Voice input blocked"
+    },
+    "debug": {
+      "title": "Debug Info",
+      "toggle": "Show/Hide",
+      "connection": "Connection Info",
+      "p2pLayer": "P2P Connection Layer"
+    }
+  },
+
+  "settings": {
+    "title": "Settings",
+    "sections": {
+      "api": "API Configuration",
+      "provider": "Provider Selection",
+      "p2p": "P2P Configuration",
+      "language": "Language Settings",
+      "serverInfo": "Server Info"
+    },
+    "language": {
+      "title": "Language Settings",
+      "select": "Select Language",
+      "current": "Current Language",
+      "languages": {
+        "zh-CN": "简体中文",
+        "zh-TW": "繁体中文",
+        "en": "English",
+        "ja": "日本語",
+        "ko": "한국어",
+        "ru": "Русский"
+      },
+      "restartRequired": "Restart required to apply language change"
+    },
+    "api": {
+      "coreProvider": "Core API Provider",
+      "assistProvider": "Assist API Provider",
+      "save": "Save Configuration",
+      "saving": "Saving...",
+      "saved": "Configuration saved",
+      "refresh": "Refresh Configuration",
+      "apiKey": "API Key",
+      "endpoint": "Custom Endpoint",
+      "enterKey": "Please enter API key"
+    },
+    "p2p": {
+      "title": "P2P Configuration",
+      "token": "P2P Token",
+      "qrCode": "P2P QR Code"
+    },
+    "serverInfo": {
+      "host": "Host Address",
+      "port": "Port",
+      "character": "Current Character"
+    }
+  },
+
+  "connection": {
+    "status": {
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "reconnecting": "Reconnecting...",
+      "restored": "Connection restored"
+    },
+    "errors": {
+      "timeout": "Connection timeout",
+      "refused": "Connection refused",
+      "networkError": "Network error",
+      "invalidConfig": "Invalid configuration"
+    }
+  },
+
+  "toast": {
+    "connectionRestored": "Connection restored",
+    "switchedCharacter": "Switched to {{name}}",
+    "settingsSaved": "Settings saved",
+    "errorOccurred": "Error occurred: {{error}}"
+  },
+
+  "qrScanner": {
+    "title": "Scan QR Code",
+    "permissionDenied": "Camera permission required to scan QR code",
+    "scanError": "Scan failed, please try again",
+    "invalidCode": "Invalid QR code",
+    "back": "Back"
+  },
+
+  "serverConfig": {
+    "title": "Server Configuration",
+    "host": "Host Address",
+    "port": "Port",
+    "character": "Character Name",
+    "save": "Save Configuration",
+    "cancel": "Cancel",
+    "hostPlaceholder": "e.g., 192.168.1.100",
+    "portPlaceholder": "e.g., 48911",
+    "characterPlaceholder": "e.g., mao_pro"
+  },
+
+  "characterManager": {
+    "title": "Character Manager",
+    "select": "Select Character",
+    "switch": "Switch Character",
+    "loading": "Loading...",
+    "error": "Failed to load character list",
+    "empty": "No characters available"
+  }
+}

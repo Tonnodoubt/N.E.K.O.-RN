@@ -1,0 +1,180 @@
+{
+  "common": {
+    "load": "加载",
+    "save": "保存",
+    "cancel": "取消",
+    "confirm": "确认",
+    "ok": "确定",
+    "delete": "删除",
+    "edit": "编辑",
+    "loading": "加载中...",
+    "error": "错误",
+    "success": "成功",
+    "close": "关闭",
+    "back": "返回",
+    "retry": "重试",
+    "settings": "设置",
+    "clear": "清空",
+    "scan": "扫描",
+    "config": "配置"
+  },
+
+  "home": {
+    "title": "Project N.E.K.O.",
+    "shortcuts": "快捷功能",
+    "apiSettings": "API 设置",
+    "characterManager": "角色管理",
+    "serverConnection": "服务器连接",
+    "status": {
+      "online": "就绪",
+      "offline": "未连接",
+      "configured": "已配置，等待连接…",
+      "unconfigured": "扫码或手动配置以连接"
+    },
+    "actions": {
+      "manualConfig": "手动配置",
+      "qrConfig": "扫码配置",
+      "currentRole": "角色"
+    }
+  },
+
+  "main": {
+    "chat": {
+      "title": "对话",
+      "placeholder": "输入消息...",
+      "send": "发送",
+      "collapse": "收起",
+      "expand": "展开"
+    },
+    "agent": {
+      "enabled": "Agent 模式已开启",
+      "disabled": "Agent 模式已关闭",
+      "connecting": "Agent 服务器连接中...",
+      "offline": "Agent 服务器未启动",
+      "unavailable": "功能不可用",
+      "checking": "查询中..."
+    },
+    "character": {
+      "switching": "切换角色中...",
+      "loading": "加载模型中...",
+      "switched": "已切换到 {{name}}",
+      "switchError": "角色切换失败",
+      "select": "选择角色",
+      "noCharacters": "暂无可用角色",
+      "current": "当前",
+      "voiceBlockTitle": "无法切换角色"
+    },
+    "voice": {
+      "start": "开始语音",
+      "stop": "停止语音",
+      "rest": "休息一下",
+      "preparing": "准备中...",
+      "ready": "就绪",
+      "blocked": "语音输入被阻止",
+      "cannotSwitchCharacter": "语音模式下无法切换角色，请先停止语音对话后再切换。"
+    },
+    "debug": {
+      "title": "调试信息",
+      "toggle": "显示/隐藏",
+      "connection": "连接信息",
+      "p2pLayer": "P2P 连接层"
+    }
+  },
+
+  "settings": {
+    "title": "设置",
+    "sections": {
+      "api": "API 配置",
+      "provider": "提供商选择",
+      "p2p": "P2P 配置",
+      "language": "语言设置",
+      "serverInfo": "服务器信息"
+    },
+    "language": {
+      "title": "语言设置",
+      "select": "选择语言",
+      "current": "当前语言",
+      "languages": {
+        "zh-CN": "简体中文",
+        "zh-TW": "繁体中文",
+        "en": "English",
+        "ja": "日本語",
+        "ko": "한국어",
+        "ru": "Русский"
+      },
+      "restartRequired": "更改语言后需要重启应用"
+    },
+    "api": {
+      "coreProvider": "核心 API 提供商",
+      "assistProvider": "辅助 API 提供商",
+      "save": "保存配置",
+      "saving": "保存中...",
+      "saved": "配置已保存",
+      "refresh": "刷新配置",
+      "apiKey": "API 密钥",
+      "endpoint": "自定义端点",
+      "enterKey": "请输入 API 密钥"
+    },
+    "p2p": {
+      "title": "P2P 配置",
+      "token": "P2P 令牌",
+      "qrCode": "P2P 二维码"
+    },
+    "serverInfo": {
+      "host": "主机地址",
+      "port": "端口",
+      "character": "当前角色"
+    }
+  },
+
+  "connection": {
+    "status": {
+      "connected": "已连接",
+      "disconnected": "未连接",
+      "reconnecting": "重新连接中...",
+      "restored": "已恢复连接"
+    },
+    "errors": {
+      "timeout": "连接超时",
+      "refused": "连接被拒绝",
+      "networkError": "网络错误",
+      "invalidConfig": "配置无效"
+    }
+  },
+
+  "toast": {
+    "connectionRestored": "已恢复连接",
+    "switchedCharacter": "已切换到 {{name}}",
+    "settingsSaved": "设置已保存",
+    "errorOccurred": "发生错误: {{error}}"
+  },
+
+  "qrScanner": {
+    "title": "扫描二维码",
+    "permissionDenied": "需要相机权限才能扫描二维码",
+    "scanError": "扫描失败，请重试",
+    "invalidCode": "无效的二维码",
+    "back": "返回"
+  },
+
+  "serverConfig": {
+    "title": "服务器配置",
+    "host": "主机地址",
+    "port": "端口",
+    "character": "角色名称",
+    "save": "保存配置",
+    "cancel": "取消",
+    "hostPlaceholder": "例如: 192.168.1.100",
+    "portPlaceholder": "例如: 48911",
+    "characterPlaceholder": "例如: mao_pro"
+  },
+
+  "characterManager": {
+    "title": "角色管理",
+    "select": "选择角色",
+    "switch": "切换角色",
+    "loading": "加载中...",
+    "error": "加载角色列表失败",
+    "empty": "暂无可用角色"
+  }
+}

@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useIsFocused } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { useDevConnectionConfig } from '@/hooks/useDevConnectionConfig';
 import { hasUserStoredConfig } from '@/services/DevConnectionStorage';
 import { sessionStore } from '@/utils/sessionStore';
@@ -10,9 +11,10 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 
 type ConnectionStatus = 'online' | 'offline';
 
-const STATUS_MAP: Record<ConnectionStatus, { color: string; text: string }> = {
-  online:  { color: '#40c5f1', text: '就绪' },
-  offline: { color: '#ff4d4d', text: '未连接' },
+// Status map will be populated by translation
+const STATUS_COLORS: Record<ConnectionStatus, string> = {
+  online:  '#40c5f1',
+  offline: '#ff4d4d',
 };
 
 // 亮色/暗色主题色板（参照主项目 theme.css 与 dark-mode.css）
@@ -55,7 +57,8 @@ export default function HomeScreen() {
   const { config, isLoaded, reload } = useDevConnectionConfig();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
-  const t = isDark ? DARK : LIGHT;
+  const theme = isDark ? DARK : LIGHT;
+  const { t } = useTranslation();
 
   const isFocused = useIsFocused();
   const [isConnected, setIsConnected] = useState(sessionStore.isConnected);
@@ -72,82 +75,83 @@ export default function HomeScreen() {
   }, [isLoaded, isFocused, reload]);
 
   const status: ConnectionStatus = isConnected ? 'online' : 'offline';
-  const { color: statusColor, text: statusText } = STATUS_MAP[status];
+  const statusColor = STATUS_COLORS[status];
+  const statusText = status === 'online' ? t('home.status.online') : t('home.status.offline');
   const showIp = isUserConfigured && isConnected;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: t.container }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.container }]}>
       <View style={styles.content}>
         {/* 标题区域 */}
         <View style={styles.header}>
-           <Text style={[styles.title, { color: t.titleColor }]}>Project N.E.K.O.</Text>
+           <Text style={[styles.title, { color: theme.titleColor }]}>{t('home.title')}</Text>
         </View>
 
         {/* 快捷功能 */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: t.sectionTitle }]}>快捷功能</Text>
+          <Text style={[styles.sectionTitle, { color: theme.sectionTitle }]}>{t('home.shortcuts')}</Text>
           <View style={styles.quickActions}>
             <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: t.actionBtn, borderColor: t.actionBorder }]}
+              style={[styles.actionButton, { backgroundColor: theme.actionBtn, borderColor: theme.actionBorder }]}
               onPress={() => router.push('/settings')}
               activeOpacity={0.8}
             >
               <Text style={styles.actionIcon}>🔑</Text>
-              <Text style={[styles.actionText, { color: t.textPrimary }]}>API 设置</Text>
+              <Text style={[styles.actionText, { color: theme.textPrimary }]}>{t('home.apiSettings')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: t.actionBtn, borderColor: t.actionBorder }]}
+              style={[styles.actionButton, { backgroundColor: theme.actionBtn, borderColor: theme.actionBorder }]}
               onPress={() => router.push('/character-manager')}
               activeOpacity={0.8}
             >
               <Text style={styles.actionIcon}>🐱</Text>
-              <Text style={[styles.actionText, { color: t.textPrimary }]}>角色管理</Text>
+              <Text style={[styles.actionText, { color: theme.textPrimary }]}>{t('home.characterManager')}</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         {/* 服务器配置 */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: t.sectionTitle }]}>服务器连接</Text>
+          <Text style={[styles.sectionTitle, { color: theme.sectionTitle }]}>{t('home.serverConnection')}</Text>
 
-          <View style={[styles.configCard, { backgroundColor: t.card, borderColor: t.cardBorder }]}>
+          <View style={[styles.configCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
             <View style={styles.configRow}>
-              <Text style={[styles.configLabel, { color: t.textSub }]}>当前连接</Text>
+              <Text style={[styles.configLabel, { color: theme.textSub }]}>{t('connection.status.connected')}</Text>
               <View style={styles.statusIndicator}>
                 <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
                 <Text style={[styles.statusText, { color: statusColor }]}>{statusText}</Text>
               </View>
             </View>
             {showIp ? (
-              <Text style={[styles.configValue, { color: t.textPrimary }]}>
+              <Text style={[styles.configValue, { color: theme.textPrimary }]}>
                 {config.host}:{config.port}
               </Text>
             ) : isUserConfigured ? (
-              <Text style={[styles.configValueOffline, { color: t.textOffline }]}>已配置，等待连接…</Text>
+              <Text style={[styles.configValueOffline, { color: theme.textOffline }]}>{t('home.status.configured')}</Text>
             ) : (
-              <Text style={[styles.configValueOffline, { color: t.textOffline }]}>扫码或手动配置以连接</Text>
+              <Text style={[styles.configValueOffline, { color: theme.textOffline }]}>{t('home.status.unconfigured')}</Text>
             )}
-            <Text style={[styles.configSubtext, { color: t.textMuted }]}>角色: {config.characterName}</Text>
+            <Text style={[styles.configSubtext, { color: theme.textMuted }]}>{t('home.actions.currentRole')}: {config.characterName}</Text>
           </View>
 
           <View style={styles.configButtons}>
             <TouchableOpacity
-              style={[styles.configButton, { backgroundColor: t.configBtn, borderColor: t.configBtnBorder }]}
+              style={[styles.configButton, { backgroundColor: theme.configBtn, borderColor: theme.configBtnBorder }]}
               onPress={() => router.push('/server-config')}
               activeOpacity={0.8}
             >
               <Text style={styles.configButtonIcon}>⚙️</Text>
-              <Text style={[styles.configButtonText, { color: t.configBtnText }]}>手动配置</Text>
+              <Text style={[styles.configButtonText, { color: theme.configBtnText }]}>{t('home.actions.manualConfig')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.configButton, { backgroundColor: t.configBtn, borderColor: t.configBtnBorder }]}
+              style={[styles.configButton, { backgroundColor: theme.configBtn, borderColor: theme.configBtnBorder }]}
               onPress={() => router.push({ pathname: '/qr-scanner', params: { returnTo: '/main' } })}
               activeOpacity={0.8}
             >
               <Text style={styles.configButtonIcon}>📷</Text>
-              <Text style={[styles.configButtonText, { color: t.configBtnText }]}>扫码配置</Text>
+              <Text style={[styles.configButtonText, { color: theme.configBtnText }]}>{t('home.actions.qrConfig')}</Text>
             </TouchableOpacity>
           </View>
         </View>

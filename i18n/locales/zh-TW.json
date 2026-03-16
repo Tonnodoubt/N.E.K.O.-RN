@@ -1,0 +1,169 @@
+{
+  "common": {
+    "load": "載入",
+    "save": "儲存",
+    "cancel": "取消",
+    "confirm": "確認",
+    "ok": "確定",
+    "delete": "刪除",
+    "edit": "編輯",
+    "loading": "載入中...",
+    "error": "錯誤",
+    "success": "成功",
+    "close": "關閉",
+    "back": "返回",
+    "retry": "重試",
+    "settings": "設定",
+    "clear": "清空",
+    "scan": "掃描",
+    "config": "配置"
+  },
+  "home": {
+    "title": "Project N.E.K.O.",
+    "shortcuts": "快捷功能",
+    "apiSettings": "API 設定",
+    "characterManager": "角色管理",
+    "serverConnection": "伺服器連線",
+    "status": {
+      "online": "就緒",
+      "offline": "未連線",
+      "configured": "已配置，等待連線…",
+      "unconfigured": "掃描或手動配置以連線"
+    },
+    "actions": {
+      "manualConfig": "手動配置",
+      "qrConfig": "掃描配置",
+      "currentRole": "角色"
+    }
+  },
+  "main": {
+    "chat": {
+      "title": "對話",
+      "placeholder": "輸入訊息...",
+      "send": "發送",
+      "collapse": "收起",
+      "expand": "展開"
+    },
+    "agent": {
+      "enabled": "Agent 模式已開啟",
+      "disabled": "Agent 模式已關閉",
+      "connecting": "Agent 伺服器連線中...",
+      "offline": "Agent 伺服器未啟動",
+      "unavailable": "功能不可用",
+      "checking": "查詢中..."
+    },
+    "character": {
+      "switching": "切換角色中...",
+      "loading": "載入模型中...",
+      "switched": "已切換到 {{name}}",
+      "switchError": "角色切換失敗",
+      "select": "選擇角色",
+      "noCharacters": "暫無可用角色"
+    },
+    "voice": {
+      "start": "開始語音",
+      "stop": "停止語音",
+      "rest": "休息一下",
+      "preparing": "準備中...",
+      "ready": "就緒",
+      "blocked": "語音輸入被阻止"
+    },
+    "debug": {
+      "title": "除錯資訊",
+      "toggle": "顯示/隱藏",
+      "connection": "連線資訊",
+      "p2pLayer": "P2P 連線層"
+    }
+  },
+  "settings": {
+    "title": "設定",
+    "sections": {
+      "api": "API 配置",
+      "provider": "提供商選擇",
+      "p2p": "P2P 配置",
+      "language": "語言設定",
+      "serverInfo": "伺服器資訊"
+    },
+    "language": {
+      "title": "語言設定",
+      "select": "選擇語言",
+      "current": "當前語言",
+      "languages": {
+        "zh-CN": "简体中文",
+        "zh-TW": "繁体中文",
+        "en": "English",
+        "ja": "日本語",
+        "ko": "한국어",
+        "ru": "Русский"
+      },
+      "restartRequired": "更改語言後需要重新啟動應用程式"
+    },
+    "api": {
+      "coreProvider": "核心 API 提供商",
+      "assistProvider": "輔助 API 提供商",
+      "save": "儲存配置",
+      "saving": "儲存中...",
+      "saved": "配置已儲存",
+      "refresh": "重新整理配置",
+      "apiKey": "API 金鑰",
+      "endpoint": "自訂端點",
+      "enterKey": "請輸入 API 金鑰"
+    },
+    "p2p": {
+      "title": "P2P 配置",
+      "token": "P2P 令牌",
+      "qrCode": "P2P 二維碼"
+    },
+    "serverInfo": {
+      "host": "主機位址",
+      "port": "埠號",
+      "character": "當前角色"
+    }
+  },
+  "connection": {
+    "status": {
+      "connected": "已連線",
+      "disconnected": "未連線",
+      "reconnecting": "重新連線中...",
+      "restored": "連線已恢復"
+    },
+    "errors": {
+      "timeout": "連線逾時",
+      "refused": "連線被拒絕",
+      "networkError": "網路錯誤",
+      "invalidConfig": "配置無效"
+    }
+  },
+  "toast": {
+    "connectionRestored": "連線已恢復",
+    "switchedCharacter": "已切換到 {{name}}",
+    "settingsSaved": "設定已儲存",
+    "errorOccurred": "發生錯誤: {{error}}"
+  },
+  "qrScanner": {
+    "title": "掃描二維碼",
+    "permissionDenied": "需要相機權限才能掃描二維碼",
+    "scanError": "掃描失敗，請重試",
+    "invalidCode": "無效的二維碼",
+    "back": "返回"
+  },
+  "serverConfig": {
+    "title": "伺服器配置",
+    "host": "主機位址",
+    "port": "埠號",
+    "character": "角色名稱",
+    "save": "儲存配置",
+    "cancel": "取消",
+    "hostPlaceholder": "例如: 192.168.1.100",
+    "portPlaceholder": "例如: 48911",
+    "characterPlaceholder": "例如: mao_pro"
+  },
+  "characterManager": {
+    "title": "角色管理",
+    "select": "選擇角色",
+    "switch": "切換角色",
+    "loading": "載入中...",
+    "error": "載入角色列表失敗",
+    "empty": "暫無可用角色"
+  }
+}
