@@ -17,7 +17,7 @@ function sanitizePartial(input: any): Partial<DevConnectionConfig> {
   if (isValidPort(input?.port)) out.port = input.port;
   if (isNonEmptyString(input?.characterName)) out.characterName = input.characterName.trim();
 
-  // 支持 P2P 配置 (v3: 完整的三层连接信息)
+  // 支持 P2P 配置 (v3: 完整的两层连接信息)
   if (input?.p2p && typeof input.p2p === 'object') {
     const p2p = input.p2p;
     if (isNonEmptyString(p2p.token)) {
@@ -30,9 +30,6 @@ function sanitizePartial(input: any): Partial<DevConnectionConfig> {
         // 第2层：STUN 打洞
         stunIp: isNonEmptyString(p2p.stunIp) ? p2p.stunIp : undefined,
         stunPort: isValidPort(p2p.stunPort) ? p2p.stunPort : undefined,
-        // 第3层：FRP 中转
-        frpIp: isNonEmptyString(p2p.frpIp) ? p2p.frpIp : undefined,
-        frpPort: isValidPort(p2p.frpPort) ? p2p.frpPort : undefined,
       };
     }
   }

@@ -2,7 +2,7 @@ export type DevConnectionConfig = {
   host: string;
   port: number;
   characterName: string;
-  // P2P 连接配置（v3: 三层回退）
+  // P2P 连接配置（v3: 两层回退）
   p2p?: {
     token: string;
     deviceId?: string;              // 设备 ID（用于云端查询）
@@ -14,10 +14,6 @@ export type DevConnectionConfig = {
     // 第2层：STUN 打洞
     stunIp?: string;                // STUN 公网 IP
     stunPort?: number;              // STUN 公网端口
-
-    // 第3层：FRP 中转
-    frpIp?: string;                 // FRP 中转 IP
-    frpPort?: number;               // FRP 中转端口
   };
 };
 
@@ -38,13 +34,13 @@ export function parseDevConnectionConfig(raw: string): Partial<DevConnectionConf
     if (obj && typeof obj === 'object') {
       const out: Partial<DevConnectionConfig> = {};
 
-      // 检测 P2P 格式（包含 lan_ip 和 token）- v3 架构：三层回退
+      // 检测 P2P 格式（包含 lan_ip 和 token）- v3 架构：两层回退
       if (typeof obj.lan_ip === 'string' && obj.lan_ip.trim() && typeof obj.token === 'string') {
         out.host = obj.lan_ip.trim();
         out.port = typeof obj.port === 'number' ? obj.port : 48920;
         out.characterName = obj.character || obj.name || 'test';
 
-        // v3: 完整的三层连接信息
+        // v3: 完整的两层连接信息
         out.p2p = {
           token: obj.token,
           deviceId: obj.device_id,
@@ -56,10 +52,6 @@ export function parseDevConnectionConfig(raw: string): Partial<DevConnectionConf
           // 第2层：STUN 打洞
           stunIp: obj.stun_ip,
           stunPort: obj.stun_port,
-
-          // 第3层：FRP 中转
-          frpIp: obj.frp_ip,
-          frpPort: obj.frp_port,
         };
         return out;
       }

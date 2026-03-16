@@ -1,7 +1,7 @@
 /**
  * UDP P2P 连接 Hook
  *
- * 自动处理 UDP P2P 三层连接，并更新 config 中的 host 和 port
+ * 自动处理 UDP P2P 两层连接，并更新 config 中的 host 和 port
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -103,8 +103,6 @@ export function useUdpP2PConnection(
           lanPort: config.p2p!.lanPort,
           stunIp: config.p2p!.stunIp,
           stunPort: config.p2p!.stunPort,
-          frpIp: config.p2p!.frpIp,
-          frpPort: config.p2p!.frpPort,
           cloudRegistryUrl: process.env.EXPO_PUBLIC_CLOUD_REGISTRY_URL,
         });
 
@@ -116,7 +114,6 @@ export function useUdpP2PConnection(
         });
 
         addLog(`stunIp=${config.p2p!.stunIp} stunPort=${config.p2p!.stunPort}`);
-        addLog(`frpIp=${config.p2p!.frpIp} frpPort=${config.p2p!.frpPort}`);
 
         const tcpEndpoint = await client.connect();
 
@@ -130,7 +127,7 @@ export function useUdpP2PConnection(
           setStatus('connected');
           setEndpoint(tcpEndpoint);
         } else {
-          addLog('❌ 所有三层连接方式都失败');
+          addLog('❌ 所有连接方式都失败');
           setStatus('failed');
           setLayer(null);
         }

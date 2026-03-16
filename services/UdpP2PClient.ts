@@ -1,8 +1,8 @@
 /**
- * UDP P2P 客户端 - v3 三层连接回退
+ * UDP P2P 客户端 - v3 两层连接回退
  *
  * 工作流程：
- * 1. UDP 探测（NAT 穿透）- 三层回退
+ * 1. UDP 探测（NAT 穿透）- 两层回退
  * 2. 获取 TCP endpoint（HTTP 代理地址）
  * 3. 切换到 TCP 连接（标准 HTTP API）
  */
@@ -20,8 +20,6 @@ export type P2PConfig = {
   lanPort?: number;
   stunIp?: string;
   stunPort?: number;
-  frpIp?: string;
-  frpPort?: number;
   cloudRegistryUrl?: string;  // 云注册中心地址，用于双向打洞协调
 };
 
@@ -42,11 +40,11 @@ export class UdpP2PClient extends EventEmitter {
   }
 
   /**
-   * 尝试建立 P2P 连接（三层回退）
+   * 尝试建立 P2P 连接（两层回退）
    * @returns TCP endpoint（用于后续 HTTP 连接）或 null
    */
   async connect(): Promise<TcpEndpoint | null> {
-    this.emit('log', '开始三层连接尝试');
+    this.emit('log', '开始两层连接尝试');
 
     // 第1层：LAN 直连（由 hook 层处理，这里跳过）
 
@@ -65,25 +63,7 @@ export class UdpP2PClient extends EventEmitter {
         this.connected = true;
         return endpoint;
       }
-      this.emit('log', '⏱️ 第2层超时，尝试 FRP...');
-    }
-
-    // 第3层：FRP 中转
-    if (this.config.frpIp && this.config.frpPort) {
-      this.emit('log', `第3层：FRP 中转 ${this.config.frpIp}:${this.config.frpPort}`);
-      const endpoint = await this._tryConnect(
-        this.config.frpIp,
-        this.config.frpPort,
-        10000,
-        3,
-        'FRP'
-      );
-      if (endpoint) {
-        this.tcpEndpoint = endpoint;
-        this.connected = true;
-        return endpoint;
-      }
-      this.emit('log', '⏱️ 第3层超时');
+      this.emit('log', '⏱️ 第2层超时');
     }
 
     this.emit('log', '❌ 所有连接方式失败');
@@ -252,10 +232,8 @@ export class UdpP2PClient extends EventEmitter {
         this.socket.on('listening', async () => {
           this.emit('log', 'Socket 就绪，查询公网地址...');
 
-          // 复用 FRP UDP 端口查询公网地址，避免依赖 coturn 3478（可能被 WiFi 封锁）
-          const stunServer = this.config.frpIp || ip;
-          const stunQueryPort = this.config.frpPort || 48920;
-          const myPublicAddr = await this._queryStunAddress(stunServer, stunQueryPort);
+          // 复用目标服务器查询公网地址
+          const myPublicAddr = await this._queryStunAddress(ip, port);
 
           if (myPublicAddr && this.config.deviceId && this.config.cloudRegistryUrl) {
             this.emit('log', `我的公网地址: ${myPublicAddr.ip}:${myPublicAddr.port}`);

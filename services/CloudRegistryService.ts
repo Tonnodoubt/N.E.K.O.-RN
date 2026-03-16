@@ -14,8 +14,6 @@ export type CloudDeviceInfo = {
   token: string;
   stun_ip?: string;
   stun_port?: number;
-  frp_ip?: string;
-  frp_port?: number;
   character?: string;
   created_at: number;
 };
@@ -67,10 +65,6 @@ export async function queryDeviceInfo(deviceId: string): Promise<DevConnectionCo
         // 第2层：STUN 打洞
         stunIp: data.stun_ip,
         stunPort: data.stun_port,
-
-        // 第3层：FRP 中转
-        frpIp: data.frp_ip,
-        frpPort: data.frp_port,
       },
     };
 

@@ -73,8 +73,7 @@ docs/
 │   └── ...
 │
 ├── solutions/              # 解决方案
-│   ├── p2p-solution.md
-│   └── frp-reverse-proxy.md
+│   └── p2p-solution.md
 │
 ├── strategy/               # 策略文档
 │   ├── cross-platform-components.md

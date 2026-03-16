@@ -1,6 +1,6 @@
 # P2P 网络方案（修订版）
 
-**核心目标**：同WiFi直连，跨网先尝试UPnP打洞，失败就走FRP中继。
+**核心目标**：同WiFi直连，跨网通过STUN打洞连接。打洞失败时用户可自行使用 cpolar/Tailscale 等隧道工具。
 
 ---
 
@@ -9,20 +9,20 @@
 主服务绑定 `localhost:48911` 无法直接对外。启动一个轻量代理，绑定当前 WiFi 的局域网 IP（如 `192.168.1.10:48920`），通过 Token 鉴权保证安全。
 
 ```
-手机连接策略（三层降级）：
+手机连接策略（两层降级）：
 
 同WiFi？ ──► 是 ──► 直连局域网IP（10ms，免费）
               │
-              └──► 否 ──► UPnP打洞成功？ ──► 是 ──► P2P直连（30-80ms，免费）
+              └──► 否 ──► STUN打洞成功？ ──► 是 ──► P2P直连（30-80ms，免费）
                                     │
-                                    └──► 否 ──► FRP中继（100-300ms，付费）
+                                    └──► 否 ──► 用户自行搭建隧道（cpolar/Tailscale等）
 ```
 
 | 场景 | 连接方式 | 延迟 | 成本 |
 |------|---------|------|------|
 | 同WiFi | 局域网直连 | <10ms | 免费 |
-| 跨网+UPnP成功 | P2P直连 | 30-80ms | 免费 |
-| 跨网+UPnP失败 | FRP中继 | 100-300ms | 按需付费 |
+| 跨网+STUN成功 | P2P直连 | 30-80ms | 免费 |
+| 跨网+STUN失败 | 用户自建隧道 | 视工具而定 | 视工具而定 |
 
 ---
 
@@ -293,74 +293,22 @@ const apiBase = config.p2p?.token
 
 ---
 
-## FRP中继兜底（Layer 3）
+## 跨网备选方案
 
-UPnP 失败时（CGNAT、路由器不支持等）：
+当 STUN 打洞失败时（Symmetric NAT 等），用户可自行使用第三方隧道工具：
 
-```
-手机(4G/5G) ──► 云服务器(FRP) ──► 电脑
-                 转发流量
-```
+- **cpolar**（推荐）: cpolar.com — 将本地 48920 端口映射到公网
+- **Tailscale**: 免费组网工具，支持 NAT 穿透
+- **Cloudflare Tunnel**: 通过 Cloudflare 代理
 
-### FRP 架构
-
-后端主服务以 `127.0.0.1:48911` 启动，外部不可直接访问。云端 frps 对手机暴露公网端口，桌面端 frpc 将隧道流量转发至本地 `lan_proxy`（`127.0.0.1:48920`），由 lan_proxy 执行与 LAN 直连相同的 Token 验证与剥离后，再转发至 Main Server，保持安全模型一致。
-
-> **注意**：FRP 模式下，`lan_proxy` 需额外绑定 `127.0.0.1:48920`（当前仅绑定 LAN IP），以便 frpc 通过本地回环连接。手机请求中的 `?token=xxx` 由 frps/frpc 隧道透传，到达 lan_proxy 后执行验证。
-
-```
-手机 App ──HTTP/WS+token──▶ 云端 frps (公网:48920)
-                                  │
-                            frps ↔ frpc 隧道 (bindPort=7000)
-                                  │
-                             frpc ──▶ lan_proxy (127.0.0.1:48920)
-                                        │
-                                  Token 验证 + 剥离
-                                        │
-                                  Main Server (127.0.0.1:48911)
-```
-
-### 配置项
-
-| 环境变量 | 默认值 | 说明 |
-|---|---|---|
-| `NEKO_FRP_BIND_PORT` | 7000 | frps 内部通信端口 |
-| `NEKO_FRP_PROXY_PORT` | 48920 | 对外代理端口（手机连这个） |
-| `NEKO_FRP_TOKEN` | neko-frp-default | FRP 认证 token |
-
-所有端口支持自动冲突检测和 fallback。
-
-### 使用方式
-
-**后端启动**：
-```bash
-# 直接启动，首次运行会自动下载当前平台的 FRP 二进制
-python launcher.py
-```
-
-启动成功后会看到：
-```
-  🎉 所有服务器已启动完成！
-
-  现在你可以：
-  1. 启动 lanlan_frd.exe 使用系统
-  2. 在浏览器访问 http://localhost:48911
-  3. 手机端连接 <电脑IP>:48920
-```
-
-**RN App 端**：
-在设置页面中，将连接地址设为 `<电脑局域网IP>:48920`。
-
-**收费策略**：
-- 免费用户：每月 3 小时额度
-- 付费用户：不限时
+安装后将本地端口 48920 映射到公网，用获取的公网地址重新扫码连接即可。
 
 ---
 
-## 移动端连接管理（三层降级）
+## 移动端连接管理（两层降级）
 
 ```typescript
-// 三层降级状态机（简化伪代码）
+// 两层降级状态机（简化伪代码）
 async function connect(config: ConnectionConfig) {
     // 1. 同WiFi → 直连代理
     if (config.p2p?.token) {
@@ -371,20 +319,17 @@ async function connect(config: ConnectionConfig) {
     // 2. 从云端获取地址
     const info = await fetchRelayInfo(config.deviceId);
 
-    // 3. 尝试 UPnP 直连
-    if (info.upnp_ip) {
+    // 3. 尝试 STUN 直连
+    if (info.stun_ip) {
         try {
-            const wsUrl = `ws://${info.upnp_ip}:${info.upnp_port}/ws/${info.character}?token=${info.token}`;
+            const wsUrl = `ws://${info.stun_ip}:${info.stun_port}/ws/${info.character}?token=${info.token}`;
             return createNativeRealtimeClient({ url: wsUrl, reconnect: { enabled: true } });
-        } catch { /* 降级到 FRP */ }
+        } catch { /* 连接失败，提示用户使用隧道工具 */ }
     }
-
-    // 4. FRP 兜底
-    return connectViaFRP(config.deviceId);
 }
 ```
 
-> 注意三层都用 `createNativeRealtimeClient`，同一套代码路径，只是 URL 不同。
+> 注意两层都用 `createNativeRealtimeClient`，同一套代码路径，只是 URL 不同。
 
 ---
 
@@ -452,7 +397,7 @@ def lookup(device_id: str):
 ```
 1. 连接断开检测（WebSocket onclose）
 2. 自动重连（realtime 库内置）
-3. 若 WiFi → 4G：重连到代理失败 → 查云端 → UPnP/FRP
+3. 若 WiFi → 4G：重连到代理失败 → 查云端 → STUN
 4. 若 4G → WiFi：重连到代理成功 → 直连恢复
 ```
 
@@ -470,7 +415,7 @@ def lookup(device_id: str):
 | UPnP映射+续期 | ~200行 | 端口映射、心跳 |
 | 云端API | ~100行 | FastAPI+Redis |
 | 移动端改动 | ~20行 | URL 构造 + config 解析 |
-| **合计** | **~440行** | 不含FRP集成 |
+| **合计** | **~440行** | |
 
 ---
 
@@ -501,15 +446,15 @@ def lookup(device_id: str):
 - 云端地址交换
 - 移动端降级连接（URL 不同，client 相同）
 
-### Phase 3：FRP兜底
-- FRP集成
-- 付费套餐
+### Phase 3：用户自建隧道（文档指引）
+- 提供 cpolar/Tailscale/Cloudflare Tunnel 使用指引
+- 在 App 中添加连接帮助提示
 
 ---
 
 ## 与原版对比
 
-| | 原版四层 | 当前三层方案 |
+| | 原版四层 | 当前两层方案 |
 |--|---------|-------------|
 | 代理协议 | - | HTTP/WebSocket |
 | 移动端额外代码 | - | ~20行 |

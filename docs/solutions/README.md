@@ -8,7 +8,7 @@
 
 | 文档 | 描述 |
 |------|------|
-| [p2p-solution.md](./p2p-solution.md) | P2P 连接方案设计（含同WiFi直连、UPnP打洞、FRP中继） |
+| [p2p-solution.md](./p2p-solution.md) | P2P 连接方案设计（含同WiFi直连、STUN打洞） |
 
 ---
 
