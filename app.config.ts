@@ -1,6 +1,6 @@
 import type { ConfigContext, ExpoConfig } from "expo/config";
 
-import base from "./app.json";
+import base from "./app.json" with { type: "json" };
 
 type BuildProfile = "development" | "preview" | "production" | string;
 

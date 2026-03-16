@@ -1,7 +1,8 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useDevConnectionConfig } from '@/hooks/useDevConnectionConfig';
 
 type ReturnToParam = string | undefined;
@@ -20,11 +21,12 @@ export default function QrScannerScreen() {
   const params = useLocalSearchParams<{ returnTo?: string }>();
   const returnTo: ReturnToParam = typeof params.returnTo === 'string' ? params.returnTo : undefined;
   const devConfig = useDevConnectionConfig();
+  const { t } = useTranslation();
 
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
 
-  const titleText = useMemo(() => (__DEV__ ? '开发扫码配置' : '扫码'), []);
+  const titleText = __DEV__ ? t('qrScanner.titleDev') : t('qrScanner.title');
 
   const handleCancel = useCallback(() => {
     router.back();
@@ -37,12 +39,11 @@ export default function QrScannerScreen() {
 
       const raw = (result?.data ?? '').trim();
       if (!raw) {
-        Alert.alert('扫码失败', '未识别到有效内容');
+        Alert.alert(t('qrScanner.scanFailed'), t('qrScanner.noValidContent'));
         setScanned(false);
         return;
       }
 
-      // 回传到上一页：同时写入“全局连接配置”（供整个项目读取）
       const target: AllowedReturnTo =
         returnTo === '/explore' ||
         returnTo === '/audio-test' ||
@@ -58,19 +59,22 @@ export default function QrScannerScreen() {
       (async () => {
         const applied = await devConfig.applyQrRaw(raw);
         if (!applied.ok) {
-          Alert.alert('二维码内容不可用', `${applied.error}\n\n内容：${raw.slice(0, 256)}`);
+          Alert.alert(t('qrScanner.invalidQRContent'), `${applied.error}\n\n${t('common.content')}: ${raw.slice(0, 256)}`);
           setScanned(false);
           return;
         }
 
-        // P2P 连接成功提示 (v2 架构)
         if (applied.isP2p) {
           Alert.alert(
-            'P2P 连接配置成功',
-            `局域网 IP: ${applied.config.host}\n端口: ${applied.config.port}\n角色: ${applied.config.characterName}\n\n请确保手机和电脑在同一 WiFi 下。`,
+            t('qrScanner.p2pConfigSuccess'),
+            t('qrScanner.p2pConfigMessage', {
+              host: applied.config.host,
+              port: applied.config.port,
+              character: applied.config.characterName,
+            }),
             [
               {
-                text: '确定',
+                text: t('common.ok'),
                 onPress: () => {
                   router.replace({
                     pathname: target,
@@ -85,21 +89,20 @@ export default function QrScannerScreen() {
 
         router.replace({
           pathname: target,
-          // 兼容旧逻辑：仍传 qr 参数；但主逻辑已写入全局配置
           params: { qr: encodeURIComponent(raw) },
         });
       })();
     },
-    [devConfig, router, returnTo, scanned]
+    [devConfig, router, returnTo, scanned, t]
   );
 
   if (!permission) {
     return (
       <View style={styles.center}>
         <Text style={styles.title}>{titleText}</Text>
-        <Text style={styles.text}>正在检查相机权限…</Text>
+        <Text style={styles.text}>{t('qrScanner.checkingPermission')}</Text>
         <Pressable style={styles.button} onPress={handleCancel}>
-          <Text style={styles.buttonText}>返回</Text>
+          <Text style={styles.buttonText}>{t('common.back')}</Text>
         </Pressable>
       </View>
     );
@@ -109,14 +112,14 @@ export default function QrScannerScreen() {
     return (
       <View style={styles.center}>
         <Text style={styles.title}>{titleText}</Text>
-        <Text style={styles.text}>需要相机权限才能扫描二维码。</Text>
+        <Text style={styles.text}>{t('qrScanner.cameraPermissionRequired')}</Text>
         <View style={{ height: 12 }} />
         <Pressable style={styles.button} onPress={() => requestPermission()}>
-          <Text style={styles.buttonText}>授权相机权限</Text>
+          <Text style={styles.buttonText}>{t('qrScanner.grantCameraPermission')}</Text>
         </Pressable>
         <View style={{ height: 12 }} />
         <Pressable style={[styles.button, styles.buttonSecondary]} onPress={handleCancel}>
-          <Text style={styles.buttonText}>返回</Text>
+          <Text style={styles.buttonText}>{t('common.back')}</Text>
         </Pressable>
       </View>
     );
@@ -130,19 +133,18 @@ export default function QrScannerScreen() {
         onBarcodeScanned={handleBarcodeScanned}
       />
 
-      {/* 轻量遮罩与提示 */}
       <View pointerEvents="none" style={styles.overlay}>
         <Text style={styles.overlayTitle}>{titleText}</Text>
-        <Text style={styles.overlayText}>对准二维码自动识别</Text>
+        <Text style={styles.overlayText}>{t('qrScanner.autoDetectHint')}</Text>
       </View>
 
       <View style={styles.bottomBar}>
         <Pressable style={[styles.button, styles.buttonSecondary]} onPress={handleCancel}>
-          <Text style={styles.buttonText}>取消</Text>
+          <Text style={styles.buttonText}>{t('common.cancel')}</Text>
         </Pressable>
         <View style={{ width: 12 }} />
         <Pressable style={styles.button} onPress={() => setScanned(false)}>
-          <Text style={styles.buttonText}>{scanned ? '继续扫描' : '重新对焦'}</Text>
+          <Text style={styles.buttonText}>{scanned ? t('qrScanner.continueScan') : t('qrScanner.refocus')}</Text>
         </Pressable>
       </View>
     </View>
@@ -213,5 +215,3 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
-
-

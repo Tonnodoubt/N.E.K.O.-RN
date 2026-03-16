@@ -2,6 +2,7 @@
   "common": {
     "load": "Load",
     "save": "Save",
+    "saved": "Saved",
     "cancel": "Cancel",
     "confirm": "Confirm",
     "ok": "OK",
@@ -16,7 +17,8 @@
     "settings": "Settings",
     "clear": "Clear",
     "scan": "Scan",
-    "config": "Config"
+    "config": "Config",
+    "content": "Content"
   },
 
   "home": {
@@ -148,9 +150,21 @@
 
   "qrScanner": {
     "title": "Scan QR Code",
+    "titleDev": "Dev QR Config",
     "permissionDenied": "Camera permission required to scan QR code",
+    "checkingPermission": "Checking camera permission...",
+    "cameraPermissionRequired": "Camera permission required to scan QR codes",
+    "grantCameraPermission": "Grant Camera Permission",
     "scanError": "Scan failed, please try again",
+    "scanFailed": "Scan Failed",
+    "noValidContent": "No valid content detected",
     "invalidCode": "Invalid QR code",
+    "invalidQRContent": "QR code content unavailable",
+    "p2pConfigSuccess": "P2P Connection Configured",
+    "p2pConfigMessage": "LAN IP: {{host}}\nPort: {{port}}\nCharacter: {{character}}\n\nMake sure your phone and computer are on the same WiFi network.",
+    "autoDetectHint": "Point at QR code to scan automatically",
+    "continueScan": "Continue Scanning",
+    "refocus": "Refocus",
     "back": "Back"
   },
 
@@ -160,10 +174,37 @@
     "port": "Port",
     "character": "Character Name",
     "save": "Save Configuration",
+    "saving": "Saving...",
+    "saved": "Saved Successfully",
+    "saveFailed": "Save Failed",
     "cancel": "Cancel",
     "hostPlaceholder": "e.g., 192.168.1.100",
     "portPlaceholder": "e.g., 48911",
-    "characterPlaceholder": "e.g., mao_pro"
+    "characterPlaceholder": "e.g., mao_pro",
+    "enterHost": "Please enter server address",
+    "enterValidPort": "Please enter a valid port number (1-65535)",
+    "enterCharacter": "Please enter character name",
+    "savedMessage": "Server address set to:\n{{host}}:{{port}}\nCharacter: {{character}}",
+    "resetDefault": "Reset to Default",
+    "resetConfirm": "Are you sure you want to reset to default configuration?",
+    "instructions": "How to get server address",
+    "instruction1": "1. Launch Nekotong app on your computer",
+    "instruction2": "2. Check \"Connection Address\" in the top-left corner",
+    "instruction3": "3. Enter the IP address and port shown below",
+    "quickFill": "Quick Fill:",
+    "serverAddress": "Server Address",
+    "ipHostname": "IP Address / Hostname",
+    "ipHint": "Enter the IP part of the connection address shown in Nekotong",
+    "portNumber": "Port Number",
+    "characterSettings": "Character Settings",
+    "characterHint": "Character name configured in Nekotong",
+    "currentConfig": "Current Configuration",
+    "p2pMode": "P2P Connection Mode",
+    "websocketUrl": "WebSocket URL",
+    "tips": "Tips",
+    "tip1": "Make sure your phone and computer are on the same WiFi network",
+    "tip2": "If connection fails, check your firewall settings",
+    "tip3": "You can also use QR scanning for automatic configuration"
   },
 
   "characterManager": {
@@ -172,6 +213,28 @@
     "switch": "Switch Character",
     "loading": "Loading...",
     "error": "Failed to load character list",
-    "empty": "No characters available"
+    "empty": "No characters available",
+    "masterProfile": "Master Profile",
+    "characters": "Characters",
+    "name": "Name",
+    "nickname": "Nickname",
+    "gender": "Gender",
+    "personality": "Personality",
+    "backstory": "Backstory",
+    "required": "Required",
+    "optional": "Optional",
+    "saveMaster": "Save Profile",
+    "saving": "Saving...",
+    "addCharacter": "Add Character",
+    "editCharacter": "Edit Character",
+    "nameRequired": "Name is required",
+    "characterSaved": "Character saved",
+    "characterDeleted": "Character deleted",
+    "confirmDelete": "Confirm Delete",
+    "confirmDeleteMessage": "Are you sure you want to delete \"{{name}}\"?",
+    "setCurrent": "Set as Current",
+    "setCurrentSuccess": "{{name}} is now the current character",
+    "noCharacters": "No characters yet",
+    "addCharacterHint": "Tap + to add a new character"
   }
 }

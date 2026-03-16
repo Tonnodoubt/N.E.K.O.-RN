@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useDevConnectionConfig } from '@/hooks/useDevConnectionConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -38,6 +39,7 @@ const Icons = {
 export default function ServerConfigScreen() {
   const router = useRouter();
   const { config, isLoaded, setConfig } = useDevConnectionConfig();
+  const { t } = useTranslation();
 
   // Form state
   const [host, setHost] = useState('');
@@ -61,15 +63,15 @@ export default function ServerConfigScreen() {
 
     // Validation
     if (!trimmedHost) {
-      Alert.alert('错误', '请输入服务器地址');
+      Alert.alert(t('common.error'), t('serverConfig.enterHost'));
       return;
     }
     if (!portNum || portNum < 1 || portNum > 65535) {
-      Alert.alert('错误', '请输入有效的端口号 (1-65535)');
+      Alert.alert(t('common.error'), t('serverConfig.enterValidPort'));
       return;
     }
     if (!characterName.trim()) {
-      Alert.alert('错误', '请输入角色名称');
+      Alert.alert(t('common.error'), t('serverConfig.enterCharacter'));
       return;
     }
 
@@ -85,26 +87,30 @@ export default function ServerConfigScreen() {
       await setConfig(newConfig);
 
       Alert.alert(
-        '保存成功',
-        `服务器地址已设置为:\n${trimmedHost}:${portNum}\n角色: ${characterName.trim()}`,
-        [{ text: '确定', onPress: () => router.back() }]
+        t('serverConfig.saved'),
+        t('serverConfig.savedMessage', {
+          host: trimmedHost,
+          port: portNum,
+          character: characterName.trim(),
+        }),
+        [{ text: t('common.ok'), onPress: () => router.back() }]
       );
     } catch (error) {
-      Alert.alert('保存失败', String(error));
+      Alert.alert(t('serverConfig.saveFailed'), String(error));
     } finally {
       setSaving(false);
     }
-  }, [host, port, characterName, setConfig, router]);
+  }, [host, port, characterName, setConfig, router, t]);
 
   // Reset to default
   const handleReset = useCallback(() => {
     Alert.alert(
-      '恢复默认',
-      '确定要恢复默认配置吗？',
+      t('serverConfig.resetDefault'),
+      t('serverConfig.resetConfirm'),
       [
-        { text: '取消', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: '确定',
+          text: t('common.confirm'),
           style: 'destructive',
           onPress: async () => {
             await AsyncStorage.removeItem(STORAGE_KEY);
@@ -115,7 +121,7 @@ export default function ServerConfigScreen() {
         },
       ]
     );
-  }, []);
+  }, [t]);
 
   // Quick fill common local IP patterns
   const quickFillLocalhost = () => {
@@ -132,7 +138,7 @@ export default function ServerConfigScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>加载中...</Text>
+          <Text style={styles.loadingText}>{t('common.loading')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -149,7 +155,7 @@ export default function ServerConfigScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Text style={styles.backButtonText}>{Icons.back}</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>服务器配置</Text>
+          <Text style={styles.headerTitle}>{t('serverConfig.title')}</Text>
           <TouchableOpacity onPress={handleSave} disabled={saving} style={styles.saveButton}>
             <Text style={styles.saveButtonText}>{Icons.save}</Text>
           </TouchableOpacity>
@@ -158,17 +164,17 @@ export default function ServerConfigScreen() {
         <ScrollView style={styles.content} keyboardShouldPersistTaps="handled">
           {/* Instructions */}
           <View style={styles.instructionCard}>
-            <Text style={styles.instructionTitle}>如何获取服务器地址</Text>
+            <Text style={styles.instructionTitle}>{t('serverConfig.instructions')}</Text>
             <Text style={styles.instructionText}>
-              1. 在电脑上启动 Nekotong 应用{'\n'}
-              2. 在应用界面左上角查看"连接地址"{'\n'}
-              3. 输入下方显示的 IP 地址和端口号
+              {t('serverConfig.instruction1')}{'\n'}
+              {t('serverConfig.instruction2')}{'\n'}
+              {t('serverConfig.instruction3')}
             </Text>
           </View>
 
           {/* Quick Fill Buttons */}
           <View style={styles.quickFillContainer}>
-            <Text style={styles.quickFillLabel}>快速填充:</Text>
+            <Text style={styles.quickFillLabel}>{t('serverConfig.quickFill')}</Text>
             <View style={styles.quickFillButtons}>
               <TouchableOpacity style={styles.quickFillButton} onPress={quickFillLocalhost}>
                 <Text style={styles.quickFillButtonText}>localhost</Text>
@@ -183,30 +189,32 @@ export default function ServerConfigScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionIcon}>{Icons.server}</Text>
-              <Text style={styles.sectionTitle}>服务器地址</Text>
+              <Text style={styles.sectionTitle}>{t('serverConfig.serverAddress')}</Text>
             </View>
             <View style={styles.card}>
               <View style={styles.field}>
-                <Text style={styles.label}>IP 地址 / 主机名</Text>
+                <Text style={styles.label}>{t('serverConfig.ipHostname')}</Text>
                 <TextInput
                   style={styles.input}
                   value={host}
                   onChangeText={setHost}
-                  placeholder="例如: 192.168.1.100"
+                  placeholder={t('serverConfig.hostPlaceholder')}
+                  placeholderTextColor="#666"
                   autoCapitalize="none"
                   autoCorrect={false}
                   keyboardType="default"
                 />
-                <Text style={styles.hint}>输入 Nekotong 显示连接地址中的 IP 部分</Text>
+                <Text style={styles.hint}>{t('serverConfig.ipHint')}</Text>
               </View>
 
               <View style={styles.field}>
-                <Text style={styles.label}>端口号</Text>
+                <Text style={styles.label}>{t('serverConfig.portNumber')}</Text>
                 <TextInput
                   style={styles.input}
                   value={port}
                   onChangeText={setPort}
-                  placeholder="例如: 48911"
+                  placeholder={t('serverConfig.portPlaceholder')}
+                  placeholderTextColor="#666"
                   keyboardType="number-pad"
                   maxLength={5}
                 />
@@ -218,20 +226,21 @@ export default function ServerConfigScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionIcon}>{Icons.user}</Text>
-              <Text style={styles.sectionTitle}>角色设置</Text>
+              <Text style={styles.sectionTitle}>{t('serverConfig.characterSettings')}</Text>
             </View>
             <View style={styles.card}>
               <View style={styles.field}>
-                <Text style={styles.label}>角色名称</Text>
+                <Text style={styles.label}>{t('serverConfig.character')}</Text>
                 <TextInput
                   style={styles.input}
                   value={characterName}
                   onChangeText={setCharacterName}
-                  placeholder="例如: test"
+                  placeholder={t('serverConfig.characterPlaceholder')}
+                  placeholderTextColor="#666"
                   autoCapitalize="none"
                   autoCorrect={false}
                 />
-                <Text style={styles.hint}>Nekotong 中配置的角色名</Text>
+                <Text style={styles.hint}>{t('serverConfig.characterHint')}</Text>
               </View>
             </View>
           </View>
@@ -240,13 +249,13 @@ export default function ServerConfigScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionIcon}>{Icons.refresh}</Text>
-              <Text style={styles.sectionTitle}>当前配置</Text>
+              <Text style={styles.sectionTitle}>{t('serverConfig.currentConfig')}</Text>
             </View>
             <View style={styles.card}>
               {config.p2p ? (
                 <>
                   <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>P2P 连接模式</Text>
+                    <Text style={styles.infoLabel}>{t('serverConfig.p2pMode')}</Text>
                   </View>
                   <Text style={styles.wsUrl}>
                     {config.host}:{config.port}
@@ -258,7 +267,7 @@ export default function ServerConfigScreen() {
               ) : (
                 <>
                   <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>WebSocket URL</Text>
+                    <Text style={styles.infoLabel}>{t('serverConfig.websocketUrl')}</Text>
                   </View>
                   <Text style={styles.wsUrl}>
                     ws://{config.host}:{config.port}/ws/{config.characterName}
@@ -276,22 +285,22 @@ export default function ServerConfigScreen() {
               disabled={saving}
             >
               <Text style={styles.primaryButtonText}>
-                {saving ? '保存中...' : `${Icons.check} 保存配置`}
+                {saving ? t('serverConfig.saving') : `${Icons.check} ${t('serverConfig.save')}`}
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.secondaryButton} onPress={handleReset}>
-              <Text style={styles.secondaryButtonText}>恢复默认</Text>
+              <Text style={styles.secondaryButtonText}>{t('serverConfig.resetDefault')}</Text>
             </TouchableOpacity>
           </View>
 
           {/* Tips */}
           <View style={styles.tipsContainer}>
-            <Text style={styles.tipsTitle}>💡 提示</Text>
+            <Text style={styles.tipsTitle}>💡 {t('serverConfig.tips')}</Text>
             <Text style={styles.tipsText}>
-              • 确保手机和电脑在同一 WiFi 网络下{'\n'}
-              • 如果连接失败，请检查防火墙设置{'\n'}
-              • 也可以使用扫码配置功能自动填充
+              • {t('serverConfig.tip1')}{'\n'}
+              • {t('serverConfig.tip2')}{'\n'}
+              • {t('serverConfig.tip3')}
             </Text>
           </View>
         </ScrollView>

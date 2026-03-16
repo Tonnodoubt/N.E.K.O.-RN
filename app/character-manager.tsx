@@ -21,6 +21,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useDevConnectionConfig } from '@/hooks/useDevConnectionConfig';
 import { buildHttpBaseURL } from '@/utils/devConnectionConfig';
 import {
@@ -51,6 +52,7 @@ export default function CharacterManagerScreen() {
   const { config, isLoaded } = useDevConnectionConfig();
   const apiBase = buildHttpBaseURL(config);
   const p2pToken = config.p2p?.token;
+  const { t } = useTranslation();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -93,11 +95,11 @@ export default function CharacterManagerScreen() {
       setCurrentCatgirl(data.当前猫娘 || null);
     } catch (err: any) {
       console.error('Failed to load characters:', err);
-      setError(err.message || 'Failed to load character data');
+      setError(err.message || t('characterManager.error'));
     } finally {
       setLoading(false);
     }
-  }, [apiBase, p2pToken]);
+  }, [apiBase, p2pToken, t]);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -114,7 +116,7 @@ export default function CharacterManagerScreen() {
   const handleSaveMaster = useCallback(async () => {
     const trimmedName = masterProfile.name.trim();
     if (!trimmedName) {
-      setError('Name is required');
+      setError(t('characterManager.nameRequired'));
       return;
     }
 
@@ -128,21 +130,21 @@ export default function CharacterManagerScreen() {
       if (trimmedNickname) profile.昵称 = trimmedNickname;
       const trimmedGender = masterProfile.gender?.trim();
       if (trimmedGender) profile.性别 = trimmedGender;
-  
+
       const result = await client.updateMaster(profile);
 
       if (result.success) {
-        Alert.alert('Success', 'Master profile saved!');
+        Alert.alert(t('common.success'), t('characterManager.masterProfile') + ' ' + t('common.saved') + '!');
       } else {
-        setError(result.error || 'Failed to save');
+        setError(result.error || t('common.error'));
       }
     } catch (err: any) {
       console.error('Failed to save master profile:', err);
-      setError(err.message || 'Failed to save');
+      setError(err.message || t('common.error'));
     } finally {
       setSaving(false);
     }
-  }, [apiBase, p2pToken, masterProfile]);
+  }, [apiBase, p2pToken, masterProfile, t]);
 
   // Add new catgirl
   const handleAddCatgirl = useCallback(() => {
@@ -160,7 +162,7 @@ export default function CharacterManagerScreen() {
   const handleSaveCharacter = useCallback(async (character: Character) => {
     const trimmedName = character.name.trim();
     if (!trimmedName) {
-      Alert.alert('Error', 'Name is required');
+      Alert.alert(t('common.error'), t('characterManager.nameRequired'));
       return;
     }
 
@@ -188,27 +190,27 @@ export default function CharacterManagerScreen() {
       if (result.success) {
         await loadCharacters();
         setEditingCharacter(null);
-        Alert.alert('Success', 'Character saved!');
+        Alert.alert(t('common.success'), t('characterManager.characterSaved'));
       } else {
-        setError(result.error || 'Failed to save');
+        setError(result.error || t('common.error'));
       }
     } catch (err: any) {
       console.error('Failed to save character:', err);
-      setError(err.message || 'Failed to save');
+      setError(err.message || t('common.error'));
     } finally {
       setSaving(false);
     }
-  }, [apiBase, p2pToken, isNewCharacter, loadCharacters]);
+  }, [apiBase, p2pToken, isNewCharacter, loadCharacters, t]);
 
   // Delete catgirl
   const handleDeleteCatgirl = useCallback((character: Character) => {
     Alert.alert(
-      'Confirm Delete',
-      `Are you sure you want to delete "${character.nickname || character.name}"?`,
+      t('characterManager.confirmDelete'),
+      t('characterManager.confirmDeleteMessage', { name: character.nickname || character.name }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -218,13 +220,13 @@ export default function CharacterManagerScreen() {
 
               if (result.success) {
                 setCatgirls(prev => prev.filter(c => c.id !== character.id));
-                Alert.alert('Success', 'Character deleted!');
+                Alert.alert(t('common.success'), t('characterManager.characterDeleted'));
               } else {
-                setError(result.error || 'Failed to delete');
+                setError(result.error || t('common.error'));
               }
             } catch (err: any) {
               console.error('Failed to delete character:', err);
-              setError(err.message || 'Failed to delete');
+              setError(err.message || t('common.error'));
             } finally {
               setSaving(false);
             }
@@ -232,7 +234,7 @@ export default function CharacterManagerScreen() {
         },
       ]
     );
-  }, [apiBase, p2pToken, catgirls]);
+  }, [apiBase, p2pToken, t]);
 
   // Set as current catgirl
   const handleSetCurrent = useCallback(async (character: Character) => {
@@ -243,17 +245,17 @@ export default function CharacterManagerScreen() {
 
       if (result.success) {
         setCurrentCatgirl(character.name);
-        Alert.alert('Success', `${character.nickname || character.name} is now the current character!`);
+        Alert.alert(t('common.success'), t('characterManager.setCurrentSuccess', { name: character.nickname || character.name }));
       } else {
-        setError(result.error || 'Failed to set current');
+        setError(result.error || t('common.error'));
       }
     } catch (err: any) {
       console.error('Failed to set current catgirl:', err);
-      setError(err.message || 'Failed to set current');
+      setError(err.message || t('common.error'));
     } finally {
       setSaving(false);
     }
-  }, [apiBase, p2pToken]);
+  }, [apiBase, p2pToken, t]);
 
   // Render catgirl item
   const renderCatgirlItem = useCallback(({ item }: { item: Character }) => {
@@ -279,7 +281,7 @@ export default function CharacterManagerScreen() {
               style={styles.actionButton}
               onPress={() => handleSetCurrent(item)}
             >
-              <Text style={styles.actionButtonText}>Set</Text>
+              <Text style={styles.actionButtonText}>{t('characterManager.setCurrent')}</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity
@@ -297,14 +299,14 @@ export default function CharacterManagerScreen() {
         </View>
       </View>
     );
-  }, [currentCatgirl, handleSetCurrent, handleEditCatgirl, handleDeleteCatgirl]);
+  }, [currentCatgirl, handleSetCurrent, handleEditCatgirl, handleDeleteCatgirl, t]);
 
   // Loading state
   if (loading && !refreshing) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading characters...</Text>
+          <Text style={styles.loadingText}>{t('characterManager.loading')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -321,7 +323,7 @@ export default function CharacterManagerScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Text style={styles.backButtonText}>{Icons.back}</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Character Manager</Text>
+          <Text style={styles.headerTitle}>{t('characterManager.title')}</Text>
           <View style={styles.headerSpacer} />
         </View>
 
@@ -343,35 +345,38 @@ export default function CharacterManagerScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionIcon}>{Icons.user}</Text>
-              <Text style={styles.sectionTitle}>Master Profile</Text>
+              <Text style={styles.sectionTitle}>{t('characterManager.masterProfile')}</Text>
             </View>
             <View style={styles.card}>
               <View style={styles.field}>
-                <Text style={styles.label}>Name *</Text>
+                <Text style={styles.label}>{t('characterManager.name')} *</Text>
                 <TextInput
                   style={styles.input}
                   value={masterProfile.name}
                   onChangeText={(text) => setMasterProfile({ ...masterProfile, name: text })}
-                  placeholder="Required"
+                  placeholder={t('characterManager.required')}
+                  placeholderTextColor="#666"
                   maxLength={20}
                 />
               </View>
               <View style={styles.field}>
-                <Text style={styles.label}>Nickname</Text>
+                <Text style={styles.label}>{t('characterManager.nickname')}</Text>
                 <TextInput
                   style={styles.input}
                   value={masterProfile.nickname || ''}
                   onChangeText={(text) => setMasterProfile({ ...masterProfile, nickname: text })}
-                  placeholder="Optional"
+                  placeholder={t('characterManager.optional')}
+                  placeholderTextColor="#666"
                 />
               </View>
               <View style={styles.field}>
-                <Text style={styles.label}>gender</Text>
+                <Text style={styles.label}>{t('characterManager.gender')}</Text>
                 <TextInput
                   style={styles.input}
                   value={masterProfile.gender}
                   onChangeText={(text) => setMasterProfile({ ...masterProfile, gender: text })}
-                  placeholder="Optional"
+                  placeholder={t('characterManager.optional')}
+                  placeholderTextColor="#666"
                 />
               </View>
               <TouchableOpacity
@@ -380,7 +385,7 @@ export default function CharacterManagerScreen() {
                 disabled={saving}
               >
                 <Text style={styles.saveButtonText}>
-                  {saving ? 'Saving...' : 'Save Master'}
+                  {saving ? t('characterManager.saving') : t('characterManager.saveMaster')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -390,7 +395,7 @@ export default function CharacterManagerScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionIcon}>{Icons.cat}</Text>
-              <Text style={styles.sectionTitle}>Characters</Text>
+              <Text style={styles.sectionTitle}>{t('characterManager.characters')}</Text>
               <TouchableOpacity style={styles.addButton} onPress={handleAddCatgirl}>
                 <Text style={styles.addButtonText}>{Icons.add}</Text>
               </TouchableOpacity>
@@ -403,8 +408,8 @@ export default function CharacterManagerScreen() {
               scrollEnabled={false}
               ListEmptyComponent={
                 <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>No characters yet</Text>
-                  <Text style={styles.emptyHint}>Tap + to add a new character</Text>
+                  <Text style={styles.emptyText}>{t('characterManager.noCharacters')}</Text>
+                  <Text style={styles.emptyHint}>{t('characterManager.addCharacterHint')}</Text>
                 </View>
               }
             />
@@ -417,7 +422,7 @@ export default function CharacterManagerScreen() {
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>
-                  {isNewCharacter ? 'Add Character' : 'Edit Character'}
+                  {isNewCharacter ? t('characterManager.addCharacter') : t('characterManager.editCharacter')}
                 </Text>
                 <TouchableOpacity onPress={() => setEditingCharacter(null)}>
                   <Text style={styles.modalClose}>{Icons.close}</Text>
@@ -426,40 +431,44 @@ export default function CharacterManagerScreen() {
 
               <ScrollView style={styles.modalBody}>
                 <View style={styles.field}>
-                  <Text style={styles.label}>Name *</Text>
+                  <Text style={styles.label}>{t('characterManager.name')} *</Text>
                   <TextInput
                     style={styles.input}
                     value={editingCharacter.name}
                     onChangeText={(text) => setEditingCharacter({ ...editingCharacter, name: text })}
-                    placeholder="Character name"
+                    placeholder={t('characterManager.name')}
+                    placeholderTextColor="#666"
                     editable={isNewCharacter}
                   />
                 </View>
                 <View style={styles.field}>
-                  <Text style={styles.label}>Nickname</Text>
+                  <Text style={styles.label}>{t('characterManager.nickname')}</Text>
                   <TextInput
                     style={styles.input}
                     value={editingCharacter.nickname || ''}
                     onChangeText={(text) => setEditingCharacter({ ...editingCharacter, nickname: text })}
-                    placeholder="Display name"
+                    placeholder={t('characterManager.nickname')}
+                    placeholderTextColor="#666"
                   />
                 </View>
                 <View style={styles.field}>
-                  <Text style={styles.label}>Personality</Text>
+                  <Text style={styles.label}>{t('characterManager.personality')}</Text>
                   <TextInput
                     style={styles.input}
                     value={editingCharacter.personality || ''}
                     onChangeText={(text) => setEditingCharacter({ ...editingCharacter, personality: text })}
-                    placeholder="Character traits"
+                    placeholder={t('characterManager.personality')}
+                    placeholderTextColor="#666"
                   />
                 </View>
                 <View style={styles.field}>
-                  <Text style={styles.label}>Backstory</Text>
+                  <Text style={styles.label}>{t('characterManager.backstory')}</Text>
                   <TextInput
                     style={[styles.input, styles.textArea]}
                     value={editingCharacter.backstory || ''}
                     onChangeText={(text) => setEditingCharacter({ ...editingCharacter, backstory: text })}
-                    placeholder="Character background"
+                    placeholder={t('characterManager.backstory')}
+                    placeholderTextColor="#666"
                     multiline
                     numberOfLines={4}
                     textAlignVertical="top"
@@ -472,7 +481,7 @@ export default function CharacterManagerScreen() {
                   style={styles.cancelButton}
                   onPress={() => setEditingCharacter(null)}
                 >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                  <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.confirmButton, saving && styles.saveButtonDisabled]}
@@ -480,7 +489,7 @@ export default function CharacterManagerScreen() {
                   disabled={saving}
                 >
                   <Text style={styles.confirmButtonText}>
-                    {saving ? 'Saving...' : 'Save'}
+                    {saving ? t('characterManager.saving') : t('common.save')}
                   </Text>
                 </TouchableOpacity>
               </View>

@@ -2,6 +2,7 @@
   "common": {
     "load": "加载",
     "save": "保存",
+    "saved": "已保存",
     "cancel": "取消",
     "confirm": "确认",
     "ok": "确定",
@@ -16,7 +17,8 @@
     "settings": "设置",
     "clear": "清空",
     "scan": "扫描",
-    "config": "配置"
+    "config": "配置",
+    "content": "内容"
   },
 
   "home": {
@@ -151,9 +153,21 @@
 
   "qrScanner": {
     "title": "扫描二维码",
+    "titleDev": "开发扫码配置",
     "permissionDenied": "需要相机权限才能扫描二维码",
+    "checkingPermission": "正在检查相机权限…",
+    "cameraPermissionRequired": "需要相机权限才能扫描二维码",
+    "grantCameraPermission": "授权相机权限",
     "scanError": "扫描失败，请重试",
+    "scanFailed": "扫码失败",
+    "noValidContent": "未识别到有效内容",
     "invalidCode": "无效的二维码",
+    "invalidQRContent": "二维码内容不可用",
+    "p2pConfigSuccess": "P2P 连接配置成功",
+    "p2pConfigMessage": "局域网 IP: {{host}}\n端口: {{port}}\n角色: {{character}}\n\n请确保手机和电脑在同一 WiFi 下。",
+    "autoDetectHint": "对准二维码自动识别",
+    "continueScan": "继续扫描",
+    "refocus": "重新对焦",
     "back": "返回"
   },
 
@@ -163,10 +177,37 @@
     "port": "端口",
     "character": "角色名称",
     "save": "保存配置",
+    "saving": "保存中...",
+    "saved": "保存成功",
+    "saveFailed": "保存失败",
     "cancel": "取消",
     "hostPlaceholder": "例如: 192.168.1.100",
     "portPlaceholder": "例如: 48911",
-    "characterPlaceholder": "例如: mao_pro"
+    "characterPlaceholder": "例如: mao_pro",
+    "enterHost": "请输入服务器地址",
+    "enterValidPort": "请输入有效的端口号 (1-65535)",
+    "enterCharacter": "请输入角色名称",
+    "savedMessage": "服务器地址已设置为:\n{{host}}:{{port}}\n角色: {{character}}",
+    "resetDefault": "恢复默认",
+    "resetConfirm": "确定要恢复默认配置吗？",
+    "instructions": "如何获取服务器地址",
+    "instruction1": "1. 在电脑上启动 Nekotong 应用",
+    "instruction2": "2. 在应用界面左上角查看"连接地址"",
+    "instruction3": "3. 输入下方显示的 IP 地址和端口号",
+    "quickFill": "快速填充:",
+    "serverAddress": "服务器地址",
+    "ipHostname": "IP 地址 / 主机名",
+    "ipHint": "输入 Nekotong 显示连接地址中的 IP 部分",
+    "portNumber": "端口号",
+    "characterSettings": "角色设置",
+    "characterHint": "Nekotong 中配置的角色名",
+    "currentConfig": "当前配置",
+    "p2pMode": "P2P 连接模式",
+    "websocketUrl": "WebSocket URL",
+    "tips": "提示",
+    "tip1": "确保手机和电脑在同一 WiFi 网络下",
+    "tip2": "如果连接失败，请检查防火墙设置",
+    "tip3": "也可以使用扫码配置功能自动填充"
   },
 
   "characterManager": {
@@ -175,6 +216,28 @@
     "switch": "切换角色",
     "loading": "加载中...",
     "error": "加载角色列表失败",
-    "empty": "暂无可用角色"
+    "empty": "暂无可用角色",
+    "masterProfile": "主人档案",
+    "characters": "角色列表",
+    "name": "名称",
+    "nickname": "昵称",
+    "gender": "性别",
+    "personality": "性格",
+    "backstory": "背景故事",
+    "required": "必填",
+    "optional": "选填",
+    "saveMaster": "保存档案",
+    "saving": "保存中...",
+    "addCharacter": "添加角色",
+    "editCharacter": "编辑角色",
+    "nameRequired": "名称为必填项",
+    "characterSaved": "角色已保存",
+    "characterDeleted": "角色已删除",
+    "confirmDelete": "确认删除",
+    "confirmDeleteMessage": "确定要删除 \"{{name}}\" 吗？",
+    "setCurrent": "设为当前",
+    "setCurrentSuccess": "{{name}} 已设为当前角色",
+    "noCharacters": "暂无角色",
+    "addCharacterHint": "点击 + 添加新角色"
   }
 }
