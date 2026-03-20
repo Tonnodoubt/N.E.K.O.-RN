@@ -4,7 +4,7 @@ import { createWebAudioService } from '@project_neko/audio-service/web';
 import type { AudioService as CrossPlatformAudioService } from '@project_neko/audio-service';
 import type { RealtimeClientLike } from '@project_neko/audio-service';
 import { WSService } from './wsService';
-import { requestMicrophonePermission } from '@/utils/permissions';
+import { requestMicrophonePermission } from '@/utils/audioPermissionManager';
 import type { DevConnectionConfig } from '@/utils/devConnectionConfig';
 
 /**
