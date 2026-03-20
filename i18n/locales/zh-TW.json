@@ -1,0 +1,245 @@
+{
+  "common": {
+    "load": "載入",
+    "save": "儲存",
+    "cancel": "取消",
+    "confirm": "確認",
+    "ok": "確定",
+    "delete": "刪除",
+    "edit": "編輯",
+    "loading": "載入中...",
+    "error": "錯誤",
+    "success": "成功",
+    "close": "關閉",
+    "back": "返回",
+    "retry": "重試",
+    "settings": "設定",
+    "clear": "清空",
+    "scan": "掃描",
+    "config": "配置"
+  },
+  "home": {
+    "title": "Project N.E.K.O.",
+    "shortcuts": "快捷功能",
+    "apiSettings": "API 設定",
+    "characterManager": "角色管理",
+    "serverConnection": "伺服器連線",
+    "status": {
+      "online": "就緒",
+      "offline": "未連線",
+      "configured": "已配置，等待連線…",
+      "unconfigured": "掃描或手動配置以連線"
+    },
+    "actions": {
+      "manualConfig": "手動配置",
+      "qrConfig": "掃描配置",
+      "currentRole": "角色"
+    }
+  },
+  "main": {
+    "chat": {
+      "title": "對話",
+      "placeholder": "輸入訊息...",
+      "send": "發送",
+      "collapse": "收起",
+      "expand": "展開"
+    },
+    "agent": {
+      "enabled": "Agent 模式已開啟",
+      "disabled": "Agent 模式已關閉",
+      "connecting": "Agent 伺服器連線中...",
+      "offline": "Agent 伺服器未啟動",
+      "unavailable": "功能不可用",
+      "checking": "查詢中..."
+    },
+    "character": {
+      "switching": "切換角色中...",
+      "loading": "載入模型中...",
+      "switched": "已切換到 {{name}}",
+      "switchError": "角色切換失敗",
+      "select": "選擇角色",
+      "noCharacters": "暫無可用角色"
+    },
+    "voice": {
+      "start": "開始語音",
+      "stop": "停止語音",
+      "rest": "休息一下",
+      "preparing": "準備中...",
+      "ready": "就緒",
+      "blocked": "語音輸入被阻止"
+    },
+    "debug": {
+      "title": "除錯資訊",
+      "toggle": "顯示/隱藏",
+      "connection": "連線資訊",
+      "p2pLayer": "P2P 連線層"
+    }
+  },
+  "settings": {
+    "title": "設定",
+    "sections": {
+      "api": "API 配置",
+      "provider": "提供商選擇",
+      "p2p": "P2P 配置",
+      "language": "語言設定",
+      "serverInfo": "伺服器資訊"
+    },
+    "language": {
+      "title": "語言設定",
+      "select": "選擇語言",
+      "current": "當前語言",
+      "languages": {
+        "zh-CN": "简体中文",
+        "zh-TW": "繁体中文",
+        "en": "English",
+        "ja": "日本語",
+        "ko": "한국어",
+        "ru": "Русский"
+      },
+      "restartRequired": "更改語言後需要重新啟動應用程式"
+    },
+    "api": {
+      "coreProvider": "核心 API 提供商",
+      "assistProvider": "輔助 API 提供商",
+      "save": "儲存配置",
+      "saving": "儲存中...",
+      "saved": "配置已儲存",
+      "refresh": "重新整理配置",
+      "apiKey": "API 金鑰",
+      "endpoint": "自訂端點",
+      "enterKey": "請輸入 API 金鑰"
+    },
+    "p2p": {
+      "title": "P2P 配置",
+      "token": "連接令牌",
+      "qrCode": "P2P 二維碼",
+      "desc": "使用手機 App 掃描下方二維碼，即可自動配置連接資訊",
+      "step1": "確保手機與電腦在同一 WiFi 下",
+      "step2": "開啟 N.E.K.O. App，點選「掃碼設定」",
+      "step3": "對準二維碼掃描，連接自動完成",
+      "lanIp": "區域網路 IP",
+      "port": "連接埠",
+      "tokenHidden": "（已隱藏，掃碼可自動取得）"
+    },
+    "serverInfo": {
+      "host": "主機位址",
+      "port": "埠號",
+      "character": "當前角色"
+    }
+  },
+  "connection": {
+    "status": {
+      "connected": "已連線",
+      "disconnected": "未連線",
+      "reconnecting": "重新連線中...",
+      "restored": "連線已恢復"
+    },
+    "errors": {
+      "timeout": "連線逾時",
+      "refused": "連線被拒絕",
+      "networkError": "網路錯誤",
+      "invalidConfig": "配置無效"
+    }
+  },
+  "toast": {
+    "connectionRestored": "連線已恢復",
+    "switchedCharacter": "已切換到 {{name}}",
+    "settingsSaved": "設定已儲存",
+    "errorOccurred": "發生錯誤: {{error}}"
+  },
+  "qrScanner": {
+    "title": "掃描二維碼",
+    "titleDev": "開發掃碼配置",
+    "permissionDenied": "需要相機權限才能掃描二維碼",
+    "checkingPermission": "正在檢查相機權限…",
+    "cameraPermissionRequired": "需要相機權限才能掃描二維碼",
+    "grantCameraPermission": "授權相機權限",
+    "scanError": "掃描失敗，請重試",
+    "scanFailed": "掃碼失敗",
+    "noValidContent": "未識別到有效內容",
+    "invalidCode": "無效的二維碼",
+    "invalidQRContent": "二維碼內容不可用",
+    "p2pConfigSuccess": "P2P 連線配置成功",
+    "p2pConfigMessage": "區域網路 IP: {{host}}\n連接埠: {{port}}\n角色: {{character}}\n\n請確保手機和電腦在同一 WiFi 下。",
+    "autoDetectHint": "對準二維碼自動識別",
+    "continueScan": "繼續掃描",
+    "refocus": "重新對焦",
+    "back": "返回"
+  },
+  "serverConfig": {
+    "title": "伺服器配置",
+    "host": "主機位址",
+    "port": "連接埠",
+    "character": "角色名稱",
+    "save": "儲存配置",
+    "saving": "儲存中...",
+    "saved": "儲存成功",
+    "saveFailed": "儲存失敗",
+    "cancel": "取消",
+    "hostPlaceholder": "例如: 192.168.1.100",
+    "portPlaceholder": "例如: 48911",
+    "characterPlaceholder": "例如: mao_pro",
+    "enterHost": "請輸入伺服器位址",
+    "enterValidPort": "請輸入有效的連接埠 (1-65535)",
+    "enterCharacter": "請輸入角色名稱",
+    "savedMessage": "伺服器位址已設定為:\n{{host}}:{{port}}\n角色: {{character}}",
+    "resetDefault": "恢復預設",
+    "resetConfirm": "確定要恢復預設配置嗎？",
+    "instructions": "如何取得伺服器位址",
+    "instruction1": "1. 在電腦上啟動 Nekotong 應用程式",
+    "instruction2": "2. 在應用程式介面左上角檢視「連線位址」",
+    "instruction3": "3. 輸入下方顯示的 IP 位址和連接埠",
+    "quickFill": "快速填充:",
+    "serverAddress": "伺服器位址",
+    "ipHostname": "IP 位址 / 主機名稱",
+    "ipHint": "輸入 Nekotong 顯示連線位址中的 IP 部分",
+    "portNumber": "連接埠號碼",
+    "characterSettings": "角色設定",
+    "characterHint": "Nekotong 中配置的角色名",
+    "currentConfig": "當前配置",
+    "p2pMode": "P2P 連線模式",
+    "websocketUrl": "WebSocket URL",
+    "tips": "提示",
+    "tip1": "確保手機和電腦在同一 WiFi 網路下",
+    "tip2": "如果連線失敗，請檢查防火牆設定",
+    "tip3": "也可以使用掃碼配置功能自動填充"
+  },
+  "characterManager": {
+    "title": "角色管理",
+    "select": "選擇角色",
+    "switch": "切換角色",
+    "loading": "載入中...",
+    "error": "載入角色列表失敗",
+    "empty": "暫無可用角色",
+    "masterProfile": "主人檔案",
+    "characters": "角色列表",
+    "name": "名稱",
+    "nickname": "暱稱",
+    "gender": "性別",
+    "personality": "性格",
+    "backstory": "背景故事",
+    "required": "必填",
+    "optional": "選填",
+    "saveMaster": "儲存檔案",
+    "saving": "儲存中...",
+    "addCharacter": "新增角色",
+    "editCharacter": "編輯角色",
+    "nameRequired": "名稱為必填項",
+    "characterSaved": "角色已儲存",
+    "characterDeleted": "角色已刪除",
+    "confirmDelete": "確認刪除",
+    "confirmDeleteMessage": "確定要刪除 \"{{name}}\" 嗎？",
+    "setCurrent": "設為當前",
+    "setCurrentSuccess": "{{name}} 已設為當前角色",
+    "noCharacters": "暫無角色",
+    "addCharacterHint": "點擊 + 新增新角色"
+  },
+  "privacy": {
+    "title": "隱私權政策",
+    "agree": "同意並繼續",
+    "disagree": "不同意（退出）",
+    "disagreeTitle": "無法繼續",
+    "iosCannotExit": "您必須同意隱私權政策才能使用本應用程式。如需退出，請從主畫面關閉應用程式。",
+    "content": "歡迎使用 N.E.K.O.（以下簡稱「本應用程式」）。在使用本應用程式前，請仔細閱讀以下隱私權政策。\n\n一、資訊收集\n本應用程式僅在本機裝置上儲存以下資訊：\n· 伺服器連線設定（主機位址、連接埠）\n· 使用者語言偏好設定\n· 角色與介面個人化設定\n\n二、權限使用說明\n· 相機權限：僅用於掃描 QR Code 進行伺服器設定，以及支援即時視覺功能。\n· 麥克風權限：僅用於語音輸入功能，錄音資料不會上傳至任何第三方伺服器。\n· 網路權限：用於與您自行部署的 N.E.K.O. 伺服器進行通訊。\n\n三、資料共享\n本應用程式不會向任何第三方收集、傳輸或出售您的個人資訊。應用程式內不包含任何第三方廣告 SDK、資料分析 SDK 或行為追蹤元件。\n\n四、資料安全\n所有設定資料均儲存於您的本機裝置，本應用程式對其不具有遠端存取能力。\n\n五、聯絡我們\n如您對本隱私權政策有任何疑問，請透過專案官方管道與我們聯繫。\n\n繼續使用本應用程式，即表示您已閱讀並同意上述隱私權政策。"
+  }
+}

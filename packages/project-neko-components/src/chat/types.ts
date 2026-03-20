@@ -1,3 +1,5 @@
+import type React from 'react';
+
 export type ChatMessage = {
   id: string;
   role: "system" | "user" | "assistant";
@@ -77,4 +79,41 @@ export interface ChatContainerProps {
    * 默认为 false（相机功能需要集成 react-native-image-picker 或 expo-image-picker）
    */
   cameraEnabled?: boolean;
+
+  /**
+   * 点击相册按钮的回调（RN 专用）
+   * 如果提供，会显示相册按钮并调用此回调
+   */
+  onPickImage?: () => void;
+
+  /**
+   * 点击拍照按钮的回调（RN 专用）
+   * 如果提供，会调用此回调而不是使用内部相机逻辑
+   * 用于从外部处理拍照（如使用 useCamera hook）
+   */
+  onTakePhoto?: () => void;
+
+  /**
+   * 浮动覆盖层渲染函数（RN 专用）
+   * 用于在 Modal 展开态内部渲染浮动元素（如打断按钮），使其能显示在聊天面板上方
+   */
+  renderFloatingOverlay?: () => React.ReactNode;
+
+  /**
+   * 强制折叠聊天面板（RN 专用，受控）
+   * 为 true 时立即关闭展开态，回到浮动按钮
+   */
+  forceCollapsed?: boolean;
+
+  /**
+   * 外部传入的待发送图片（如从相册选择的图片）
+   * 这些图片会被添加到 pendingScreenshots 列表中
+   */
+  externalPendingImages?: PendingScreenshot[];
+
+  /**
+   * 清除外部待发送图片的回调
+   * 当外部图片被添加到 pendingScreenshots 后调用
+   */
+  onClearExternalPendingImages?: () => void;
 }

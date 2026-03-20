@@ -131,7 +131,7 @@ export function useToolbarButtons<TIcon = ToolbarIcon>({
         },
         {
           id: 'screen' as const,
-          title: tOrDefault(t, 'buttons.screenShare', '屏幕分享'),
+          title: tOrDefault(t, 'buttons.cameraShare', '摄像头'),
           hidden: false,
           active: screenEnabled,
           onClick: () => onToggleScreen(!screenEnabled),
@@ -197,6 +197,11 @@ export function useSettingsToggleRows(
         id: 'proactiveVision' as const,
         label: tOrDefault(t, 'settings.toggles.proactiveVision', '自主视觉'),
         checked: settings.proactiveVision,
+      },
+      {
+        id: 'darkMode' as const,
+        label: tOrDefault(t, 'settings.toggles.darkMode', '暗色模式'),
+        checked: settings.darkMode,
       },
     ],
     [settings, t]
@@ -289,6 +294,11 @@ export function useSettingsMenuItems<TIcon = ToolbarIcon>(
         icon: mkIcon('characterManage', 'character_icon.png'),
       },
       {
+        id: 'reload' as const,
+        label: tOrDefault(t, 'settings.menu.reload', '重新加载'),
+        icon: mkIcon('reload', 'character_icon.png'),
+      },
+      {
         id: 'voiceClone' as const,
         label: tOrDefault(t, 'settings.menu.voiceClone', '声音克隆'),
         icon: mkIcon('voiceClone', 'voice_clone_icon.png'),
@@ -302,6 +312,11 @@ export function useSettingsMenuItems<TIcon = ToolbarIcon>(
         id: 'steamWorkshop' as const,
         label: tOrDefault(t, 'settings.menu.steamWorkshop', '创意工坊'),
         icon: mkIcon('steamWorkshop', 'Steam_icon_logo.png'),
+      },
+      {
+        id: 'connectionHelp' as const,
+        label: tOrDefault(t, 'settings.menu.connectionHelp', '连接帮助'),
+        icon: mkIcon('connectionHelp', 'set_off.png'),
       },
     ];
   }, [t, iconBasePath, icons]);

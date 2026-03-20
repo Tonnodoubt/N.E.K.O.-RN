@@ -5,9 +5,10 @@ import {
   type DevConnectionConfig,
 } from '@/utils/devConnectionConfig';
 import { clearStoredDevConnectionConfig, getStoredDevConnectionConfig, setStoredDevConnectionConfig } from '@/services/DevConnectionStorage';
+import { queryDeviceInfo } from '@/services/CloudRegistryService';
 
 export type ApplyQrResult =
-  | { ok: true; config: DevConnectionConfig }
+  | { ok: true; config: DevConnectionConfig; isP2p?: boolean }
   | { ok: false; error: string };
 
 export function useDevConnectionConfig(): {
@@ -15,7 +16,9 @@ export function useDevConnectionConfig(): {
   isLoaded: boolean;
   setConfig: (next: Partial<DevConnectionConfig> | ((prev: DevConnectionConfig) => DevConnectionConfig)) => Promise<DevConnectionConfig>;
   applyQrRaw: (raw: string) => Promise<ApplyQrResult>;
+  refreshFromCloud: () => Promise<boolean>;  // 从云端刷新
   clear: () => Promise<void>;
+  reload: () => Promise<void>;  // 重新加载配置
 } {
   const [config, _setConfig] = useState<DevConnectionConfig>(DEFAULT_DEV_CONNECTION_CONFIG);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -58,8 +61,9 @@ export function useDevConnectionConfig(): {
     async (raw: string): Promise<ApplyQrResult> => {
       const parsed = parseDevConnectionConfig(raw);
       if (!parsed) return { ok: false, error: '二维码内容不可解析（请扫 JSON / URL / host:port 格式）' };
+      const isP2p = !!parsed.p2p;
       const next = await setConfig((prev) => ({ ...prev, ...parsed }));
-      return { ok: true, config: next };
+      return { ok: true, config: next, isP2p };
     },
     [setConfig]
   );
@@ -70,6 +74,43 @@ export function useDevConnectionConfig(): {
     configRef.current = DEFAULT_DEV_CONNECTION_CONFIG;
   }, []);
 
-  return { config, isLoaded, setConfig, applyQrRaw, clear };
+  /** 从 AsyncStorage 重新加载配置（用于其他页面写入后同步到当前实例）。 */
+  const reload = useCallback(async () => {
+    const stored = await getStoredDevConnectionConfig();
+    _setConfig(stored);
+    configRef.current = stored;
+  }, []);
+
+  /**
+   * 从云端刷新设备信息（如果配置中有 deviceId）
+   */
+  const refreshFromCloud = useCallback(async (): Promise<boolean> => {
+    const currentConfig = configRef.current;
+
+    // 如果没有 P2P 配置或 deviceId，跳过
+    if (!currentConfig.p2p?.deviceId) {
+      console.log('[useDevConnectionConfig] 没有 deviceId，跳过云端刷新');
+      return false;
+    }
+
+    try {
+      console.log(`[useDevConnectionConfig] 从云端刷新设备信息: ${currentConfig.p2p.deviceId}`);
+      const latest = await queryDeviceInfo(currentConfig.p2p.deviceId);
+
+      if (latest) {
+        await setConfig(latest);
+        console.log('[useDevConnectionConfig] 云端刷新成功');
+        return true;
+      } else {
+        console.log('[useDevConnectionConfig] 云端查询失败');
+        return false;
+      }
+    } catch (e) {
+      console.error('[useDevConnectionConfig] 云端刷新异常:', e);
+      return false;
+    }
+  }, [setConfig]);
+
+  return { config, isLoaded, setConfig, applyQrRaw, refreshFromCloud, clear, reload };
 }
 

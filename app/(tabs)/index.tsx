@@ -1,125 +1,331 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { useIsFocused } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
+import { useDevConnectionConfig } from '@/hooks/useDevConnectionConfig';
+import { hasUserStoredConfig } from '@/services/DevConnectionStorage';
+import { sessionStore } from '@/utils/sessionStore';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { changeLanguage, SUPPORTED_LANGUAGES } from '@/i18n';
 
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+type ConnectionStatus = 'online' | 'offline';
+
+// Status map will be populated by translation
+const STATUS_COLORS: Record<ConnectionStatus, string> = {
+  online:  '#40c5f1',
+  offline: '#ff4d4d',
+};
+
+// 亮色/暗色主题色板（参照主项目 theme.css 与 dark-mode.css）
+const LIGHT = {
+  container:       '#e3f4ff',
+  card:            '#f0f8ff',
+  cardBorder:      '#b3e5fc',
+  actionBtn:       '#f0f8ff',
+  actionBorder:    '#b3e5fc',
+  configBtn:       '#f0f8ff',
+  configBtnBorder: '#b3e5fc',
+  textPrimary:     '#1a1a2e',
+  textSub:         '#555',
+  textMuted:       '#888',
+  textOffline:     '#999',
+  titleColor:      '#40c5f1',
+  sectionTitle:    '#40c5f1',
+  configBtnText:   '#40c5f1',
+};
+
+const DARK = {
+  container:       '#000',
+  card:            'rgba(30, 30, 30, 0.6)',
+  cardBorder:      'rgba(255, 255, 255, 0.1)',
+  actionBtn:       'rgba(64, 197, 241, 0.1)',
+  actionBorder:    'rgba(64, 197, 241, 0.3)',
+  configBtn:       'rgba(64, 197, 241, 0.08)',
+  configBtnBorder: 'rgba(64, 197, 241, 0.2)',
+  textPrimary:     '#fff',
+  textSub:         '#888',
+  textMuted:       '#666',
+  textOffline:     '#555',
+  titleColor:      '#40c5f1',
+  sectionTitle:    '#40c5f1',
+  configBtnText:   '#40c5f1',
+};
 
 export default function HomeScreen() {
+  const router = useRouter();
+  const { config, isLoaded, reload } = useDevConnectionConfig();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const theme = isDark ? DARK : LIGHT;
+  const { t, i18n } = useTranslation();
+  const [currentLang, setCurrentLang] = useState(i18n.resolvedLanguage ?? i18n.language);
+
+  // 监听语言变化，更新高亮状态
+  useEffect(() => {
+    const handler = (lang: string) => setCurrentLang(lang);
+    i18n.on('languageChanged', handler);
+    return () => i18n.off('languageChanged', handler);
+  }, [i18n]);
+
+  const isFocused = useIsFocused();
+  const [isConnected, setIsConnected] = useState(sessionStore.isConnected);
+  const [isUserConfigured, setIsUserConfigured] = useState(false);
+
+  // 订阅 WebSocket 连接状态变化
+  useEffect(() => sessionStore.subscribe(setIsConnected), []);
+
+  // 每次页面获得焦点时同步配置状态（扫码/手动配置后返回首页可立即更新）
+  useEffect(() => {
+    if (!isLoaded || !isFocused) return;
+    hasUserStoredConfig().then(setIsUserConfigured);
+    reload();
+  }, [isLoaded, isFocused, reload]);
+
+  const status: ConnectionStatus = isConnected ? 'online' : 'offline';
+  const statusColor = STATUS_COLORS[status];
+  const statusText = status === 'online' ? t('home.status.online') : t('home.status.offline');
+  const showIp = isUserConfigured && isConnected;
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/main.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/qr-scanner">
-          <ThemedText type="subtitle">扫码配置（Dev）</ThemedText>
-        </Link>
-        <ThemedText>
-          扫码配置（Dev）
-        </ThemedText>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.container }]}>
+      <View style={styles.content}>
+        {/* 标题区域 */}
+        <View style={styles.header}>
+           <Text style={[styles.title, { color: theme.titleColor }]}>{t('home.title')}</Text>
+        </View>
 
-        <Link href={'/request-lab' as any}>
-          <ThemedText type="subtitle">🧪 Request/组件实验室</ThemedText>
-        </Link>
-        <ThemedText>
-          测试 `@project_neko/request`（token/刷新/队列）以及基础 UI 组件。
-        </ThemedText>
+        {/* 快捷功能 */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.sectionTitle }]}>{t('home.shortcuts')}</Text>
+          <View style={styles.quickActions}>
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: theme.actionBtn, borderColor: theme.actionBorder }]}
+              onPress={() => router.push('/settings')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="key-outline" size={28} color={theme.titleColor} />
+              <Text style={[styles.actionText, { color: theme.textPrimary }]}>{t('home.apiSettings')}</Text>
+            </TouchableOpacity>
 
-        <Link href="/webapp">
-          <ThemedText type="subtitle">🧩 WebApp 页面（对齐 frontend/src/web/App.tsx）</ThemedText>
-        </Link>
-        <ThemedText>
-          复刻 Web 端 App.tsx：语言切换、请求 page_config、StatusToast、Modal（Alert/Confirm/Prompt）。
-        </ThemedText>
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: theme.actionBtn, borderColor: theme.actionBorder }]}
+              onPress={() => router.push('/character-manager')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="paw-outline" size={28} color={theme.titleColor} />
+              <Text style={[styles.actionText, { color: theme.textPrimary }]}>{t('home.characterManager')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
-        <Link href="/rnlive2d">
-          <ThemedText type="subtitle"> Live2D测试页面 (react-native-live2d)</ThemedText>
-        </Link>
-        <ThemedText>
-          测试 Live2D 角色渲染、动画控制和表情切换功能（基于 Cubism SDK + mao_pro 模型）。
-        </ThemedText>
+        {/* 语言选择 */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.sectionTitle }]}>{t('settings.sections.language')}</Text>
+          <View style={styles.langRow}>
+            {SUPPORTED_LANGUAGES.map((lang) => (
+              <TouchableOpacity
+                key={lang.code}
+                style={[
+                  styles.langButton,
+                  { backgroundColor: theme.actionBtn, borderColor: theme.actionBorder },
+                  currentLang === lang.code && { backgroundColor: theme.titleColor, borderColor: theme.titleColor },
+                ]}
+                onPress={() => changeLanguage(lang.code)}
+                activeOpacity={0.8}
+              >
+                <Text style={[
+                  styles.langText,
+                  { color: theme.textPrimary },
+                  currentLang === lang.code && { color: '#fff', fontWeight: 'bold' },
+                ]}>
+                  {lang.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
 
-        <Link href="/audio-test">
-          <ThemedText type="subtitle">🎤 音频测试页面 (react-native-pcm-stream)</ThemedText>
-        </Link>
-        <ThemedText>
-          测试 PCM 音频播放、音频数据处理和格式转换功能（16kHz/16bit）。
-        </ThemedText>
-        
-        <Link href="/pcmstream-test">
-          <ThemedText type="subtitle" style={{ color: '#FF9800' }}>🚀 PCMStream音频测试 (推荐)</ThemedText>
-        </Link>
-        <ThemedText>
-          测试 WebSocket 实时音频流播放和唇形同步功能（推荐使用此页面测试完整功能）。
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+        {/* 服务器配置 */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.sectionTitle }]}>{t('home.serverConnection')}</Text>
+
+          <View style={[styles.configCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+            <View style={styles.configRow}>
+              <Text style={[styles.configLabel, { color: theme.textSub }]}>{t('connection.status.connected')}</Text>
+              <View style={styles.statusIndicator}>
+                <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+                <Text style={[styles.statusText, { color: statusColor }]}>{statusText}</Text>
+              </View>
+            </View>
+            {showIp ? (
+              <Text style={[styles.configValue, { color: theme.textPrimary }]}>
+                {config.host}:{config.port}
+              </Text>
+            ) : isUserConfigured ? (
+              <Text style={[styles.configValueOffline, { color: theme.textOffline }]}>{t('home.status.configured')}</Text>
+            ) : (
+              <Text style={[styles.configValueOffline, { color: theme.textOffline }]}>{t('home.status.unconfigured')}</Text>
+            )}
+            <Text style={[styles.configSubtext, { color: theme.textMuted }]}>{t('home.actions.currentRole')}: {config.characterName}</Text>
+          </View>
+
+          <View style={styles.configButtons}>
+            <TouchableOpacity
+              style={[styles.configButton, { backgroundColor: theme.configBtn, borderColor: theme.configBtnBorder }]}
+              onPress={() => router.push('/server-config')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="settings-outline" size={20} color={theme.configBtnText} />
+              <Text style={[styles.configButtonText, { color: theme.configBtnText }]}>{t('home.actions.manualConfig')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.configButton, { backgroundColor: theme.configBtn, borderColor: theme.configBtnBorder }]}
+              onPress={() => router.push({ pathname: '/qr-scanner', params: { returnTo: '/main' } })}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="qr-code-outline" size={20} color={theme.configBtnText} />
+              <Text style={[styles.configButtonText, { color: theme.configBtnText }]}>{t('home.actions.qrConfig')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  container: {
+    flex: 1,
+    // backgroundColor 由 t.container 动态注入
+  },
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  header: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    letterSpacing: 2,
+  },
+  section: {
+    marginBottom: 28,
+    paddingHorizontal: 20,
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 12,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  quickActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  actionButton: {
+    flex: 1,
+    borderRadius: 16,
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    borderWidth: 1,
+  },
+  actionIcon: {
+    fontSize: 28,
+  },
+  actionText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  langRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  langButton: {
+    width: '31%',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  langText: {
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  configCard: {
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+  },
+  configRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  configLabel: {
+    fontSize: 12,
+  },
+  statusIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  configValue: {
+    fontSize: 20,
+    fontFamily: 'monospace',
+    fontWeight: '600',
+  },
+  configValueOffline: {
+    fontSize: 14,
+    fontStyle: 'italic',
+  },
+  configSubtext: {
+    fontSize: 13,
+    marginTop: 6,
+  },
+  configButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+  configButton: {
+    flex: 1,
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+  },
+  configButtonIcon: {
+    fontSize: 20,
+  },
+  configButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

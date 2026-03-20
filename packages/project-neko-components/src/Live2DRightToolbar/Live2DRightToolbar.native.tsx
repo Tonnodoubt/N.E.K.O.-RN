@@ -17,6 +17,7 @@ import {
   Switch,
   Text,
   TouchableWithoutFeedback,
+  useColorScheme,
 } from 'react-native';
 import { useT } from '../i18n';
 import {
@@ -32,7 +33,7 @@ import type {
   Live2DSettingsMenuId,
   Live2DSettingsToggleId,
 } from './types';
-import { styles } from './styles.native';
+import { createToolbarStyles } from './styles.native';
 
 export * from './types';
 
@@ -58,6 +59,8 @@ export function Live2DRightToolbar({
   onSettingsMenuClick,
 }: Live2DRightToolbarProps) {
   const t = useT();
+  const colorScheme = useColorScheme();
+  const styles = createToolbarStyles(colorScheme === 'dark');
 
   // 使用共享的面板切换逻辑
   const { togglePanel } = usePanelToggle(openPanel, onOpenPanelChange);
@@ -93,10 +96,12 @@ export function Live2DRightToolbar({
     icons: {
       live2dSettings: require('../../../../assets/icons/set_off.png'),
       apiKeys: require('../../../../assets/icons/set_off.png'),
-      characterManage: require('../../../../assets/icons/set_off.png'),
+      characterManage: require('../../../../assets/icons/character_icon.png'),
+      reload: require('../../../../assets/icons/character_icon.png'),
       voiceClone: require('../../../../assets/icons/set_off.png'),
       memoryBrowser: require('../../../../assets/icons/set_off.png'),
       steamWorkshop: require('../../../../assets/icons/set_off.png'),
+      connectionHelp: require('../../../../assets/icons/set_off.png'),
     },
   });
 
@@ -219,6 +224,27 @@ export function Live2DRightToolbar({
                           </View>
                         </TouchableOpacity>
                       ))}
+                    </>
+                  )}
+
+                  {/* 移动端：仅显示角色管理入口 */}
+                  {isMobile && (
+                    <>
+                      <View style={styles.separator} />
+                      {settingsMenuItems
+                        .filter((item) => item.id === 'characterManage' || item.id === 'reload')
+                        .map((item) => (
+                          <TouchableOpacity
+                            key={item.id}
+                            style={styles.menuItem}
+                            onPress={() => onSettingsMenuClick?.(item.id as Live2DSettingsMenuId)}
+                          >
+                            <View style={styles.menuItemContent}>
+                              <Image source={item.icon} style={styles.menuIcon} />
+                              <Text style={styles.menuItemText}>{item.label}</Text>
+                            </View>
+                          </TouchableOpacity>
+                        ))}
                     </>
                   )}
                 </ScrollView>

@@ -7,7 +7,11 @@ interface UseLive2DConfig {
   backendPort: number;
   live2dPath?: string;
   modelName: string;
-  autoLoad?: boolean; // 是否自动加载模型
+  /** 若提供，直接使用该 URL 作为 model3.json 远端地址，跳过自动拼接 */
+  modelUrl?: string;
+  /** 模型唯一 ID，用于缓存隔离，换角色时自动失效旧缓存 */
+  modelItemId?: string;
+  autoLoad?: boolean;
 }
 
 export const useLive2D = (config: UseLive2DConfig) => {
@@ -17,6 +21,8 @@ export const useLive2D = (config: UseLive2DConfig) => {
     backendPort,
     live2dPath = 'live2d',
     modelName,
+    modelUrl,
+    modelItemId,
     autoLoad = false,
   } = config;
 
@@ -123,9 +129,15 @@ export const useLive2D = (config: UseLive2DConfig) => {
   useEffect(() => {
     console.log('🎨 useLive2D 初始化中...');
 
+    // service 重建时立即重置状态，避免旧模型 path 残留导致"两个模型"问题
+    setModelState({ path: undefined, isReady: false, isLoading: false });
+    setIsNativeModelLoaded(false);
+
     // 创建 Live2DService
     live2dServiceRef.current = new Live2DService({
       modelName,
+      modelUrl,
+      modelItemId,
       backendHost,
       backendPort,
       backendScheme,
@@ -172,7 +184,7 @@ export const useLive2D = (config: UseLive2DConfig) => {
       live2dServiceRef.current?.destroy();
       live2dServiceRef.current = null;
     };
-  }, [modelName, backendHost, backendPort, backendScheme, live2dPath, autoLoad, loadModel]);
+  }, [modelName, modelUrl, backendHost, backendPort, backendScheme, live2dPath, autoLoad, loadModel]);
 
   // 使用 useMemo 缓存 live2dProps，避免每次渲染都创建新对象
   const live2dProps = useMemo(() => ({

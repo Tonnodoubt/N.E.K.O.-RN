@@ -1,4 +1,4 @@
-import { requestMicrophonePermission } from '@/utils/permissions';
+import { requestMicrophonePermission } from '@/utils/audioPermissionManager';
 import { Alert, Platform } from 'react-native';
 import PCMStream from 'react-native-pcm-stream';
 import { WSService } from './wsService';

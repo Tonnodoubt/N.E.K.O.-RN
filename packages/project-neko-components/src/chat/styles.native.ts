@@ -31,8 +31,7 @@ export const styles = StyleSheet.create({
   },
 
   floatingButtonEmoji: {
-    fontSize: 22,
-    color: '#fff',
+    marginRight: 4,
   },
 
   // ===== Modal 遮罩和面板 =====
@@ -254,7 +253,14 @@ export const styles = StyleSheet.create({
 
   buttonGroup: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     gap: 8,
+  },
+
+  leftButtonGroup: {
+    flexDirection: 'row',
+    gap: 8,
+    flex: 1,
   },
 
   sendButton: {
@@ -308,6 +314,58 @@ export const styles = StyleSheet.create({
   },
 
   screenshotButtonTextDisabled: {
+    color: '#d9d9d9',
+  },
+
+  // ===== 相册按钮 =====
+  galleryButton: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderWidth: 1,
+    borderColor: '#44b7fe',
+    paddingVertical: 12,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  galleryButtonDisabled: {
+    borderColor: '#d9d9d9',
+  },
+
+  galleryButtonText: {
+    fontSize: 13,
+    color: '#44b7fe',
+    fontWeight: '500',
+  },
+
+  galleryButtonTextDisabled: {
+    color: '#d9d9d9',
+  },
+
+  // ===== 图片按钮（合并相册+拍照）=====
+  imageButton: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderWidth: 1,
+    borderColor: '#44b7fe',
+    paddingVertical: 12,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  imageButtonDisabled: {
+    borderColor: '#d9d9d9',
+  },
+
+  imageButtonText: {
+    fontSize: 14,
+    color: '#44b7fe',
+    fontWeight: '500',
+  },
+
+  imageButtonTextDisabled: {
     color: '#d9d9d9',
   },
 });
