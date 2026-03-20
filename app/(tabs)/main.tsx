@@ -87,7 +87,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   // 🔥 新增：调试信息面板
   const [debugPanelVisible, setDebugPanelVisible] = useState(false);
   // 合并为单一对象，确保 modelName 和 modelUrl 同步更新，避免两次 setState 触发两次 useLive2D effect
-  const [live2dModel, setLive2dModel] = useState<{ name: string; url: string | undefined }>({
+  const [live2dModel, setLive2dModel] = useState<{ name: string; url: string | undefined; itemId?: string }>({
     name: 'mao_pro',
     url: undefined,
   });
@@ -204,6 +204,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         setLive2dModel({
           name: modelRes.model_info.name,
           url: modelUrl,
+          itemId: modelRes.model_info.item_id,
         });
       } else {
         console.warn('🎨 [syncLive2dModel] API 返回但无 model_info:', modelRes);
@@ -596,6 +597,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   const live2d = useLive2D({
     modelName: live2dModel.name,
     modelUrl: live2dModel.url,
+    modelItemId: live2dModel.itemId,
     backendHost: config.host,
     backendPort: config.port,
     // 由页面 focus 生命周期触发加载；避免 autoLoad + focus 双重触发导致重复加载
@@ -641,13 +643,14 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   );
 
   // 角色切换后 modelUrl 变化时，页面已聚焦无法靠 useFocusEffect 触发，需单独监听
-  // 先显式 unload 再 load，确保 modelPath = undefined 这一帧被渲染，原生层 clearModel() 被调用
+  // 注意：live2dModel 变化时 useLive2D 已因 modelUrl 变化重建 service（新 service 天然干净）
+  // 不需要 unloadModel，直接 loadModel 即可；用 ref 确保拿到新 service 的最新引用
+  const loadModelRef = useRef(live2d.loadModel);
+  loadModelRef.current = live2d.loadModel;
   useEffect(() => {
     if (!isPageFocused || !live2dModel.url) return;
-    live2d.unloadModel();
-    // 下一帧再 load，确保 unload 的 state 变化（modelPath = undefined）先渲染到原生层
     const timer = setTimeout(() => {
-      live2d.loadModel();
+      loadModelRef.current();
     }, 0);
     return () => clearTimeout(timer);
   }, [live2dModel]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1559,11 +1562,26 @@ ${t('serverInfo.character')}: ${config.characterName || t('main.character.noChar
             </ScrollView>
             <TouchableOpacity
               style={{
-                backgroundColor: '#40c5f1',
+                backgroundColor: '#e05555',
                 borderRadius: 8,
                 paddingVertical: 12,
                 alignItems: 'center',
                 marginTop: 15,
+              }}
+              onPress={async () => {
+                await live2d.live2dService?.clearModelCache();
+                setDebugPanelVisible(false);
+              }}
+            >
+              <Text style={{ color: '#fff', fontWeight: 'bold' }}>🗑️ 清除模型缓存</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#40c5f1',
+                borderRadius: 8,
+                paddingVertical: 12,
+                alignItems: 'center',
+                marginTop: 10,
               }}
               onPress={() => setDebugPanelVisible(false)}
             >

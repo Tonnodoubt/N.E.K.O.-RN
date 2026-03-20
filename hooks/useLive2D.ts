@@ -9,7 +9,9 @@ interface UseLive2DConfig {
   modelName: string;
   /** 若提供，直接使用该 URL 作为 model3.json 远端地址，跳过自动拼接 */
   modelUrl?: string;
-  autoLoad?: boolean; // 是否自动加载模型
+  /** 模型唯一 ID，用于缓存隔离，换角色时自动失效旧缓存 */
+  modelItemId?: string;
+  autoLoad?: boolean;
 }
 
 export const useLive2D = (config: UseLive2DConfig) => {
@@ -20,6 +22,7 @@ export const useLive2D = (config: UseLive2DConfig) => {
     live2dPath = 'live2d',
     modelName,
     modelUrl,
+    modelItemId,
     autoLoad = false,
   } = config;
 
@@ -134,6 +137,7 @@ export const useLive2D = (config: UseLive2DConfig) => {
     live2dServiceRef.current = new Live2DService({
       modelName,
       modelUrl,
+      modelItemId,
       backendHost,
       backendPort,
       backendScheme,

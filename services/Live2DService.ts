@@ -21,6 +21,8 @@ import { downloadDependenciesFromLocalModel, removeDownloadedModel } from '../ut
  */
 export interface Live2DServiceConfig {
   modelName: string;
+  /** 模型唯一 ID，用于缓存目录隔离；换角色时旧缓存自动失效 */
+  modelItemId?: string;
   backendHost: string;
   backendPort: number;
   backendScheme?: 'http' | 'https';
@@ -96,6 +98,7 @@ export class Live2DService {
   private modelBaseUrl: string;
   private core: CoreLive2DService;
   private lastLoadingFlag: boolean | null = null;
+  private actualModelBaseName: string | null = null;
   private hasWarnedAboutSetViewPosition: boolean = false;
   private hasWarnedAboutSetViewScale: boolean = false;
 
@@ -234,16 +237,20 @@ export class Live2DService {
    */
   private validateModelFiles(): boolean {
     try {
+      const cacheDirName = this.config.modelItemId ?? this.config.modelName;
+      const baseName = this.actualModelBaseName ?? this.config.modelName;
       const modelFile = new File(
         Paths.cache,
-        `live2d/${this.config.modelName}/${this.config.modelName}.model3.json`
+        `live2d/${cacheDirName}/${baseName}.model3.json`
       );
       const mocFile = new File(
         Paths.cache,
-        `live2d/${this.config.modelName}/${this.config.modelName}.moc3`
+        `live2d/${cacheDirName}/${baseName}.moc3`
       );
 
       const isValid = modelFile.exists && mocFile.exists;
+
+      console.log(`🔍 验证: modelFile=${modelFile.uri} exists=${modelFile.exists}, mocFile=${mocFile.uri} exists=${mocFile.exists}`);
 
       if (isValid) {
         console.log('✅ 模型文件验证通过');
@@ -271,32 +278,55 @@ export class Live2DService {
       console.log('📁 创建缓存目录:', cacheDir.uri);
     }
 
-    const modelDir = new Directory(cacheDir, this.config.modelName);
+    const cacheDirName = this.config.modelItemId ?? this.config.modelName;
+    const modelDir = new Directory(cacheDir, cacheDirName);
     if (!modelDir.exists) {
       modelDir.create();
       console.log('📁 创建模型目录:', modelDir.uri);
     }
 
-    // 构建本地路径
-    const localPath = `${modelDir.uri}${this.config.modelName}.model3.json`;
+    // 用 URL 的实际文件名（downloadFileAsync 会用 decode 后的名字保存）
+    const rawFileName = remoteModel3JsonUrl.split('?')[0].split('/').pop()
+      ?? `${this.config.modelName}.model3.json`;
+    const urlFileName = (() => { try { return decodeURIComponent(rawFileName); } catch { return rawFileName; } })();
+    const baseName = urlFileName.replace(/\.model3\.json$/i, '');
+    this.actualModelBaseName = baseName;
+    const localPath = `${modelDir.uri}${urlFileName}`;
     console.log('📍 本地模型路径:', localPath);
 
-    // 检查模型文件是否存在
-    const modelFile = new File(modelDir, `${this.config.modelName}.model3.json`);
+    // 检查模型文件是否存在（用 decode 后的文件名）
+    const modelFile = new File(modelDir, urlFileName);
 
+    let actualLocalPath = localPath;
     if (!modelFile.exists) {
       console.log('📥 模型文件不存在，开始下载...');
-      await File.downloadFileAsync(remoteModel3JsonUrl, modelDir);
-      console.log('✅ 模型文件下载完成');
+      try {
+        // downloadFileAsync 返回 File 对象，有 .uri 属性
+        const downloaded = await File.downloadFileAsync(remoteModel3JsonUrl, modelDir);
+        actualLocalPath = downloaded.uri;
+        // 同步更新 baseName，供 validateModelFiles 使用
+        const actualFileName = downloaded.uri.split('/').pop() ?? urlFileName;
+        this.actualModelBaseName = (() => { try { return decodeURIComponent(actualFileName); } catch { return actualFileName; } })().replace(/\.model3\.json$/i, '');
+        console.log('✅ 模型文件下载完成, actualLocalPath:', actualLocalPath, 'baseName:', this.actualModelBaseName);
+      } catch (e) {
+        console.error('❌ [step1] model3.json 下载失败:', e);
+        throw e;
+      }
     } else {
-      console.log('✅ 模型文件已存在');
+      console.log('✅ 模型文件已存在:', modelDir.uri + urlFileName);
+      actualLocalPath = modelDir.uri + urlFileName;
     }
 
     // 检查依赖文件是否完整
     if (!this.validateModelFiles()) {
       console.log('📥 依赖文件缺失，下载依赖文件...');
-      await downloadDependenciesFromLocalModel(localPath, remoteModel3JsonUrl);
-      console.log('✅ 依赖文件下载完成');
+      try {
+        await downloadDependenciesFromLocalModel(actualLocalPath, remoteModel3JsonUrl);
+        console.log('✅ 依赖文件下载完成');
+      } catch (e) {
+        console.error('❌ [step2] 依赖文件下载失败:', e);
+        throw e;
+      }
     } else {
       console.log('✅ 所有关键文件都存在，跳过依赖下载');
     }
@@ -307,7 +337,7 @@ export class Live2DService {
     }
 
     // 只更新 path：isReady/isLoading 由 core stateChanged 同步
-    this.modelState.path = localPath;
+    this.modelState.path = actualLocalPath;
     this.notifyModelStateChange();
   }
 
@@ -382,7 +412,8 @@ export class Live2DService {
 
     // 删除文件
     try {
-      await removeDownloadedModel(`live2d/${this.config.modelName}/`);
+      const cacheDirName = this.config.modelItemId ?? this.config.modelName;
+      await removeDownloadedModel(`live2d/${cacheDirName}/`);
       console.log('✅ 模型缓存已清理');
     } catch (error) {
       console.error('❌ 清理模型缓存失败:', error);

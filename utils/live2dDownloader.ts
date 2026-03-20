@@ -34,31 +34,44 @@ async function downloadFileTo(dstPath: string, srcUrl: string): Promise<void> {
     // 提取文件名（处理包含子目录的相对路径，如 Nahida_1080.1024/texture_00.png）
     const lastSlashIndex = dstPath.lastIndexOf('/');
     const fileName = dstPath.substring(lastSlashIndex + 1);
+    const expectedUri = `${dstDir}${fileName}`;
+
+    // 如果目标文件已存在，跳过下载
+    const existingFile = new File(expectedUri);
+    if (existingFile.exists) {
+      console.log(`skip (exists): ${expectedUri}`);
+      return;
+    }
+
+    // downloadFileAsync 用 URL 末尾的文件名作为目标，先清理可能残留的同名文件
+    const urlFileName = srcUrl.split('?')[0].split('/').pop() ?? fileName;
+    const downloadTarget = new File(`${dstDir}${urlFileName}`);
+    if (downloadTarget.exists) {
+      await downloadTarget.delete();
+    }
 
     const dstFolder = new Directory(dstDir);
-    const output = await File.downloadFileAsync(srcUrl, dstFolder);
+    // downloadFileAsync 返回 File 对象，有 .uri 属性
+    const downloaded = await File.downloadFileAsync(srcUrl, dstFolder);
+    const downloadedUri = downloaded.uri;
 
-    // 如果下载的文件名与目标文件名不同，需要重命名
-    // expo-file-system 的 downloadFileAsync 使用 URL 中的文件名，不是 dstPath 中的
-    const expectedUri = `${dstDir}${fileName}`;
-    if (output.uri !== expectedUri) {
-      // 文件被下载到了错误的位置，需要移动
-      const downloadedFile = new File(output.uri);
+    // 如果下载的文件名与目标文件名不同（URL encoded vs decoded），需要重命名
+    const normalizedDownloaded = (() => { try { return decodeURIComponent(downloadedUri); } catch { return downloadedUri; } })();
+    const normalizedExpected = (() => { try { return decodeURIComponent(expectedUri); } catch { return expectedUri; } })();
+
+    if (normalizedDownloaded !== normalizedExpected) {
+      const downloadedFile = new File(downloadedUri);
       const targetFile = new File(expectedUri);
-
-      // 如果目标文件已存在，先删除
-      if (await targetFile.exists) {
-        await targetFile.delete();
+      if (targetFile.exists) {
+        targetFile.delete();
       }
-
-      // 移动文件到正确位置
-      await downloadedFile.moveAsync(targetFile);
-      console.log(`moved file: ${output.uri} => ${expectedUri}`);
+      downloadedFile.move(targetFile);
+      console.log(`moved file: ${downloadedUri} => ${expectedUri}`);
     } else {
-      console.log(`loaded file: ${output.uri}`);
+      console.log(`loaded file: ${downloadedUri}`);
     }
   } catch (error) {
-    console.log(`loaded file error: ${error}`)
+    console.error(`❌ downloadFileTo failed: ${dstPath}`, error)
   }
 }
 
@@ -126,15 +139,14 @@ export async function downloadDependenciesFromLocalModel(
   }
 
   const uniqueFiles = Array.from(new Set(files.filter(Boolean)));
+  console.log('📦 需要下载的依赖文件:', uniqueFiles);
 
-  // 并发下载所有依赖
-  await Promise.all(
-    uniqueFiles.map(async (relPath) => {
-      const src = resolveUrl(remoteBaseUrl, relPath);
-      const dst = `${targetRoot}${relPath}`;
-      await downloadFileTo(dst, src);
-    })
-  );
+  // 串行下载，避免并发时同名文件冲突
+  for (const relPath of uniqueFiles) {
+    const src = resolveUrl(remoteBaseUrl, relPath);
+    const dst = `${targetRoot}${relPath}`;
+    await downloadFileTo(dst, src);
+  }
 
   return localModelJsonUri;
 }
