@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 type VoicePrepareStatus = 'preparing' | 'ready' | null;
 
@@ -103,7 +104,11 @@ export const VoicePrepareOverlay: React.FC<VoicePrepareOverlayProps> = ({ status
               isPreparing ? styles.centerCirclePreparing : styles.centerCircleReady,
             ]}
           >
-            <Text style={styles.iconText}>{isPreparing ? '🎤' : '✓'}</Text>
+            {isPreparing ? (
+              <Ionicons name="mic" size={32} color="#fff" />
+            ) : (
+              <Ionicons name="checkmark" size={32} color="#73d13d" />
+            )}
           </View>
         </View>
 

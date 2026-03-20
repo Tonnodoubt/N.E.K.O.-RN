@@ -4,7 +4,7 @@ import { createWebAudioService } from '@project_neko/audio-service/web';
 import type { AudioService as CrossPlatformAudioService } from '@project_neko/audio-service';
 import type { RealtimeClientLike } from '@project_neko/audio-service';
 import { WSService } from './wsService';
-import { requestMicrophonePermission } from '@/utils/permissions';
+import { requestMicrophonePermission } from '@/utils/audioPermissionManager';
 import type { DevConnectionConfig } from '@/utils/devConnectionConfig';
 
 /**
@@ -281,8 +281,8 @@ export class AudioService {
       return;
     }
 
-    // 🔥 修复：在开始录音前先请求权限
-    if (Platform.OS === 'android') {
+    // 在开始录音前先请求权限（Android 和 iOS 都需要运行时请求）
+    if (Platform.OS === 'android' || Platform.OS === 'ios') {
       console.log('🔐 检查麦克风权限...');
       const hasPermission = await requestMicrophonePermission();
       if (!hasPermission) {

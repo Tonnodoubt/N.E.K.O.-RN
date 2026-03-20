@@ -18,6 +18,7 @@ import { mainManager } from '@/utils/MainManager';
 import { sessionStore } from '@/utils/sessionStore';
 import { VoicePrepareOverlay } from '@/components/VoicePrepareOverlay';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -741,6 +742,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     return Gesture.Pan()
       .minPointers(2)
       .activateAfterLongPress(500)
+      .enabled(isPageFocused)
       .runOnJS(true)
       .onStart(() => {
         const { width, height } = Dimensions.get('window');
@@ -776,12 +778,13 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         setIsDraggingModel(false);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isPageFocused]);
 
   // 双指缩放手势（捏合/张开）
   // 注意：Pinch 手势本身就需要双指，无需 minPointers
   const pinchGesture = useMemo(() => {
     return Gesture.Pinch()
+      .enabled(isPageFocused)
       .runOnJS(true)
       .onStart(() => {
         // 记录开始时的缩放值
@@ -799,7 +802,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         setIsScalingModel(false);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isPageFocused]);
 
   // 组合手势：双指拖动 + 缩放同时识别
   const live2dGesture = useMemo(() => {
@@ -1158,7 +1161,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
           clientMessageId,
         });
       }
-      chat.addMessage(`📸 [已发送${imagesToSend.length}张照片]`, 'user');
+      chat.addMessage(`[已发送${imagesToSend.length}张照片]`, 'user');
     }
 
     // 再发送文本
@@ -1227,41 +1230,10 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       <StatusToast ref={statusToastRef} />
 
       {/* Live2D 舞台区域 */}
-      {/* Android 端：GestureDetector 包裹整个容器，同时支持单指注视（原生处理）和双指手势 */}
-      {/* iOS 端：直接渲染容器，暂不支持双指手势 */}
-      {Platform.OS === 'android' ? (
-        <GestureDetector gesture={live2dGesture}>
-          <View style={styles.live2dContainer}>
-            {/* 页面获得焦点时渲染 Live2D */}
-            {isPageFocused && (
-              <ReactNativeLive2dView
-                style={styles.live2dView}
-                {...live2d.live2dPropsForLipSync}
-                onTap={handleLive2DTap}
-              />
-            )}
-
-            {/* 失去焦点时的显示 */}
-            {!isPageFocused && (
-              <View style={styles.pausedContainer}>
-                <Text style={styles.pausedText}>
-                  {live2d.live2dProps.modelPath ? 'Live2D 已暂停' : '页面未激活'}
-                </Text>
-              </View>
-            )}
-
-            {(isDraggingModel || isScalingModel) && (
-              <View style={styles.dragIndicator} pointerEvents="none">
-                <Text style={styles.dragIndicatorText}>
-                  {isDraggingModel && isScalingModel ? '拖动/缩放中' : isDraggingModel ? '拖动中' : '缩放中'}
-                </Text>
-              </View>
-            )}
-          </View>
-        </GestureDetector>
-      ) : (
+      {/* GestureDetector 包裹整个容器，Android & iOS 共用双指拖动 + 捏合缩放 */}
+      <GestureDetector gesture={live2dGesture}>
         <View style={styles.live2dContainer}>
-          {/* iOS 端暂不支持双指手势 */}
+          {/* 页面获得焦点时渲染 Live2D */}
           {isPageFocused && (
             <ReactNativeLive2dView
               style={styles.live2dView}
@@ -1270,6 +1242,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
             />
           )}
 
+          {/* 失去焦点时的显示 */}
           {!isPageFocused && (
             <View style={styles.pausedContainer}>
               <Text style={styles.pausedText}>
@@ -1277,8 +1250,16 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
               </Text>
             </View>
           )}
+
+          {(isDraggingModel || isScalingModel) && (
+            <View style={styles.dragIndicator} pointerEvents="none">
+              <Text style={styles.dragIndicatorText}>
+                {isDraggingModel && isScalingModel ? '拖动/缩放中' : isDraggingModel ? '拖动中' : '缩放中'}
+              </Text>
+            </View>
+          )}
         </View>
-      )}
+      </GestureDetector>
 
       {/* 
         【跨平台组件】Live2DRightToolbar 右侧工具栏
@@ -1529,7 +1510,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         }}
         onPress={() => setDebugPanelVisible(true)}
       >
-        <Text style={{ color: '#fff', fontSize: 20 }}>🔧</Text>
+        <Ionicons name="construct" size={20} color="#fff" />
       </TouchableOpacity>
 
       {/* 调试信息面板 */}
@@ -1559,7 +1540,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
             onStartShouldSetResponder={() => true}
           >
             <Text style={{ color: '#40c5f1', fontSize: 18, fontWeight: 'bold', marginBottom: 15 }}>
-              🔧 {t('main.debug.title')}
+              {t('main.debug.title')}
             </Text>
             <ScrollView>
               <Text style={{ color: '#fff', fontSize: 12, fontFamily: 'monospace', marginBottom: 10 }}>

@@ -1,4 +1,5 @@
 import { StyleSheet, View, TouchableOpacity, Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -60,6 +61,14 @@ export default function HomeScreen() {
   const isDark = colorScheme === 'dark';
   const theme = isDark ? DARK : LIGHT;
   const { t, i18n } = useTranslation();
+  const [currentLang, setCurrentLang] = useState(i18n.resolvedLanguage ?? i18n.language);
+
+  // 监听语言变化，更新高亮状态
+  useEffect(() => {
+    const handler = (lang: string) => setCurrentLang(lang);
+    i18n.on('languageChanged', handler);
+    return () => i18n.off('languageChanged', handler);
+  }, [i18n]);
 
   const isFocused = useIsFocused();
   const [isConnected, setIsConnected] = useState(sessionStore.isConnected);
@@ -97,7 +106,7 @@ export default function HomeScreen() {
               onPress={() => router.push('/settings')}
               activeOpacity={0.8}
             >
-              <Text style={styles.actionIcon}>🔑</Text>
+              <Ionicons name="key-outline" size={28} color={theme.titleColor} />
               <Text style={[styles.actionText, { color: theme.textPrimary }]}>{t('home.apiSettings')}</Text>
             </TouchableOpacity>
 
@@ -106,7 +115,7 @@ export default function HomeScreen() {
               onPress={() => router.push('/character-manager')}
               activeOpacity={0.8}
             >
-              <Text style={styles.actionIcon}>🐱</Text>
+              <Ionicons name="paw-outline" size={28} color={theme.titleColor} />
               <Text style={[styles.actionText, { color: theme.textPrimary }]}>{t('home.characterManager')}</Text>
             </TouchableOpacity>
           </View>
@@ -114,7 +123,7 @@ export default function HomeScreen() {
 
         {/* 语言选择 */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.sectionTitle }]}>🌐 {t('settings.sections.language')}</Text>
+          <Text style={[styles.sectionTitle, { color: theme.sectionTitle }]}>{t('settings.sections.language')}</Text>
           <View style={styles.langRow}>
             {SUPPORTED_LANGUAGES.map((lang) => (
               <TouchableOpacity
@@ -122,7 +131,7 @@ export default function HomeScreen() {
                 style={[
                   styles.langButton,
                   { backgroundColor: theme.actionBtn, borderColor: theme.actionBorder },
-                  i18n.language === lang.code && { backgroundColor: theme.titleColor, borderColor: theme.titleColor },
+                  currentLang === lang.code && { backgroundColor: theme.titleColor, borderColor: theme.titleColor },
                 ]}
                 onPress={() => changeLanguage(lang.code)}
                 activeOpacity={0.8}
@@ -130,7 +139,7 @@ export default function HomeScreen() {
                 <Text style={[
                   styles.langText,
                   { color: theme.textPrimary },
-                  i18n.language === lang.code && { color: '#fff', fontWeight: 'bold' },
+                  currentLang === lang.code && { color: '#fff', fontWeight: 'bold' },
                 ]}>
                   {lang.name}
                 </Text>
@@ -169,7 +178,7 @@ export default function HomeScreen() {
               onPress={() => router.push('/server-config')}
               activeOpacity={0.8}
             >
-              <Text style={styles.configButtonIcon}>⚙️</Text>
+              <Ionicons name="settings-outline" size={20} color={theme.configBtnText} />
               <Text style={[styles.configButtonText, { color: theme.configBtnText }]}>{t('home.actions.manualConfig')}</Text>
             </TouchableOpacity>
 
@@ -178,7 +187,7 @@ export default function HomeScreen() {
               onPress={() => router.push({ pathname: '/qr-scanner', params: { returnTo: '/main' } })}
               activeOpacity={0.8}
             >
-              <Text style={styles.configButtonIcon}>📷</Text>
+              <Ionicons name="qr-code-outline" size={20} color={theme.configBtnText} />
               <Text style={[styles.configButtonText, { color: theme.configBtnText }]}>{t('home.actions.qrConfig')}</Text>
             </TouchableOpacity>
           </View>

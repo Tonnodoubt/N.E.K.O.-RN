@@ -21,19 +21,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import QRCode from 'react-native-qrcode-svg';
+import { Ionicons } from '@expo/vector-icons';
 import { useDevConnectionConfig } from '@/hooks/useDevConnectionConfig';
 import { createConfigApiClient, type CoreConfig, type ApiProvider } from '@/services/api/config';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-// Icons as text
-const Icons = {
-  back: '←',
-  check: '✓',
-  close: '✕',
-  key: '🔑',
-  settings: '⚙️',
-  info: 'ℹ️',
-  refresh: '🔄',
-};
 
 // 亮色/暗色主题色板（参照主项目 theme.css 与 dark-mode.css）
 const LIGHT = {
@@ -194,26 +185,32 @@ export default function SettingsScreen() {
         {/* Header */}
         <View style={[styles.header, { backgroundColor: theme.header, borderBottomColor: theme.headerBorder }]}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Text style={[styles.backButtonText, { color: theme.accent }]}>{Icons.back}</Text>
+            <Ionicons name="chevron-back" size={24} color={theme.accent} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>{t('settings.title')}</Text>
           <TouchableOpacity onPress={loadConfig} style={styles.refreshButton}>
-            <Text style={[styles.refreshButtonText, { color: theme.accent }]}>{Icons.refresh}</Text>
+            <Ionicons name="refresh" size={22} color={theme.accent} />
           </TouchableOpacity>
         </View>
 
         {/* Messages */}
         {error && (
           <View style={styles.errorBox}>
-            <Text style={styles.errorText}>❌ {error}</Text>
+            <View style={styles.errorRow}>
+              <Ionicons name="close-circle" size={16} color="#fff" />
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
             <TouchableOpacity onPress={() => setError(null)}>
-              <Text style={styles.errorClose}>{Icons.close}</Text>
+              <Ionicons name="close" size={18} color="#fff" />
             </TouchableOpacity>
           </View>
         )}
         {success && (
           <View style={styles.successBox}>
-            <Text style={styles.successText}>✅ {success}</Text>
+            <View style={styles.successRow}>
+              <Ionicons name="checkmark-circle" size={16} color="#fff" />
+              <Text style={styles.successText}>{success}</Text>
+            </View>
           </View>
         )}
 
@@ -224,7 +221,7 @@ export default function SettingsScreen() {
           {/* Core API Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionIcon}>{Icons.key}</Text>
+              <Ionicons name="key" size={20} color={theme.accent} style={styles.sectionIcon} />
               <Text style={[styles.sectionTitle, { color: theme.sectionTitle }]}>{t('settings.sections.api')}</Text>
             </View>
             <View style={[styles.card, { backgroundColor: theme.card }]}>
@@ -274,7 +271,7 @@ export default function SettingsScreen() {
           {/* Assist API Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionIcon}>{Icons.settings}</Text>
+              <Ionicons name="settings" size={20} color={theme.accent} style={styles.sectionIcon} />
               <Text style={[styles.sectionTitle, { color: theme.sectionTitle }]}>{t('settings.sections.provider')}</Text>
             </View>
             <View style={[styles.card, { backgroundColor: theme.card }]}>
@@ -310,7 +307,7 @@ export default function SettingsScreen() {
           {/* Provider-specific API Keys */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionIcon}>{Icons.key}</Text>
+              <Ionicons name="key" size={20} color={theme.accent} style={styles.sectionIcon} />
               <Text style={[styles.sectionTitle, { color: theme.sectionTitle }]}>{t('settings.title')}</Text>
             </View>
             <View style={[styles.card, { backgroundColor: theme.card }]}>
@@ -342,7 +339,7 @@ export default function SettingsScreen() {
           {/* MCP Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionIcon}>{Icons.settings}</Text>
+              <Ionicons name="cog" size={20} color={theme.accent} style={styles.sectionIcon} />
               <Text style={[styles.sectionTitle, { color: theme.sectionTitle }]}>MCP Token</Text>
             </View>
             <View style={[styles.card, { backgroundColor: theme.card }]}>
@@ -365,7 +362,7 @@ export default function SettingsScreen() {
           {/* Server Info */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionIcon}>{Icons.info}</Text>
+              <Ionicons name="information-circle" size={20} color={theme.accent} style={styles.sectionIcon} />
               <Text style={[styles.sectionTitle, { color: theme.sectionTitle }]}>{t('settings.sections.serverInfo')}</Text>
             </View>
             <View style={[styles.card, { backgroundColor: theme.card }]}>
@@ -386,7 +383,7 @@ export default function SettingsScreen() {
           {p2pConfig && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionIcon}>📱</Text>
+                <Ionicons name="phone-portrait" size={20} color={theme.accent} style={styles.sectionIcon} />
                 <Text style={[styles.sectionTitle, { color: theme.sectionTitle }]}>{t('settings.sections.p2p')}</Text>
               </View>
               <View style={[styles.card, { backgroundColor: theme.card }]}>
@@ -502,9 +499,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
   errorText: {
     color: '#fff',
-    flex: 1,
   },
   errorClose: {
     color: '#fff',
@@ -515,6 +517,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#00c853',
     paddingHorizontal: 16,
     paddingVertical: 8,
+  },
+  successRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   successText: {
     color: '#fff',
@@ -532,7 +539,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionIcon: {
-    fontSize: 20,
     marginRight: 8,
   },
   sectionTitle: {
