@@ -23,6 +23,7 @@ interface ServerMessage {
   text?: string;
   isNewMessage?: boolean;
   message?: string;
+  new_catgirl?: string;
   data?: unknown;
 }
 
@@ -269,4 +270,3 @@ export const useChatMessages = (config: UseChatMessagesConfig = {}) => {
     handleWebSocketMessage,
   };
 };
-

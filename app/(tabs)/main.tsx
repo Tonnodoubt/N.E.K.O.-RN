@@ -435,7 +435,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
 
       // 根据消息类型，通过 MainManager 触发相应的行为
       if (result?.type === 'gemini_response') {
-        mainManager.onGeminiResponse(result.isNewMessage);
+        mainManager.onGeminiResponse(!!result.isNewMessage);
       } else if (result?.type === 'user_activity') {
         mainManager.onUserSpeechDetected();
       } else if (result?.type === 'turn_end') {

@@ -49,6 +49,7 @@ export default function RootLayout() {
               <Stack.Screen name="audio-debug" options={{ title: '🎤 音频诊断' }} />
               <Stack.Screen name="qr-scanner" options={{ title: '扫码（Dev）' }} />
               <Stack.Screen name="request-lab" options={{ title: 'Request/组件实验室' }} />
+              <Stack.Screen name="vrm-poc" options={{ title: 'VRM R3F PoC' }} />
               <Stack.Screen name="webapp" options={{ title: 'WebApp（对齐 frontend/src/web/App.tsx）' }} />
             </Stack>
             <StatusBar style="auto" />

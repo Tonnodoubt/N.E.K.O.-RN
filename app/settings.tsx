@@ -611,6 +611,63 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     marginBottom: 12,
   },
+  qrDesc: {
+    fontSize: 14,
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  qrSteps: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    gap: 10,
+  },
+  qrStepRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  qrStepNum: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+    marginTop: 1,
+  },
+  qrStepNumText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  qrStepText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  qrInfoBlock: {
+    borderWidth: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  qrInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  qrInfoLabel: {
+    fontSize: 13,
+  },
+  qrInfoValue: {
+    flex: 1,
+    fontSize: 13,
+    textAlign: 'right',
+    marginLeft: 12,
+  },
   qrHint: {
     fontSize: 14,
     textAlign: 'center',

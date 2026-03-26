@@ -17,6 +17,8 @@
 | 搭建开发环境 | [guides/onboarding.md](./guides/onboarding.md) |
 | 排查问题 | [troubleshooting/](./troubleshooting/) |
 | 了解架构 | [arch/design.md](./arch/design.md) |
+| 了解移动端 VRM 方案 | [arch/mobile-vrm-r3f-design.md](./arch/mobile-vrm-r3f-design.md) |
+| 查看移动端 VRM PoC | [arch/mobile-vrm-r3f-poc.md](./arch/mobile-vrm-r3f-poc.md) |
 
 ---
 
@@ -27,6 +29,8 @@
 | [ROADMAP.md](./ROADMAP.md) | 开发路线图和功能规划（必读） |
 | [core/overview.md](./core/overview.md) | 项目概述 |
 | [arch/design.md](./arch/design.md) | 架构设计 |
+| [arch/mobile-vrm-r3f-design.md](./arch/mobile-vrm-r3f-design.md) | 移动端 VRM 接入设计（R3F 第一阶段） |
+| [arch/mobile-vrm-r3f-poc.md](./arch/mobile-vrm-r3f-poc.md) | 移动端 VRM PoC（R3F 路线） |
 
 ---
 
@@ -39,6 +43,8 @@ docs/
 │
 ├── arch/                   # 架构文档
 │   ├── design.md           # 架构设计
+│   ├── mobile-vrm-r3f-design.md  # 移动端 VRM 接入设计
+│   ├── mobile-vrm-r3f-poc.md  # 移动端 VRM PoC
 │   ├── rn-development-guide.md  # RN 开发指南
 │   └── cross-project-integration.md  # 跨项目集成
 │
