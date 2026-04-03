@@ -87,12 +87,12 @@ export function usePanelToggle(
  */
 export function useToolbarButtons<TIcon = ToolbarIcon>({
   micEnabled,
-  screenEnabled,
+  cameraEnabled,
   openPanel,
   goodbyeMode,
   isMobile,
   onToggleMic,
-  onToggleScreen,
+  onToggleCamera,
   onGoodbye,
   togglePanel,
   t,
@@ -100,19 +100,19 @@ export function useToolbarButtons<TIcon = ToolbarIcon>({
   icons, // RN 使用 require() 资源
 }: {
   micEnabled: boolean;
-  screenEnabled: boolean;
+  cameraEnabled: boolean;
   openPanel: Live2DRightToolbarPanel;
   goodbyeMode: boolean;
   isMobile?: boolean;
   onToggleMic: (next: boolean) => void;
-  onToggleScreen: (next: boolean) => void;
+  onToggleCamera: (next: boolean) => void;
   onGoodbye: () => void;
   togglePanel: (panel: Exclude<Live2DRightToolbarPanel, null>) => void;
   t?: TFunction;
   iconBasePath?: string;
   icons?: {
     mic: TIcon;
-    screen: TIcon;
+    camera: TIcon;
     agent: TIcon;
     settings: TIcon;
     goodbye: TIcon;
@@ -130,12 +130,12 @@ export function useToolbarButtons<TIcon = ToolbarIcon>({
           icon: (icons?.mic ?? `${iconBasePath}/mic_icon_off.png`) as TIcon,
         },
         {
-          id: 'screen' as const,
+          id: 'camera' as const,
           title: tOrDefault(t, 'buttons.cameraShare', '摄像头'),
           hidden: false,
-          active: screenEnabled,
-          onClick: () => onToggleScreen(!screenEnabled),
-          icon: (icons?.screen ?? `${iconBasePath}/screen_icon_off.png`) as TIcon,
+          active: cameraEnabled,
+          onClick: () => onToggleCamera(!cameraEnabled),
+          icon: (icons?.camera ?? `${iconBasePath}/screen_icon_off.png`) as TIcon,
         },
         {
           id: 'agent' as const,
@@ -165,7 +165,7 @@ export function useToolbarButtons<TIcon = ToolbarIcon>({
           hasPanel: false,
         },
       ].filter((b) => !b.hidden),
-    [goodbyeMode, isMobile, micEnabled, onGoodbye, onToggleMic, onToggleScreen, openPanel, screenEnabled, t, togglePanel, iconBasePath, icons]
+    [cameraEnabled, goodbyeMode, isMobile, micEnabled, onGoodbye, onToggleCamera, onToggleMic, openPanel, t, togglePanel, iconBasePath, icons]
   );
 }
 

@@ -71,7 +71,7 @@ export function useCameraStream(
         setError(err.message);
         setStatus('error');
       },
-      frameInterval: 5000, // 5s
+      frameInterval: 1500, // 1.5s，与后端原生视觉节奏对齐
     });
 
     serviceRef.current = service;

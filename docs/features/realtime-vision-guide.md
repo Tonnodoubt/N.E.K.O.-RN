@@ -172,7 +172,7 @@ export interface CameraStreamConfig {
 **关键实现**：
 
 - `setCameraRef(ref)` — 绑定 CameraView ref
-- `start()` — 启动 `setInterval` 帧捕获循环，立即捕获第一帧
+- `start()` — 启动帧捕获循环，首帧延迟约 500ms 以提升 CameraView 启动稳定性
 - `stop()` — 清除 interval，状态回到 `idle`
 - `pause()` / `resume()` — 后台暂停/恢复
 - `captureAndSend()` — 内部方法：
@@ -256,7 +256,7 @@ const cameraStream = useCameraStream({
 **(c) 替换 toolbarScreenEnabled 状态 (line 220)**
 
 - 删除 `const [toolbarScreenEnabled, setToolbarScreenEnabled] = useState(false);`
-- 把 toolbar 的 `screenEnabled` prop 改为 `screenEnabled={cameraStream.isStreaming}`
+- 把 toolbar 的 `cameraEnabled` prop 接到 `cameraStream.isStreaming`
 
 **(d) 重写 handleToggleScreen (line 772-775)**
 
@@ -303,7 +303,7 @@ iOS `NSCameraUsageDescription` 也做同样更新。
 | `services/imageCompression.ts` | 直接复用 `compress()` 方法，无需改动 |
 | `services/AudioService.ts` | 通过 hook 层的 `sendMessage` 消费 |
 | `hooks/useCamera.ts` | 单张拍照 hook，保持独立 |
-| `packages/project-neko-components/` | toolbar 已有 `screenEnabled` / `onToggleScreen` props |
+| `packages/project-neko-components/` | toolbar 已统一为 `cameraEnabled` / `onToggleCamera` props |
 | 后端所有文件 | 协议和限流完全兼容 |
 
 #### 4.2.5 实现顺序
@@ -385,7 +385,7 @@ React 渲染 CameraStreamOverlay + CameraView
         ↓
 onCameraReady 回调触发 → setCameraRef + start()
         ↓
-setInterval 启动 (每 1.5s) + 立即捕获第一帧
+定时启动 (每 1.5s) + 首帧延迟约 500ms
         ↓
 takePictureAsync() → ImageCompressionService.compress()
         ↓

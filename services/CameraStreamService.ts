@@ -18,6 +18,11 @@ const yieldToMain = (ms: number = 0): Promise<void> =>
   new Promise(resolve => setTimeout(resolve, ms));
 
 /**
+ * CameraView 刚 ready 时给原生预览一点稳定时间，避免首帧拍照过早失败。
+ */
+const INITIAL_CAPTURE_DELAY_MS = 500;
+
+/**
  * 摄像头流式服务
  * 使用 aggressive yielding 策略避免阻塞 JS 线程
  */
@@ -32,7 +37,7 @@ export class CameraStreamService {
 
   constructor(config: CameraStreamConfig) {
     this.config = config;
-    this.frameInterval = config.frameInterval ?? 5000; // 默认 5s
+    this.frameInterval = config.frameInterval ?? 1500; // 默认 1.5s，与后端原生视觉节奏对齐
   }
 
   private setStatus(status: CameraStreamStatus) {
@@ -64,10 +69,10 @@ export class CameraStreamService {
 
     console.log('📹 启动摄像头流');
     this.setStatus('streaming');
-    this.scheduleNextCapture();
+    this.scheduleNextCapture(INITIAL_CAPTURE_DELAY_MS);
   }
 
-  private scheduleNextCapture() {
+  private scheduleNextCapture(delayMs: number = this.frameInterval) {
     if (this.status !== 'streaming') return;
 
     this.timeoutId = setTimeout(() => {
@@ -76,7 +81,7 @@ export class CameraStreamService {
           this.scheduleNextCapture();
         }
       });
-    }, this.frameInterval);
+    }, delayMs);
   }
 
   stop() {
@@ -92,6 +97,10 @@ export class CameraStreamService {
   pause() {
     if (this.status !== 'streaming') return;
     console.log('📹 暂停摄像头流');
+    if (this.timeoutId) {
+      clearTimeout(this.timeoutId);
+      this.timeoutId = null;
+    }
     this.setStatus('paused');
   }
 
@@ -99,7 +108,7 @@ export class CameraStreamService {
     if (this.status !== 'paused') return;
     console.log('📹 恢复摄像头流');
     this.setStatus('streaming');
-    this.scheduleNextCapture();
+    this.scheduleNextCapture(INITIAL_CAPTURE_DELAY_MS);
   }
 
   /**

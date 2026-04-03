@@ -4,7 +4,7 @@
  * 此文件包含 Web 和 RN 版本共享的所有类型定义
  */
 
-export type Live2DRightToolbarButtonId = "mic" | "screen" | "agent" | "settings" | "goodbye" | "return";
+export type Live2DRightToolbarButtonId = "mic" | "camera" | "agent" | "settings" | "goodbye" | "return";
 
 export type Live2DRightToolbarPanel = "agent" | "settings" | null;
 
@@ -47,7 +47,7 @@ export interface Live2DRightToolbarProps {
   isMobile?: boolean;
 
   micEnabled: boolean;
-  screenEnabled: boolean;
+  cameraEnabled: boolean;
   goodbyeMode: boolean;
 
   openPanel: Live2DRightToolbarPanel;
@@ -60,7 +60,7 @@ export interface Live2DRightToolbarProps {
   onAgentChange: (id: Live2DAgentToggleId, next: boolean) => void;
 
   onToggleMic: (next: boolean) => void;
-  onToggleScreen: (next: boolean) => void;
+  onToggleCamera: (next: boolean) => void;
   onGoodbye: () => void;
   onReturn: () => void;
 

@@ -314,6 +314,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   const sessionStartedResolverRef = useRef<((value: boolean) => void) | null>(null);
   const sessionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSessionPromiseRef = useRef<Promise<boolean> | null>(null);
+  const activeSessionModeRef = useRef<'text' | 'audio' | null>(null);
 
   // Agent Backend 管理（传入 openPanel 以支持动态刷新）
   const { agent, onAgentChange, refreshAgentState } = useLive2DAgentBackend({
@@ -392,9 +393,13 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         console.log('✅ 收到 session_started，input_mode:', inputMode);
         if (inputMode === 'text') {
           setIsTextSessionActive(true);
+          activeSessionModeRef.current = 'text';
         } else if (inputMode === 'audio') {
           // audio session 启动意味着 text session 已被替换，重置状态
           setIsTextSessionActive(false);
+          activeSessionModeRef.current = 'audio';
+        } else {
+          activeSessionModeRef.current = null;
         }
         if (sessionTimeoutRef.current) {
           clearTimeout(sessionTimeoutRef.current);
@@ -412,6 +417,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       if (parsedMsg?.type === 'session_failed') {
         console.log('❌ 收到 session_failed，input_mode:', parsedMsg.input_mode);
         setIsTextSessionActive(false);
+        activeSessionModeRef.current = null;
         if (sessionTimeoutRef.current) {
           clearTimeout(sessionTimeoutRef.current);
           sessionTimeoutRef.current = null;
@@ -428,6 +434,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       if (parsedMsg?.type === 'session_ended_by_server') {
         console.log('⚠️ 收到 session_ended_by_server，input_mode:', parsedMsg.input_mode);
         setIsTextSessionActive(false);
+        activeSessionModeRef.current = null;
         return;
       }
 
@@ -570,6 +577,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         }
         // 连接断开时重置 text session 状态
         setIsTextSessionActive(false);
+        activeSessionModeRef.current = null;
       }
     }
   });
@@ -851,7 +859,39 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     }
   }, [mainManager]);
 
-  const handleToggleScreen = useCallback(async (next: boolean) => {
+  const ensureRealtimeVisionSession = useCallback(async (): Promise<boolean> => {
+    const getActiveSessionMode = (): 'text' | 'audio' | null => activeSessionModeRef.current;
+
+    if (!audio.isConnected) {
+      return false;
+    }
+
+    if (getActiveSessionMode() === 'audio' || audio.isRecording) {
+      return true;
+    }
+
+    console.log('📤 为实时摄像头准备 audio session');
+    audio.sendMessage({
+      action: 'start_session',
+      input_type: 'audio',
+      audio_format: 'PCM_48000HZ_MONO_16BIT',
+      new_session: false,
+    });
+
+    const start = Date.now();
+    const timeoutMs = 5000;
+    while (Date.now() - start < timeoutMs) {
+      if (getActiveSessionMode() === 'audio') {
+        return true;
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    console.warn('⚠️ 实时摄像头切换 audio session 超时');
+    return false;
+  }, [audio.isConnected, audio.isRecording, audio.sendMessage]);
+
+  const handleToggleCamera = useCallback(async (next: boolean) => {
     if (!next) {
       // 停止摄像头
       cameraStream.stopStreaming();
@@ -864,6 +904,21 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     if (!hasPermission) return;
 
     // 显示选择对话框
+    const startCameraStream = async (selectedFacing: 'front' | 'back') => {
+      statusToastRef.current?.show('正在准备实时视觉...', 2000);
+      const sessionReady = await ensureRealtimeVisionSession();
+      if (!sessionReady) {
+        statusToastRef.current?.show('实时视觉会话准备失败', 3000);
+        return;
+      }
+
+      cameraStream.startStreaming(selectedFacing);
+      statusToastRef.current?.show(
+        selectedFacing === 'front' ? '前置摄像头已开启' : '后置摄像头已开启',
+        2000
+      );
+    };
+
     Alert.alert(
       '选择摄像头',
       '请选择要使用的摄像头',
@@ -871,15 +926,13 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         {
           text: '前置摄像头',
           onPress: () => {
-            cameraStream.startStreaming('front');
-            statusToastRef.current?.show('前置摄像头已开启', 2000);
+            void startCameraStream('front');
           },
         },
         {
           text: '后置摄像头',
           onPress: () => {
-            cameraStream.startStreaming('back');
-            statusToastRef.current?.show('后置摄像头已开启', 2000);
+            void startCameraStream('back');
           },
         },
         {
@@ -888,7 +941,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         },
       ]
     );
-  }, [cameraStream.startStreaming, cameraStream.stopStreaming, cameraStream.checkAndRequestPermission]);
+  }, [cameraStream.startStreaming, cameraStream.stopStreaming, cameraStream.checkAndRequestPermission, ensureRealtimeVisionSession]);
 
   const handleGoodbye = useCallback(() => {
     // 如果麦克风正在录音，先停止
@@ -1042,6 +1095,13 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       return false;
     }
 
+    // 连续摄像头需要 realtime/audio session；切回文本前先暂停它，避免图片堆进文本会话队列。
+    if (cameraStream.isStreaming) {
+      console.log('📹 切换到文本会话，先暂停实时摄像头');
+      cameraStream.stopStreaming();
+      statusToastRef.current?.show('发送文本时已暂停实时摄像头', 2500);
+    }
+
     // 如果当前正在录音（语音模式），先停止录音并等待服务端清理旧 session，
     // 避免 start_session(text) 与正在启动/活跃的 audio session 产生竞态
     if (audio.isRecording) {
@@ -1095,7 +1155,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
 
     pendingSessionPromiseRef.current = promise;
     return promise;
-  }, [isTextSessionActive, audio.isConnected, audio.isRecording, audio.sendMessage, audio.toggleRecording]);
+  }, [isTextSessionActive, audio.isConnected, audio.isRecording, audio.sendMessage, audio.toggleRecording, cameraStream.isStreaming, cameraStream.stopStreaming]);
 
   // 图片消息服务
   const imageMessageService = useMemo(() => new ImageMessageService(), []);
@@ -1273,7 +1333,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         - 详见：docs/strategy/cross-platform-components.md
         
         功能包括：
-        - 麦克风/屏幕共享切换
+        - 麦克风/摄像头切换
         - Agent 设置面板
         - Settings 面板
         - 设置菜单（Live2D设置、API密钥、角色管理等）
@@ -1285,7 +1345,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
           right={isMobile ? 12 : 24}
           top={isMobile ? screenHeight * 0.05 : 24}
           micEnabled={toolbarMicEnabled}
-          screenEnabled={cameraStream.isStreaming}
+          cameraEnabled={cameraStream.isStreaming}
           goodbyeMode={toolbarGoodbyeMode}
           openPanel={toolbarOpenPanel}
           onOpenPanelChange={setToolbarOpenPanel}
@@ -1294,7 +1354,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
           agent={agent}
           onAgentChange={handleToolbarAgentChange}
           onToggleMic={handleToggleMic}
-          onToggleScreen={handleToggleScreen}
+          onToggleCamera={handleToggleCamera}
           onGoodbye={handleGoodbye}
           onReturn={handleReturn}
           onSettingsMenuClick={handleSettingsMenuClick}
