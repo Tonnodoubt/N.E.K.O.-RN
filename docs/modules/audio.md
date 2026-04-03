@@ -28,3 +28,46 @@
 ## 3.3 性能规格
 - **上行延迟**：目标单位切片 < 40ms。
 - **下行抖动缓冲**：由原生 `PCMStream` 处理队列。
+
+## 3.4 生命周期注意事项（2026-03-06 修复）
+
+### AudioService 初始化（BUG-1 修复）
+
+`initWebSocket()` 在 1006 断线（首次连接失败）时，现在会 `resolve()` 而非挂起：
+
+```
+1006 出现
+  → resolve()（初始化继续）
+  → initAudioService() 正常执行（client 对象已创建）
+  → 重连机制在后台自动重试
+  → onOpen 触发 → onConnectionChange(true) 通知上层
+```
+
+**旧行为（已修复）**：1006 时既不 resolve 也不 reject，导致 `init()` 永久挂起，音频和发消息功能全部失效。
+
+### destroy() 资源清理（BUG-2 修复）
+
+`destroy()` 现在先保存局部引用再清空成员，避免 fire-and-forget 异步操作访问已销毁的实例：
+
+```typescript
+// 正确顺序：先保存，立即清空成员，再用局部引用做异步清理
+const audioSvc = this.audioService;
+const wsSvc = this.wsService;
+this.audioService = null;
+this.wsService = null;
+audioSvc?.stopVoiceSession().catch(...);  // 在局部引用上完成
+wsSvc?.close();
+```
+
+### useAudio isReadyRef 守护（BUG-3 修复）
+
+`init().then()` 回调现在检查 service 身份，防止旧 Promise 在 cleanup 后污染 `isReadyRef`：
+
+```typescript
+service.init().then(() => {
+  if (audioServiceRef.current !== service) return;  // 守护
+  if (service.isReady()) isReadyRef.current = true;
+});
+```
+
+快速切换角色时（reconnectKey 递增），旧 service 的回调不会再干扰新 service 的状态。

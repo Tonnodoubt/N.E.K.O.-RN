@@ -2,7 +2,13 @@ import { Directory, File, Paths } from 'expo-file-system';
 
 function resolveUrl(baseUrl: string, relativePath: string): string {
   try {
-    return new URL(relativePath, baseUrl).toString();
+    const resolved = new URL(relativePath, baseUrl);
+    // 保留 base URL 的 query 参数（如 P2P token），new URL() 会丢弃它们
+    const base = new URL(baseUrl);
+    base.searchParams.forEach((v, k) => {
+      if (!resolved.searchParams.has(k)) resolved.searchParams.set(k, v);
+    });
+    return resolved.toString();
   } catch {
     if (baseUrl.endsWith('/')) return baseUrl + relativePath;
     return baseUrl + '/' + relativePath;
@@ -25,12 +31,47 @@ async function downloadFileTo(dstPath: string, srcUrl: string): Promise<void> {
   const dstDir = dstPath.substring(0, dstPath.lastIndexOf('/') + 1);
   await ensureDirAsync(dstDir);
   try {
+    // 提取文件名（处理包含子目录的相对路径，如 Nahida_1080.1024/texture_00.png）
+    const lastSlashIndex = dstPath.lastIndexOf('/');
+    const fileName = dstPath.substring(lastSlashIndex + 1);
+    const expectedUri = `${dstDir}${fileName}`;
+
+    // 如果目标文件已存在，跳过下载
+    const existingFile = new File(expectedUri);
+    if (existingFile.exists) {
+      console.log(`skip (exists): ${expectedUri}`);
+      return;
+    }
+
+    // downloadFileAsync 用 URL 末尾的文件名作为目标，先清理可能残留的同名文件
+    const urlFileName = srcUrl.split('?')[0].split('/').pop() ?? fileName;
+    const downloadTarget = new File(`${dstDir}${urlFileName}`);
+    if (downloadTarget.exists) {
+      await downloadTarget.delete();
+    }
+
     const dstFolder = new Directory(dstDir);
-    const dst = new Directory(dstFolder.uri);
-    const output = await File.downloadFileAsync(srcUrl, dst);
-    console.log(`loaded file: ${output.uri}`)
+    // downloadFileAsync 返回 File 对象，有 .uri 属性
+    const downloaded = await File.downloadFileAsync(srcUrl, dstFolder);
+    const downloadedUri = downloaded.uri;
+
+    // 如果下载的文件名与目标文件名不同（URL encoded vs decoded），需要重命名
+    const normalizedDownloaded = (() => { try { return decodeURIComponent(downloadedUri); } catch { return downloadedUri; } })();
+    const normalizedExpected = (() => { try { return decodeURIComponent(expectedUri); } catch { return expectedUri; } })();
+
+    if (normalizedDownloaded !== normalizedExpected) {
+      const downloadedFile = new File(downloadedUri);
+      const targetFile = new File(expectedUri);
+      if (targetFile.exists) {
+        targetFile.delete();
+      }
+      downloadedFile.move(targetFile);
+      console.log(`moved file: ${downloadedUri} => ${expectedUri}`);
+    } else {
+      console.log(`loaded file: ${downloadedUri}`);
+    }
   } catch (error) {
-    // console.log(`loaded file error: ${error}`)
+    console.error(`❌ downloadFileTo failed: ${dstPath}`, error)
   }
 }
 
@@ -98,15 +139,14 @@ export async function downloadDependenciesFromLocalModel(
   }
 
   const uniqueFiles = Array.from(new Set(files.filter(Boolean)));
+  console.log('📦 需要下载的依赖文件:', uniqueFiles);
 
-  // 并发下载所有依赖
-  await Promise.all(
-    uniqueFiles.map(async (relPath) => {
-      const src = resolveUrl(remoteBaseUrl, relPath);
-      const dst = `${targetRoot}${relPath}`;
-      await downloadFileTo(dst, src);
-    })
-  );
+  // 串行下载，避免并发时同名文件冲突
+  for (const relPath of uniqueFiles) {
+    const src = resolveUrl(remoteBaseUrl, relPath);
+    const dst = `${targetRoot}${relPath}`;
+    await downloadFileTo(dst, src);
+  }
 
   return localModelJsonUri;
 }

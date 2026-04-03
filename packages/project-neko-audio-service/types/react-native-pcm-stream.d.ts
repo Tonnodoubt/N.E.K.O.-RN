@@ -10,10 +10,40 @@ declare module "react-native-pcm-stream" {
     progress: number;
   };
 
+  export type OnErrorEventPayload = {
+    message?: string | null;
+    state?: string;
+  };
+
   export type OnAudioFrameEventPayload = {
     pcm: Uint8Array;
     ts?: number;
     seq?: number;
+  };
+
+  export type OnPlaybackStartEventPayload = {
+    state: string;
+  };
+
+  export type OnPlaybackStopEventPayload = {
+    state: string;
+    totalDuration: number;
+    playedDuration: number;
+  };
+
+  export type OnPlaybackPausedEventPayload = {
+    state: string;
+  };
+
+  export type OnPlaybackResumedEventPayload = {
+    state: string;
+  };
+
+  export type OnPlaybackProgressEventPayload = {
+    playedDuration: number;
+    totalDuration: number;
+    progress: number;
+    remainingDuration: number;
   };
 
   export type OnAmplitudeUpdateEventPayload = {
@@ -21,22 +51,18 @@ declare module "react-native-pcm-stream" {
   };
 
   export type PCMStreamModuleEvents = {
-    onError?: (params: { message?: string | null; state?: string }) => void;
-    onPlaybackStart?: (params: { state: string }) => void;
-    onPlaybackStop?: (params: { state: string; totalDuration: number; playedDuration: number }) => void;
-    onPlaybackPaused?: (params: { state: string }) => void;
-    onPlaybackResumed?: (params: { state: string }) => void;
-    onPlaybackProgress?: (params: {
-      playedDuration: number;
-      totalDuration: number;
-      progress: number;
-      remainingDuration: number;
-    }) => void;
+    onError?: (params: OnErrorEventPayload) => void;
+    onPlaybackStart?: (params: OnPlaybackStartEventPayload) => void;
+    onPlaybackStop?: (params: OnPlaybackStopEventPayload) => void;
+    onPlaybackPaused?: (params: OnPlaybackPausedEventPayload) => void;
+    onPlaybackResumed?: (params: OnPlaybackResumedEventPayload) => void;
+    onPlaybackProgress?: (params: OnPlaybackProgressEventPayload) => void;
     onAmplitudeUpdate?: (params: OnAmplitudeUpdateEventPayload) => void;
     onAudioFrame?: (params: OnAudioFrameEventPayload) => void;
   };
 
   export type PCMStreamModuleSpec = {
+    hello(): string;
     initPlayer(sampleRate?: number): void;
     playPCMChunk(chunk: Uint8Array): void;
     stopPlayback(): void;
@@ -61,4 +87,3 @@ declare module "react-native-pcm-stream" {
   const PCMStream: PCMStreamModuleSpec;
   export default PCMStream;
 }
-

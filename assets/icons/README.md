@@ -7,7 +7,7 @@
 请从主项目的 `static/icons/` 目录复制以下图标文件到此目录：
 
 - `mic_icon_off.png` - 麦克风图标
-- `screen_icon_off.png` - 屏幕分享图标
+- `screen_icon_off.png` - 摄像头按钮当前复用的历史图标资源
 - `Agent_off.png` - Agent 工具图标
 - `set_off.png` - 设置图标
 - `rest_off.png` - 离开/返回图标

@@ -31,6 +31,15 @@ export function createWebRealtimeClient(options: Omit<RealtimeClientOptions, "bu
 }
 
 export { createRealtimeClient } from "./src/client";
-export type { RealtimeClientOptions } from "./src/types";
-
+export type {
+  RealtimeClientOptions,
+  RealtimeHeartbeatOptions,
+  RealtimeReconnectOptions,
+  RealtimeConnectionState,
+  RealtimeEventMap,
+  WebSocketConstructorLike,
+  WebSocketLike,
+  WebSocketMessageEventLike,
+  WebSocketData,
+} from "./src/types";
 

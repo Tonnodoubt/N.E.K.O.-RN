@@ -14,6 +14,29 @@ interface UseChatMessagesConfig {
   onMessageUpdated?: (message: ChatMessage) => void;
 }
 
+/**
+ * 服务端消息基础类型。
+ * 对应 docs/specs/websocket.md 中定义的 JSON 负载格式。
+ */
+interface ServerMessage {
+  type: string;
+  text?: string;
+  isNewMessage?: boolean;
+  message?: string;
+  new_catgirl?: string;
+  data?: unknown;
+}
+
+/** 运行时类型守卫：校验 JSON.parse 结果是否为合法 ServerMessage。 */
+function isServerMessage(value: unknown): value is ServerMessage {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'type' in value &&
+    typeof (value as ServerMessage).type === 'string'
+  );
+}
+
 export const useChatMessages = (config: UseChatMessagesConfig = {}) => {
   const { maxMessages = 100, onMessageAdded, onMessageUpdated } = config;
 
@@ -153,9 +176,15 @@ export const useChatMessages = (config: UseChatMessagesConfig = {}) => {
     // 处理文本消息
     if (typeof event.data === 'string') {
       try {
-        const parsed = JSON.parse(event.data);
-        console.log('📄 解析的消息:', parsed);
+        const raw: unknown = JSON.parse(event.data);
+        console.log('📄 解析的消息:', raw);
 
+        if (!isServerMessage(raw)) {
+          console.warn('⚠️ Received message without valid "type" field:', raw);
+          return { type: 'other', data: raw };
+        }
+
+        const parsed = raw;
         if (parsed.type === 'gemini_response') {
           const isNewMessage = parsed.isNewMessage || false;
           const text = parsed.text || '';
@@ -192,8 +221,8 @@ export const useChatMessages = (config: UseChatMessagesConfig = {}) => {
         
         else if (parsed.type === 'status') {
           console.log('ℹ️ 状态消息:', parsed.message || parsed.data);
-          addMessage(parsed.message || JSON.stringify(parsed.data), 'system');
-          return { type: 'status', data: parsed };
+          // 状态消息不再添加到聊天列表，改为通过 Toast 显示
+          return { type: 'status', message: parsed.message || JSON.stringify(parsed.data), data: parsed };
         } 
         
         else if (parsed.type === 'system' && parsed.data === 'turn end') {
@@ -201,20 +230,27 @@ export const useChatMessages = (config: UseChatMessagesConfig = {}) => {
           markLastMessageComplete('gemini');
           return { type: 'turn_end', fullText: getLastMessageText('gemini') };
         }
-        
+
+        else if (parsed.type === 'catgirl_switched') {
+          console.log('🔄 角色已切换，清空消息');
+          clearMessages();
+          const characterName: string | undefined = parsed.new_catgirl;
+          return { type: 'catgirl_switched', characterName };
+        }
+
         else {
           console.log('📋 其他类型消息:', parsed.type);
           return { type: 'other', data: parsed };
         }
       } catch (e) {
         console.log('📝 普通文本消息:', event.data);
-        addMessage(event.data, 'system');
-        return { type: 'text', text: event.data };
+        // 非 JSON 的纯文本作为系统通知，通过 Toast 显示
+        return { type: 'system_notice', message: event.data };
       }
     }
 
     return null;
-  }, [addMessage, appendToLastMessage, markLastMessageComplete, getLastMessageText]);
+  }, [addMessage, appendToLastMessage, markLastMessageComplete, getLastMessageText, clearMessages]);
 
   return {
     // 状态
@@ -234,4 +270,3 @@ export const useChatMessages = (config: UseChatMessagesConfig = {}) => {
     handleWebSocketMessage,
   };
 };
-

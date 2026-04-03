@@ -32,6 +32,7 @@ import {
   Platform,
   Keyboard,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type { ScrollView as ScrollViewType } from 'react-native';
 import { useT, tOrDefault } from '../i18n';
 import { useChatState, useSendMessage } from './hooks';
@@ -107,7 +108,13 @@ export default function ChatContainer({
   connectionStatus = 'idle',
   disabled = false,
   statusText,
-  cameraEnabled = false, // 相机功能默认禁用，需要集成 react-native-image-picker 后启用
+  cameraEnabled = false,
+  onPickImage,
+  onTakePhoto: onTakePhotoProp,
+  renderFloatingOverlay,
+  forceCollapsed,
+  externalPendingImages,
+  onClearExternalPendingImages,
 }: ChatContainerProps = {}) {
   const t = useT();
 
@@ -133,11 +140,16 @@ export default function ChatContainer({
 
   // ScrollView ref 用于自动滚动
   const scrollViewRef = useRef<ScrollViewType>(null);
+  // 滚动延迟 timer refs（确保组件卸载时清理）
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const expandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 滚动到底部
   const scrollToBottom = React.useCallback((animated = true) => {
     // 延迟执行确保布局完成
-    setTimeout(() => {
+    if (scrollTimerRef.current !== null) clearTimeout(scrollTimerRef.current);
+    scrollTimerRef.current = setTimeout(() => {
+      scrollTimerRef.current = null;
       scrollViewRef.current?.scrollToEnd({ animated });
     }, 100);
   }, []);
@@ -150,6 +162,14 @@ export default function ChatContainer({
     return internalMessages;
   }, [isControlled, externalMessages, internalMessages]);
 
+  // 卸载时清理所有滚动 timer
+  useEffect(() => {
+    return () => {
+      if (scrollTimerRef.current !== null) clearTimeout(scrollTimerRef.current);
+      if (expandTimerRef.current !== null) clearTimeout(expandTimerRef.current);
+    };
+  }, []);
+
   // 消息列表变化时自动滚动到底部
   useEffect(() => {
     if (displayMessages.length > 0 && !collapsed) {
@@ -161,10 +181,18 @@ export default function ChatContainer({
   useEffect(() => {
     if (!collapsed) {
       // 延迟稍长一点，确保 Modal 动画完成后再滚动
-      setTimeout(() => {
+      if (expandTimerRef.current !== null) clearTimeout(expandTimerRef.current);
+      expandTimerRef.current = setTimeout(() => {
+        expandTimerRef.current = null;
         scrollToBottom(false);
       }, 300);
     }
+    return () => {
+      if (expandTimerRef.current !== null) {
+        clearTimeout(expandTimerRef.current);
+        expandTimerRef.current = null;
+      }
+    };
   }, [collapsed, scrollToBottom]);
 
   // 键盘弹起时滚动到底部
@@ -179,6 +207,26 @@ export default function ChatContainer({
       keyboardDidShowListener.remove();
     };
   }, [collapsed, scrollToBottom]);
+
+  // 远端强制折叠
+  useEffect(() => {
+    if (forceCollapsed) {
+      setCollapsed(true);
+    }
+  }, [forceCollapsed, setCollapsed]);
+
+  // 处理外部传入的待发送图片（如从相册选择的图片）
+  useEffect(() => {
+    if (externalPendingImages && externalPendingImages.length > 0) {
+      setPendingScreenshots((prev) => {
+        const combined = [...prev, ...externalPendingImages];
+        // 限制最多 5 张
+        return combined.slice(0, MAX_SCREENSHOTS);
+      });
+      // 清除外部图片（已添加到内部状态）
+      onClearExternalPendingImages?.();
+    }
+  }, [externalPendingImages, onClearExternalPendingImages, setPendingScreenshots]);
 
   // 初始化欢迎消息（仅非受控模式）
   React.useEffect(() => {
@@ -260,6 +308,12 @@ export default function ChatContainer({
       return;
     }
 
+    // 如果提供了外部拍照回调，使用它
+    if (onTakePhotoProp) {
+      onTakePhotoProp();
+      return;
+    }
+
     // 相机功能已启用，检查相机权限（Android）
     if (Platform.OS === 'android') {
       try {
@@ -286,49 +340,45 @@ export default function ChatContainer({
       }
     }
 
-    // TODO: 当 cameraEnabled 为 true 时，集成 react-native-image-picker 或 expo-image-picker
-    // 在集成后，移除此 Alert 并启用下方注释的代码
-    Alert.alert(
-      tOrDefault(t, 'chat.camera.title', '相机功能'),
-      tOrDefault(
-        t,
-        'chat.camera.integration_pending',
-        '相机权限已获取，但拍照功能尚未完全集成。\n\n请参考 react-native-image-picker 文档完成集成。'
-      ),
-      [{ text: tOrDefault(t, 'chat.camera.ok', '确定') }]
-    );
+  };
 
-    /*
-    // 示例：使用 react-native-image-picker
-    try {
-      const result = await launchCamera({
-        mediaType: 'photo',
-        quality: 0.8,
-        maxWidth: 1280,
-        maxHeight: 720,
-        includeBase64: true,
-      });
+  // 合并的图片操作按钮 - 弹出选项菜单
+  const handleImageAction = () => {
+    if (disabled) return;
 
-      if (result.didCancel) return;
-      if (result.errorCode) {
-        console.error('[ChatContainer] Camera error:', result.errorMessage);
-        Alert.alert('拍照失败', result.errorMessage || '未知错误');
-        return;
-      }
-
-      const asset = result.assets?.[0];
-      if (asset?.base64) {
-        const base64 = `data:${asset.type || 'image/jpeg'};base64,${asset.base64}`;
-        setPendingScreenshots(prev => [
-          ...prev,
-          { id: `photo-${Date.now()}`, base64 },
-        ]);
-      }
-    } catch (err) {
-      console.error('[ChatContainer] Camera error:', err);
-      Alert.alert('拍照失败', '无法访问相机');
+    // 检查截图数量限制
+    if (pendingScreenshots.length >= MAX_SCREENSHOTS) {
+      Alert.alert(
+        tOrDefault(t, 'chat.image.title', '图片'),
+        tOrDefault(t, 'chat.image.maxReached', `最多只能添加 ${MAX_SCREENSHOTS} 张图片`)
+      );
+      return;
     }
-    */
+
+    type AlertOption = { text: string; style?: 'default' | 'cancel' | 'destructive'; onPress?: () => void };
+    const options: AlertOption[] = [];
+    if (onPickImage) {
+      options.push({
+        text: tOrDefault(t, 'chat.image.gallery', '从相册选择'),
+        onPress: () => onPickImage(),
+      });
+    }
+    if (onTakePhotoProp) {
+      options.push({
+        text: tOrDefault(t, 'chat.image.camera', '拍照'),
+        onPress: () => handleTakePhoto(),
+      });
+    }
+    options.push({
+      text: tOrDefault(t, 'common.cancel', '取消'),
+      style: 'cancel',
+    });
+
+    Alert.alert(
+      tOrDefault(t, 'chat.image.title', '添加图片'),
+      undefined,
+      options
+    );
   };
 
   // 渲染单个消息
@@ -370,7 +420,7 @@ export default function ChatContainer({
         onPress={() => setCollapsed(false)}
         activeOpacity={0.8}
       >
-        <Text style={styles.floatingButtonEmoji}>💬</Text>
+        <Ionicons name="chatbubble-ellipses" size={22} color="#fff" style={styles.floatingButtonEmoji} />
       </TouchableOpacity>
     );
   }
@@ -391,7 +441,7 @@ export default function ChatContainer({
               <View style={styles.header}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Text style={styles.headerTitle}>
-                    {tOrDefault(t, 'chat.title', '💬 Chat')}
+                    {tOrDefault(t, 'chat.title', 'Chat')}
                   </Text>
                   {/* 连接状态指示器 - 仅在受控模式下显示 */}
                   {sendHandler && (
@@ -440,7 +490,7 @@ export default function ChatContainer({
                       {tOrDefault(
                         t,
                         'chat.screenshot.pending',
-                        `📸 待发送照片 (${pendingScreenshots.length})`
+                        `待发送照片 (${pendingScreenshots.length})`
                       )}
                     </Text>
                     <TouchableOpacity
@@ -500,6 +550,29 @@ export default function ChatContainer({
                 />
 
                 <View style={styles.buttonGroup}>
+                  {/* 左侧：图片按钮（合并相册+拍照） */}
+                  {(onPickImage || onTakePhotoProp) && (
+                    <TouchableOpacity
+                      style={[
+                        styles.imageButton,
+                        disabled && styles.imageButtonDisabled,
+                      ]}
+                      onPress={handleImageAction}
+                      activeOpacity={0.7}
+                      disabled={disabled}
+                    >
+                      <Text
+                        style={[
+                          styles.imageButtonText,
+                          disabled && styles.imageButtonTextDisabled,
+                        ]}
+                      >
+                        {tOrDefault(t, 'chat.image.button', '图片')}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {/* 右侧：发送按钮 */}
                   <TouchableOpacity
                     style={[
                       styles.sendButton,
@@ -518,32 +591,20 @@ export default function ChatContainer({
                       {tOrDefault(t, 'chat.send', '发送')}
                     </Text>
                   </TouchableOpacity>
-
-                  {/* 拍照按钮 - 仅在 cameraEnabled 且支持 onSendMessage 的受控模式或非受控模式下显示 */}
-                  {cameraEnabled && (onSendMessage || !sendHandler) && (
-                    <TouchableOpacity
-                      style={[
-                        styles.screenshotButton,
-                        disabled && styles.screenshotButtonDisabled,
-                      ]}
-                      onPress={handleTakePhoto}
-                      activeOpacity={0.7}
-                      disabled={disabled}
-                    >
-                      <Text
-                        style={[
-                          styles.screenshotButtonText,
-                          disabled && styles.screenshotButtonTextDisabled,
-                        ]}
-                      >
-                        {tOrDefault(t, 'chat.screenshot.button', '拍照')}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
                 </View>
               </View>
             </View>
           </TouchableWithoutFeedback>
+
+          {/* 浮动覆盖层插槽（如打断按钮）：绝对定位在 Modal 内，pointer-events 穿透空白区域 */}
+          {renderFloatingOverlay && (
+            <View
+              style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+              pointerEvents="box-none"
+            >
+              {renderFloatingOverlay()}
+            </View>
+          )}
         </View>
       </TouchableWithoutFeedback>
     </Modal>

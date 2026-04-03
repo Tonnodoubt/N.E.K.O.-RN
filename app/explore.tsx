@@ -23,6 +23,13 @@ export default function ExploreScreen() {
 	const [isPlaying, setIsPlaying] = useState<boolean>(false);
 	const [focusModeState, setFocusModeState] = useState<boolean>(false);
 
+	const getErrorMessage = (error: unknown): string => {
+		if (error instanceof Error && error.message) {
+			return error.message;
+		}
+		return String(error);
+	};
+
 	// 扫码回填（只在参数变化时处理一次，避免重复应用）
 	useEffect(() => {
 		const qrParam = typeof params.qr === 'string' ? params.qr : undefined;
@@ -59,7 +66,7 @@ export default function ExploreScreen() {
 			characterName: connectionConfig.characterName,
 			onError: (error) => {
 				console.error('AudioService错误:', error);
-				Alert.alert('音频服务错误', error.message || '未知错误');
+				Alert.alert('音频服务错误', getErrorMessage(error));
 			},
 			onConnectionChange: (connected) => {
 				setIsConnected(connected);
@@ -78,7 +85,7 @@ export default function ExploreScreen() {
 		// 初始化 AudioService
 		audioServiceRef.current.init().catch((error) => {
 			console.error('AudioService 初始化失败:', error);
-			Alert.alert('初始化失败', error.message || '未知错误');
+			Alert.alert('初始化失败', getErrorMessage(error));
 		});
 
 		return () => {

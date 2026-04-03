@@ -9,9 +9,8 @@
 export { Button } from "./src/Button";
 export type { ButtonProps, ButtonVariant, ButtonSize } from "./src/Button";
 
-// StatusToast 依赖 react-dom，不导出
-// export { default as StatusToast } from "./src/StatusToast";
-// export type { StatusToastHandle } from "./src/StatusToast";
+export { default as StatusToast } from "./src/StatusToast";
+export type { StatusToastHandle } from "./src/StatusToast";
 
 export { QrMessageBox } from "./src/QrMessageBox";
 export type { QrMessageBoxProps } from "./src/QrMessageBox";
@@ -39,11 +38,6 @@ export type { ChatMessage, PendingScreenshot } from "./src/chat";
 // i18n adapter (Provider -> window.t -> fallback)
 export { I18nProvider, useT, tOrDefault } from "./src/i18n";
 export type { TFunction, I18nProviderProps } from "./src/i18n";
-
-// 为了类型兼容性，导出空的 stub 类型
-export type StatusToastHandle = {
-  show: (message: string, duration?: number) => void;
-};
 
 export type ModalHandle = {
   showAlert: (message: string, title?: string | null) => Promise<boolean>;

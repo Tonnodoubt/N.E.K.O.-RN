@@ -21,10 +21,14 @@ import { downloadDependenciesFromLocalModel, removeDownloadedModel } from '../ut
  */
 export interface Live2DServiceConfig {
   modelName: string;
+  /** 模型唯一 ID，用于缓存目录隔离；换角色时旧缓存自动失效 */
+  modelItemId?: string;
   backendHost: string;
   backendPort: number;
   backendScheme?: 'http' | 'https';
   live2dPath?: string;
+  /** 若提供，直接使用该 URL 作为 model3.json 远端地址，跳过自动拼接 */
+  modelUrl?: string;
   onModelLoaded?: () => void;
   onModelError?: (error: string) => void;
   onLoadingStateChange?: (isLoading: boolean) => void;
@@ -94,6 +98,9 @@ export class Live2DService {
   private modelBaseUrl: string;
   private core: CoreLive2DService;
   private lastLoadingFlag: boolean | null = null;
+  private actualModelBaseName: string | null = null;
+  private hasWarnedAboutSetViewPosition: boolean = false;
+  private hasWarnedAboutSetViewScale: boolean = false;
 
   constructor(config: Live2DServiceConfig) {
     this.config = {
@@ -230,16 +237,20 @@ export class Live2DService {
    */
   private validateModelFiles(): boolean {
     try {
+      const cacheDirName = this.config.modelItemId ?? this.config.modelName;
+      const baseName = this.actualModelBaseName ?? this.config.modelName;
       const modelFile = new File(
         Paths.cache,
-        `live2d/${this.config.modelName}/${this.config.modelName}.model3.json`
+        `live2d/${cacheDirName}/${baseName}.model3.json`
       );
       const mocFile = new File(
         Paths.cache,
-        `live2d/${this.config.modelName}/${this.config.modelName}.moc3`
+        `live2d/${cacheDirName}/${baseName}.moc3`
       );
 
       const isValid = modelFile.exists && mocFile.exists;
+
+      console.log(`🔍 验证: modelFile=${modelFile.uri} exists=${modelFile.exists}, mocFile=${mocFile.uri} exists=${mocFile.exists}`);
 
       if (isValid) {
         console.log('✅ 模型文件验证通过');
@@ -267,32 +278,55 @@ export class Live2DService {
       console.log('📁 创建缓存目录:', cacheDir.uri);
     }
 
-    const modelDir = new Directory(cacheDir, this.config.modelName);
+    const cacheDirName = this.config.modelItemId ?? this.config.modelName;
+    const modelDir = new Directory(cacheDir, cacheDirName);
     if (!modelDir.exists) {
       modelDir.create();
       console.log('📁 创建模型目录:', modelDir.uri);
     }
 
-    // 构建本地路径
-    const localPath = `${modelDir.uri}${this.config.modelName}.model3.json`;
+    // 用 URL 的实际文件名（downloadFileAsync 会用 decode 后的名字保存）
+    const rawFileName = remoteModel3JsonUrl.split('?')[0].split('/').pop()
+      ?? `${this.config.modelName}.model3.json`;
+    const urlFileName = (() => { try { return decodeURIComponent(rawFileName); } catch { return rawFileName; } })();
+    const baseName = urlFileName.replace(/\.model3\.json$/i, '');
+    this.actualModelBaseName = baseName;
+    const localPath = `${modelDir.uri}${urlFileName}`;
     console.log('📍 本地模型路径:', localPath);
 
-    // 检查模型文件是否存在
-    const modelFile = new File(modelDir, `${this.config.modelName}.model3.json`);
+    // 检查模型文件是否存在（用 decode 后的文件名）
+    const modelFile = new File(modelDir, urlFileName);
 
+    let actualLocalPath = localPath;
     if (!modelFile.exists) {
       console.log('📥 模型文件不存在，开始下载...');
-      await File.downloadFileAsync(remoteModel3JsonUrl, modelDir);
-      console.log('✅ 模型文件下载完成');
+      try {
+        // downloadFileAsync 返回 File 对象，有 .uri 属性
+        const downloaded = await File.downloadFileAsync(remoteModel3JsonUrl, modelDir);
+        actualLocalPath = downloaded.uri;
+        // 同步更新 baseName，供 validateModelFiles 使用
+        const actualFileName = downloaded.uri.split('/').pop() ?? urlFileName;
+        this.actualModelBaseName = (() => { try { return decodeURIComponent(actualFileName); } catch { return actualFileName; } })().replace(/\.model3\.json$/i, '');
+        console.log('✅ 模型文件下载完成, actualLocalPath:', actualLocalPath, 'baseName:', this.actualModelBaseName);
+      } catch (e) {
+        console.error('❌ [step1] model3.json 下载失败:', e);
+        throw e;
+      }
     } else {
-      console.log('✅ 模型文件已存在');
+      console.log('✅ 模型文件已存在:', modelDir.uri + urlFileName);
+      actualLocalPath = modelDir.uri + urlFileName;
     }
 
     // 检查依赖文件是否完整
     if (!this.validateModelFiles()) {
       console.log('📥 依赖文件缺失，下载依赖文件...');
-      await downloadDependenciesFromLocalModel(localPath, remoteModel3JsonUrl);
-      console.log('✅ 依赖文件下载完成');
+      try {
+        await downloadDependenciesFromLocalModel(actualLocalPath, remoteModel3JsonUrl);
+        console.log('✅ 依赖文件下载完成');
+      } catch (e) {
+        console.error('❌ [step2] 依赖文件下载失败:', e);
+        throw e;
+      }
     } else {
       console.log('✅ 所有关键文件都存在，跳过依赖下载');
     }
@@ -303,7 +337,7 @@ export class Live2DService {
     }
 
     // 只更新 path：isReady/isLoading 由 core stateChanged 同步
-    this.modelState.path = localPath;
+    this.modelState.path = actualLocalPath;
     this.notifyModelStateChange();
   }
 
@@ -345,8 +379,14 @@ export class Live2DService {
       return;
     }
 
-    const remoteModelUrl = `${this.modelBaseUrl}/${this.config.modelName}.model3.json`;
-    await this.core.loadModel({ uri: remoteModelUrl, source: 'url', id: this.config.modelName });
+    const remoteModelUrl = this.config.modelUrl
+      ?? `${this.modelBaseUrl}/${this.config.modelName}.model3.json`;
+    try {
+      await this.core.loadModel({ uri: remoteModelUrl, source: 'url', id: this.config.modelName });
+    } catch (error) {
+      console.error('❌ [Live2DService] loadModel failed:', error);
+      this.config.onModelError?.(error instanceof Error ? error.message : String(error));
+    }
   }
 
   /**
@@ -372,7 +412,8 @@ export class Live2DService {
 
     // 删除文件
     try {
-      await removeDownloadedModel(`live2d/${this.config.modelName}/`);
+      const cacheDirName = this.config.modelItemId ?? this.config.modelName;
+      await removeDownloadedModel(`live2d/${cacheDirName}/`);
       console.log('✅ 模型缓存已清理');
     } catch (error) {
       console.error('❌ 清理模型缓存失败:', error);
@@ -400,16 +441,61 @@ export class Live2DService {
    * 设置缩放
    */
   setScale(scale: number): void {
-    console.log('🔍 设置缩放:', scale);
-    void this.core.setTransform({ scale } as Transform);
+    // 直接调用 native module，不走 setTransform → React 重渲染链路
+    // 避免频繁缩放触发 live2dProps 重建导致模型闪烁
+    try {
+      if (typeof ReactNativeLive2dModule.setViewScale === 'function') {
+        ReactNativeLive2dModule.setViewScale(scale);
+      } else {
+        // 仅首次打印警告，避免每帧重复
+        if (!this.hasWarnedAboutSetViewScale) {
+          console.warn('⚠️ [Live2DService] setViewScale is not a function, using fallback');
+          this.hasWarnedAboutSetViewScale = true;
+        }
+        void this.core.setTransform({ scale } as Transform);
+      }
+    } catch (e) {
+      // 仅首次打印错误，避免每帧重复
+      if (!this.hasWarnedAboutSetViewScale) {
+        console.error('❌ [Live2DService] setViewScale error:', e);
+        this.hasWarnedAboutSetViewScale = true;
+      }
+      void this.core.setTransform({ scale } as Transform);
+    }
+    // 同步更新内部状态，供 getTransformState() 读取
+    this.transformState.scale = scale;
   }
 
   /**
    * 设置位置
    */
   setPosition(x: number, y: number): void {
-    console.log('📍 设置位置:', x, y);
-    void this.core.setTransform({ position: { x, y } } as Transform);
+    // 直接调用 native module，不走 setTransform → React 重渲染链路
+    // 避免每帧拖动触发 live2dProps 重建导致模型消失
+    try {
+      if (typeof ReactNativeLive2dModule.setViewPosition === 'function') {
+        ReactNativeLive2dModule.setViewPosition(x, y);
+        // 成功时不打印日志，避免拖动时每帧产生 log spam
+      } else {
+        // 仅首次打印警告，避免每帧重复
+        if (!this.hasWarnedAboutSetViewPosition) {
+          console.warn('⚠️ [Live2DService] setViewPosition is not a function, using fallback');
+          this.hasWarnedAboutSetViewPosition = true;
+        }
+        // Fallback: 使用旧的 setTransform 方法
+        void this.core.setTransform({ position: { x, y } } as Transform);
+      }
+    } catch (e) {
+      // 仅首次打印错误，避免每帧重复
+      if (!this.hasWarnedAboutSetViewPosition) {
+        console.error('❌ [Live2DService] setViewPosition error:', e);
+        this.hasWarnedAboutSetViewPosition = true;
+      }
+      // Fallback: 使用旧的 setTransform 方法
+      void this.core.setTransform({ position: { x, y } } as Transform);
+    }
+    // 同步更新内部状态，供 getTransformState() 读取
+    this.transformState.position = { x, y };
   }
 
   /**
@@ -521,10 +607,17 @@ export class Live2DService {
   destroy(): void {
     console.log('🧹 Live2DService 销毁中...');
 
-    // 卸载模型
-    if (this.modelState.isReady) {
-      this.unloadModel();
-    }
+    // 先清空所有回调，防止 unloadModel/dispose 触发的异步状态事件
+    // 污染新 service 的 React state（覆盖掉 useLive2D 的 reset）
+    this.config.onModelStateChange = undefined;
+    this.config.onLoadingStateChange = undefined;
+    this.config.onTransformStateChange = undefined;
+    this.config.onAnimationStateChange = undefined;
+    this.config.onModelLoaded = undefined;
+    this.config.onModelError = undefined;
+
+    // 无论 isReady/isLoading 状态，都强制卸载，避免旧模型残留
+    this.unloadModel();
 
     // 重置状态
     this.isInitialized = false;

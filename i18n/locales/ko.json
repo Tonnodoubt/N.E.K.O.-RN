@@ -1,0 +1,245 @@
+{
+  "common": {
+    "load": "로드",
+    "save": "저장",
+    "cancel": "취소",
+    "confirm": "확인",
+    "ok": "확인",
+    "delete": "삭제",
+    "edit": "편집",
+    "loading": "로드 중...",
+    "error": "오류",
+    "success": "성공",
+    "close": "닫기",
+    "back": "뒤로",
+    "retry": "다시 시도",
+    "settings": "설정",
+    "clear": "지우기",
+    "scan": "스캔",
+    "config": "설정"
+  },
+  "home": {
+    "title": "Project N.E.K.O.",
+    "shortcuts": "바로가기",
+    "apiSettings": "API 설정",
+    "characterManager": "캐릭터 관리",
+    "serverConnection": "서버 연결",
+    "status": {
+      "online": "준비 완료",
+      "offline": "연결 안됨",
+      "configured": "설정됨, 연결 대기 중...",
+      "unconfigured": "QR 스캔 또는 수동 설정으로 연결하세요"
+    },
+    "actions": {
+      "manualConfig": "수동 설정",
+      "qrConfig": "QR 스캔",
+      "currentRole": "캐릭터"
+    }
+  },
+  "main": {
+    "chat": {
+      "title": "채팅",
+      "placeholder": "메시지를 입력하세요...",
+      "send": "보내기",
+      "collapse": "접기",
+      "expand": "펼치기"
+    },
+    "agent": {
+      "enabled": "Agent 모드 활성화됨",
+      "disabled": "Agent 모드 비활성화됨",
+      "connecting": "Agent 서버 연결 중...",
+      "offline": "Agent 서버 실행 중 아님",
+      "unavailable": "기능 사용 불가",
+      "checking": "확인 중..."
+    },
+    "character": {
+      "switching": "캐릭터 전환 중...",
+      "loading": "모델 로드 중...",
+      "switched": "{{name}}로 전환됨",
+      "switchError": "캐릭터 전환 실패",
+      "select": "캐릭터 선택",
+      "noCharacters": "사용 가능한 캐릭터 없음"
+    },
+    "voice": {
+      "start": "음성 시작",
+      "stop": "음성 중지",
+      "rest": "휴식",
+      "preparing": "준비 중...",
+      "ready": "준비 완료",
+      "blocked": "음성 입력 차단됨"
+    },
+    "debug": {
+      "title": "디버그 정보",
+      "toggle": "표시/숨기기",
+      "connection": "연결 정보",
+      "p2pLayer": "P2P 연결 레이어"
+    }
+  },
+  "settings": {
+    "title": "설정",
+    "sections": {
+      "api": "API 설정",
+      "provider": "제공자 선택",
+      "p2p": "P2P 설정",
+      "language": "언어 설정",
+      "serverInfo": "서버 정보"
+    },
+    "language": {
+      "title": "언어 설정",
+      "select": "언어 선택",
+      "current": "현재 언어",
+      "languages": {
+        "zh-CN": "简体中文",
+        "zh-TW": "繁体中文",
+        "en": "English",
+        "ja": "日本語",
+        "ko": "한국어",
+        "ru": "Русский"
+      },
+      "restartRequired": "언어 변경을 위해 앱 재시작 필요"
+    },
+    "api": {
+      "coreProvider": "코어 API 제공자",
+      "assistProvider": "어시스턴트 API 제공자",
+      "save": "설정 저장",
+      "saving": "저장 중...",
+      "saved": "설정 저장됨",
+      "refresh": "설정 새로고침",
+      "apiKey": "API 키",
+      "endpoint": "사용자 정의 엔드포인트",
+      "enterKey": "API 키를 입력하세요"
+    },
+    "p2p": {
+      "title": "P2P 설정",
+      "token": "연결 토큰",
+      "qrCode": "P2P QR 코드",
+      "desc": "N.E.K.O. App으로 QR코드를 스캔하여 연결을 자동 설정합니다",
+      "step1": "휴대폰과 PC가 같은 WiFi에 연결되어 있는지 확인",
+      "step2": "N.E.K.O. App을 열고 \"QR 스캔\" 탭",
+      "step3": "QR코드를 스캔하면 연결이 자동 완료",
+      "lanIp": "로컬 IP",
+      "port": "포트",
+      "tokenHidden": "(QR 스캔으로 자동 획득)"
+    },
+    "serverInfo": {
+      "host": "호스트 주소",
+      "port": "포트",
+      "character": "현재 캐릭터"
+    }
+  },
+  "connection": {
+    "status": {
+      "connected": "연결됨",
+      "disconnected": "연결 안됨",
+      "reconnecting": "재연결 중...",
+      "restored": "연결 복구됨"
+    },
+    "errors": {
+      "timeout": "연결 시간 초과",
+      "refused": "연결 거부됨",
+      "networkError": "네트워크 오류",
+      "invalidConfig": "잘못된 설정"
+    }
+  },
+  "toast": {
+    "connectionRestored": "연결 복구됨",
+    "switchedCharacter": "{{name}}로 전환됨",
+    "settingsSaved": "설정 저장됨",
+    "errorOccurred": "오류 발생: {{error}}"
+  },
+  "qrScanner": {
+    "title": "QR 코드 스캔",
+    "titleDev": "개발용 QR 설정",
+    "permissionDenied": "QR 코드 스캔을 위해 카메라 권한 필요",
+    "checkingPermission": "카메라 권한 확인 중...",
+    "cameraPermissionRequired": "QR 코드 스캔에 카메라 권한이 필요합니다",
+    "grantCameraPermission": "카메라 권한 허용",
+    "scanError": "스캔 실패, 다시 시도하세요",
+    "scanFailed": "스캔 실패",
+    "noValidContent": "유효한 콘텐츠가 감지되지 않았습니다",
+    "invalidCode": "잘못된 QR 코드",
+    "invalidQRContent": "QR 코드 내용을 사용할 수 없습니다",
+    "p2pConfigSuccess": "P2P 연결 설정 완료",
+    "p2pConfigMessage": "LAN IP: {{host}}\n포트: {{port}}\n캐릭터: {{character}}\n\n휴대폰과 컴퓨터가 같은 WiFi 네트워크에 연결되어 있는지 확인하세요.",
+    "autoDetectHint": "QR 코드에 맞추면 자동으로 인식합니다",
+    "continueScan": "계속 스캔",
+    "refocus": "다시 초점 맞추기",
+    "back": "뒤로"
+  },
+  "serverConfig": {
+    "title": "서버 설정",
+    "host": "호스트 주소",
+    "port": "포트",
+    "character": "캐릭터 이름",
+    "save": "설정 저장",
+    "saving": "저장 중...",
+    "saved": "저장 완료",
+    "saveFailed": "저장 실패",
+    "cancel": "취소",
+    "hostPlaceholder": "예: 192.168.1.100",
+    "portPlaceholder": "예: 48911",
+    "characterPlaceholder": "예: mao_pro",
+    "enterHost": "서버 주소를 입력하세요",
+    "enterValidPort": "유효한 포트 번호를 입력하세요 (1-65535)",
+    "enterCharacter": "캐릭터 이름을 입력하세요",
+    "savedMessage": "서버 주소가 설정되었습니다:\n{{host}}:{{port}}\n캐릭터: {{character}}",
+    "resetDefault": "기본값으로 복원",
+    "resetConfirm": "기본 설정으로 복원하시겠습니까?",
+    "instructions": "서버 주소 얻는 방법",
+    "instruction1": "1. 컴퓨터에서 Nekotong 앱을 실행합니다",
+    "instruction2": "2. 앱 화면 왼쪽 상단의 \"연결 주소\"를 확인합니다",
+    "instruction3": "3. 표시된 IP 주소와 포트 번호를 입력합니다",
+    "quickFill": "빠른 입력:",
+    "serverAddress": "서버 주소",
+    "ipHostname": "IP 주소 / 호스트명",
+    "ipHint": "Nekotong에 표시된 연결 주소의 IP 부분을 입력",
+    "portNumber": "포트 번호",
+    "characterSettings": "캐릭터 설정",
+    "characterHint": "Nekotong에 설정된 캐릭터 이름",
+    "currentConfig": "현재 설정",
+    "p2pMode": "P2P 연결 모드",
+    "websocketUrl": "WebSocket URL",
+    "tips": "팁",
+    "tip1": "휴대폰과 컴퓨터가 같은 WiFi 네트워크에 연결되어 있는지 확인하세요",
+    "tip2": "연결 실패 시 방화벽 설정을 확인하세요",
+    "tip3": "QR 스캔 기능을 사용하여 자동 설정할 수도 있습니다"
+  },
+  "characterManager": {
+    "title": "캐릭터 관리",
+    "select": "캐릭터 선택",
+    "switch": "캐릭터 전환",
+    "loading": "로드 중...",
+    "error": "캐릭터 목록 로드 실패",
+    "empty": "사용 가능한 캐릭터 없음",
+    "masterProfile": "마스터 프로필",
+    "characters": "캐릭터",
+    "name": "이름",
+    "nickname": "닉네임",
+    "gender": "성별",
+    "personality": "성격",
+    "backstory": "백스토리",
+    "required": "필수",
+    "optional": "선택",
+    "saveMaster": "프로필 저장",
+    "saving": "저장 중...",
+    "addCharacter": "캐릭터 추가",
+    "editCharacter": "캐릭터 편집",
+    "nameRequired": "이름은 필수입니다",
+    "characterSaved": "캐릭터가 저장되었습니다",
+    "characterDeleted": "캐릭터가 삭제되었습니다",
+    "confirmDelete": "삭제 확인",
+    "confirmDeleteMessage": "\"{{name}}\"을(를) 삭제하시겠습니까?",
+    "setCurrent": "현재 캐릭터로 설정",
+    "setCurrentSuccess": "{{name}}이(가) 현재 캐릭터로 설정되었습니다",
+    "noCharacters": "캐릭터가 없습니다",
+    "addCharacterHint": "+를 눌러 새 캐릭터 추가"
+  },
+  "privacy": {
+    "title": "개인정보 처리방침",
+    "agree": "동의하고 계속하기",
+    "disagree": "동의하지 않음 (종료)",
+    "disagreeTitle": "계속할 수 없습니다",
+    "iosCannotExit": "앱을 사용하려면 개인정보 처리방침에 동의해야 합니다. 종료하려면 홈 화면에서 앱을 닫아주세요.",
+    "content": "N.E.K.O.(이하 '본 앱')를 이용해 주셔서 감사합니다. 본 앱 이용 전 아래 개인정보 처리방침을 주의 깊게 읽어보시기 바랍니다.\n\n1. 수집하는 정보\n본 앱은 다음 정보만 기기 내에 로컬 저장합니다：\n· 서버 연결 설정 (호스트 주소, 포트)\n· 언어 환경 설정\n· 캐릭터 및 UI 개인화 설정\n\n2. 권한 사용 안내\n· 카메라 권한：서버 설정을 위한 QR 코드 스캔 및 실시간 시각 기능에만 사용됩니다.\n· 마이크 권한：음성 입력 기능에만 사용됩니다. 녹음 데이터는 어떠한 제3자 서버에도 전송되지 않습니다.\n· 네트워크 권한：사용자가 직접 호스팅하는 N.E.K.O. 서버와의 통신에 사용됩니다.\n\n3. 데이터 공유\n본 앱은 귀하의 개인정보를 제3자에게 수집, 전송 또는 판매하지 않습니다. 제3자 광고 SDK, 분석 SDK, 행동 추적 구성요소가 포함되어 있지 않습니다.\n\n4. 데이터 보안\n모든 설정 데이터는 기기 내에 로컬 저장됩니다. 본 앱은 이 데이터에 원격으로 접근하지 않습니다.\n\n5. 문의하기\n개인정보 처리방침에 관한 문의는 프로젝트 공식 채널을 통해 연락해 주세요.\n\n본 앱을 계속 사용함으로써 위 개인정보 처리방침을 읽고 동의한 것으로 간주됩니다."
+  }
+}

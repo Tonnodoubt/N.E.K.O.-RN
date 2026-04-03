@@ -8,11 +8,11 @@
  */
 declare module "expo-file-system" {
   export const Paths: {
-    cache: string;
+    cache: string | Directory;
   };
 
   export class Directory {
-    constructor(pathOrParent: string | Directory, childName?: string);
+    constructor(pathOrParent: string | Directory | File, childName?: string);
     name: string;
     uri: string;
     /**
@@ -20,20 +20,23 @@ declare module "expo-file-system" {
      * 这里用 any 避免在业务代码里引入大量类型分支。
      */
     exists: any;
-    create(): void;
-    list(): any;
-    delete(): Promise<void>;
+    create(options?: unknown): void;
+    list(): Array<Directory | File>;
+    delete(): void | Promise<void>;
+    move(target: Directory | File): void;
   }
 
   export class File {
-    constructor(pathOrParent: string | Directory, childName?: string);
+    constructor(pathOrParent: string | Directory | File, childName?: string);
     name: string;
-    size: number;
+    size: number | null;
+    uri: string;
     exists: any;
     textSync(): string;
-    delete(): Promise<void>;
+    delete(): void | Promise<void>;
+    move(targetFile: File | Directory): void;
+    moveAsync(targetFile: File): Promise<void>;
 
-    static downloadFileAsync(srcUrl: string, dstDir: Directory): Promise<{ uri: string }>;
+    static downloadFileAsync(srcUrl: string, dstDir: Directory | File): Promise<File | { uri: string }>;
   }
 }
-
