@@ -18,6 +18,11 @@ const yieldToMain = (ms: number = 0): Promise<void> =>
   new Promise(resolve => setTimeout(resolve, ms));
 
 /**
+ * CameraView 刚 ready 时给原生预览一点稳定时间，避免首帧拍照过早失败。
+ */
+const INITIAL_CAPTURE_DELAY_MS = 500;
+
+/**
  * 摄像头流式服务
  * 使用 aggressive yielding 策略避免阻塞 JS 线程
  */
@@ -64,7 +69,7 @@ export class CameraStreamService {
 
     console.log('📹 启动摄像头流');
     this.setStatus('streaming');
-    this.scheduleNextCapture(0);
+    this.scheduleNextCapture(INITIAL_CAPTURE_DELAY_MS);
   }
 
   private scheduleNextCapture(delayMs: number = this.frameInterval) {
@@ -103,7 +108,7 @@ export class CameraStreamService {
     if (this.status !== 'paused') return;
     console.log('📹 恢复摄像头流');
     this.setStatus('streaming');
-    this.scheduleNextCapture(0);
+    this.scheduleNextCapture(INITIAL_CAPTURE_DELAY_MS);
   }
 
   /**

@@ -888,7 +888,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     return false;
   }, [audio.isConnected, audio.isRecording, audio.sendMessage]);
 
-  const handleToggleScreen = useCallback(async (next: boolean) => {
+  const handleToggleCamera = useCallback(async (next: boolean) => {
     if (!next) {
       // 停止摄像头
       cameraStream.stopStreaming();
@@ -1352,7 +1352,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         - 详见：docs/strategy/cross-platform-components.md
         
         功能包括：
-        - 麦克风/屏幕共享切换
+        - 麦克风/摄像头切换
         - Agent 设置面板
         - Settings 面板
         - 设置菜单（Live2D设置、API密钥、角色管理等）
@@ -1364,7 +1364,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
           right={isMobile ? 12 : 24}
           top={isMobile ? screenHeight * 0.05 : 24}
           micEnabled={toolbarMicEnabled}
-          screenEnabled={cameraStream.isStreaming}
+          cameraEnabled={cameraStream.isStreaming}
           goodbyeMode={toolbarGoodbyeMode}
           openPanel={toolbarOpenPanel}
           onOpenPanelChange={setToolbarOpenPanel}
@@ -1373,7 +1373,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
           agent={agent}
           onAgentChange={handleToolbarAgentChange}
           onToggleMic={handleToggleMic}
-          onToggleScreen={handleToggleScreen}
+          onToggleCamera={handleToggleCamera}
           onGoodbye={handleGoodbye}
           onReturn={handleReturn}
           onSettingsMenuClick={handleSettingsMenuClick}
