@@ -32,6 +32,7 @@ import {
   Platform,
   Keyboard,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type { ScrollView as ScrollViewType } from 'react-native';
 import { useT, tOrDefault } from '../i18n';
 import { useChatState, useSendMessage } from './hooks';
@@ -419,7 +420,7 @@ export default function ChatContainer({
         onPress={() => setCollapsed(false)}
         activeOpacity={0.8}
       >
-        <Text style={styles.floatingButtonEmoji}>💬</Text>
+        <Ionicons name="chatbubble-ellipses" size={22} color="#fff" style={styles.floatingButtonEmoji} />
       </TouchableOpacity>
     );
   }
@@ -440,7 +441,7 @@ export default function ChatContainer({
               <View style={styles.header}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Text style={styles.headerTitle}>
-                    {tOrDefault(t, 'chat.title', '💬 Chat')}
+                    {tOrDefault(t, 'chat.title', 'Chat')}
                   </Text>
                   {/* 连接状态指示器 - 仅在受控模式下显示 */}
                   {sendHandler && (
@@ -489,7 +490,7 @@ export default function ChatContainer({
                       {tOrDefault(
                         t,
                         'chat.screenshot.pending',
-                        `📸 待发送照片 (${pendingScreenshots.length})`
+                        `待发送照片 (${pendingScreenshots.length})`
                       )}
                     </Text>
                     <TouchableOpacity

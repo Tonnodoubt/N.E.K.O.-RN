@@ -22,6 +22,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { Ionicons } from '@expo/vector-icons';
 import { useDevConnectionConfig } from '@/hooks/useDevConnectionConfig';
 import { buildHttpBaseURL } from '@/utils/devConnectionConfig';
 import {
@@ -33,19 +34,6 @@ import {
   type CharactersData,
   type MasterProfile,
 } from '@/services/api/characters';
-
-// Icons as text for simplicity (could use react-native-vector-icons later)
-const Icons = {
-  back: '←',
-  add: '+',
-  edit: '✏️',
-  trash: '🗑️',
-  check: '✓',
-  close: '✕',
-  user: '👤',
-  cat: '🐱',
-  current: '⭐',
-};
 
 export default function CharacterManagerScreen() {
   const router = useRouter();
@@ -264,11 +252,11 @@ export default function CharacterManagerScreen() {
     return (
       <View style={[styles.characterItem, isCurrent && styles.characterItemCurrent]}>
         <View style={styles.characterInfo}>
-          <Text style={styles.characterIcon}>{Icons.cat}</Text>
+          <Ionicons name="paw" size={24} color="#00d9ff" style={styles.characterIcon} />
           <View style={styles.characterDetails}>
             <View style={styles.characterNameRow}>
               <Text style={styles.characterName}>{item.nickname || item.name}</Text>
-              {isCurrent && <Text style={styles.currentBadge}>{Icons.current}</Text>}
+              {isCurrent && <Ionicons name="star" size={16} color="#fbbf24" style={styles.currentBadge} />}
             </View>
             {item.personality && (
               <Text style={styles.characterMeta} numberOfLines={1}>{item.personality}</Text>
@@ -288,13 +276,13 @@ export default function CharacterManagerScreen() {
             style={styles.actionButton}
             onPress={() => handleEditCatgirl(item)}
           >
-            <Text style={styles.actionButtonText}>{Icons.edit}</Text>
+            <Ionicons name="create" size={16} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actionButton, styles.deleteButton]}
             onPress={() => handleDeleteCatgirl(item)}
           >
-            <Text style={styles.actionButtonText}>{Icons.trash}</Text>
+            <Ionicons name="trash" size={16} color="#fff" />
           </TouchableOpacity>
         </View>
       </View>
@@ -321,7 +309,7 @@ export default function CharacterManagerScreen() {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Text style={styles.backButtonText}>{Icons.back}</Text>
+            <Ionicons name="chevron-back" size={24} color="#00d9ff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t('characterManager.title')}</Text>
           <View style={styles.headerSpacer} />
@@ -330,9 +318,12 @@ export default function CharacterManagerScreen() {
         {/* Error Message */}
         {error && (
           <View style={styles.errorBox}>
-            <Text style={styles.errorText}>❌ {error}</Text>
+            <View style={styles.errorRow}>
+              <Ionicons name="close-circle" size={16} color="#fff" />
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
             <TouchableOpacity onPress={() => setError(null)}>
-              <Text style={styles.errorClose}>{Icons.close}</Text>
+              <Ionicons name="close" size={18} color="#fff" />
             </TouchableOpacity>
           </View>
         )}
@@ -344,7 +335,7 @@ export default function CharacterManagerScreen() {
           {/* Master Profile Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionIcon}>{Icons.user}</Text>
+              <Ionicons name="person" size={20} color="#00d9ff" style={styles.sectionIcon} />
               <Text style={styles.sectionTitle}>{t('characterManager.masterProfile')}</Text>
             </View>
             <View style={styles.card}>
@@ -394,10 +385,10 @@ export default function CharacterManagerScreen() {
           {/* Catgirls Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionIcon}>{Icons.cat}</Text>
+              <Ionicons name="paw" size={20} color="#00d9ff" style={styles.sectionIcon} />
               <Text style={styles.sectionTitle}>{t('characterManager.characters')}</Text>
               <TouchableOpacity style={styles.addButton} onPress={handleAddCatgirl}>
-                <Text style={styles.addButtonText}>{Icons.add}</Text>
+                <Ionicons name="add" size={20} color="#1a1a2e" />
               </TouchableOpacity>
             </View>
 
@@ -425,7 +416,7 @@ export default function CharacterManagerScreen() {
                   {isNewCharacter ? t('characterManager.addCharacter') : t('characterManager.editCharacter')}
                 </Text>
                 <TouchableOpacity onPress={() => setEditingCharacter(null)}>
-                  <Text style={styles.modalClose}>{Icons.close}</Text>
+                  <Ionicons name="close" size={24} color="#00d9ff" />
                 </TouchableOpacity>
               </View>
 
@@ -551,6 +542,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
   errorText: {
     color: '#fff',
     flex: 1,
@@ -573,7 +570,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionIcon: {
-    fontSize: 20,
     marginRight: 8,
   },
   sectionTitle: {
@@ -654,7 +650,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   characterIcon: {
-    fontSize: 24,
     marginRight: 12,
   },
   characterDetails: {
@@ -671,7 +666,6 @@ const styles = StyleSheet.create({
   },
   currentBadge: {
     marginLeft: 8,
-    fontSize: 16,
   },
   characterMeta: {
     color: '#888',

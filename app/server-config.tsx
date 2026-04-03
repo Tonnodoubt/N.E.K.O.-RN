@@ -20,21 +20,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { Ionicons } from '@expo/vector-icons';
 import { useDevConnectionConfig } from '@/hooks/useDevConnectionConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEY = 'NEKO_DEV_CONNECTION_CONFIG_V1';
-
-// Icons as text
-const Icons = {
-  back: '←',
-  check: '✓',
-  save: '💾',
-  server: '🖥️',
-  port: '🔌',
-  user: '👤',
-  refresh: '🔄',
-};
 
 export default function ServerConfigScreen() {
   const router = useRouter();
@@ -153,11 +143,11 @@ export default function ServerConfigScreen() {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Text style={styles.backButtonText}>{Icons.back}</Text>
+            <Ionicons name="chevron-back" size={24} color="#00d9ff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t('serverConfig.title')}</Text>
           <TouchableOpacity onPress={handleSave} disabled={saving} style={styles.saveButton}>
-            <Text style={styles.saveButtonText}>{Icons.save}</Text>
+            <Ionicons name="save" size={20} color="#00d9ff" />
           </TouchableOpacity>
         </View>
 
@@ -188,7 +178,7 @@ export default function ServerConfigScreen() {
           {/* Server Address Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionIcon}>{Icons.server}</Text>
+              <Ionicons name="server" size={20} color="#00d9ff" style={styles.sectionIcon} />
               <Text style={styles.sectionTitle}>{t('serverConfig.serverAddress')}</Text>
             </View>
             <View style={styles.card}>
@@ -225,7 +215,7 @@ export default function ServerConfigScreen() {
           {/* Character Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionIcon}>{Icons.user}</Text>
+              <Ionicons name="person" size={20} color="#00d9ff" style={styles.sectionIcon} />
               <Text style={styles.sectionTitle}>{t('serverConfig.characterSettings')}</Text>
             </View>
             <View style={styles.card}>
@@ -248,7 +238,7 @@ export default function ServerConfigScreen() {
           {/* Current Connection Info */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionIcon}>{Icons.refresh}</Text>
+              <Ionicons name="refresh" size={20} color="#00d9ff" style={styles.sectionIcon} />
               <Text style={styles.sectionTitle}>{t('serverConfig.currentConfig')}</Text>
             </View>
             <View style={styles.card}>
@@ -285,7 +275,7 @@ export default function ServerConfigScreen() {
               disabled={saving}
             >
               <Text style={styles.primaryButtonText}>
-                {saving ? t('serverConfig.saving') : `${Icons.check} ${t('serverConfig.save')}`}
+                {saving ? t('serverConfig.saving') : t('serverConfig.save')}
               </Text>
             </TouchableOpacity>
 
@@ -296,7 +286,10 @@ export default function ServerConfigScreen() {
 
           {/* Tips */}
           <View style={styles.tipsContainer}>
-            <Text style={styles.tipsTitle}>💡 {t('serverConfig.tips')}</Text>
+            <View style={styles.tipsTitle}>
+              <Ionicons name="bulb" size={20} color="#fbbf24" />
+              <Text style={styles.tipsTitleText}>{t('serverConfig.tips')}</Text>
+            </View>
             <Text style={styles.tipsText}>
               • {t('serverConfig.tip1')}{'\n'}
               • {t('serverConfig.tip2')}{'\n'}
@@ -413,7 +406,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionIcon: {
-    fontSize: 20,
     marginRight: 8,
   },
   sectionTitle: {
@@ -504,10 +496,14 @@ const styles = StyleSheet.create({
     borderColor: '#333',
   },
   tipsTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 4,
+  },
+  tipsTitleText: {
     color: '#fbbf24',
     fontSize: 14,
     fontWeight: '600',
-    marginBottom: 8,
   },
   tipsText: {
     color: '#888',

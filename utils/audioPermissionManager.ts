@@ -4,6 +4,7 @@
  */
 
 import { Platform, PermissionsAndroid, Alert, Linking } from 'react-native';
+import { PERMISSIONS, request, check, RESULTS } from 'react-native-permissions';
 
 export interface PermissionStatus {
   granted: boolean;
@@ -15,12 +16,23 @@ export interface PermissionStatus {
  * 检查麦克风权限状态
  */
 export async function checkMicrophonePermission(): Promise<PermissionStatus> {
+  if (Platform.OS === 'ios') {
+    try {
+      const result = await check(PERMISSIONS.IOS.MICROPHONE);
+      const granted = result === RESULTS.GRANTED;
+      return {
+        granted,
+        canAskAgain: result === RESULTS.DENIED,
+        shouldShowRationale: !granted,
+      };
+    } catch (error) {
+      console.error('检查 iOS 麦克风权限失败:', error);
+      return { granted: false, canAskAgain: true, shouldShowRationale: true };
+    }
+  }
+
   if (Platform.OS !== 'android') {
-    return {
-      granted: true, // iOS 在 Info.plist 中声明，安装时自动授予
-      canAskAgain: false,
-      shouldShowRationale: false,
-    };
+    return { granted: true, canAskAgain: false, shouldShowRationale: false };
   }
 
   try {
@@ -47,6 +59,30 @@ export async function checkMicrophonePermission(): Promise<PermissionStatus> {
  * 请求麦克风权限（带友好提示）
  */
 export async function requestMicrophonePermission(): Promise<boolean> {
+  if (Platform.OS === 'ios') {
+    try {
+      const result = await request(PERMISSIONS.IOS.MICROPHONE);
+      if (result === RESULTS.GRANTED) {
+        console.log('✅ iOS 麦克风权限已授予');
+        return true;
+      }
+      if (result === RESULTS.BLOCKED) {
+        Alert.alert(
+          '需要麦克风权限',
+          '麦克风权限已被禁用，请在系统设置中手动授予。',
+          [
+            { text: '取消', style: 'cancel' },
+            { text: '去设置', onPress: () => Linking.openSettings() },
+          ]
+        );
+      }
+      return false;
+    } catch (error) {
+      console.error('请求 iOS 麦克风权限失败:', error);
+      return false;
+    }
+  }
+
   if (Platform.OS !== 'android') {
     return true;
   }

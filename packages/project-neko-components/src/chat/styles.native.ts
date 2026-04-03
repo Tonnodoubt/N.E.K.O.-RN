@@ -31,8 +31,7 @@ export const styles = StyleSheet.create({
   },
 
   floatingButtonEmoji: {
-    fontSize: 22,
-    color: '#fff',
+    marginRight: 4,
   },
 
   // ===== Modal 遮罩和面板 =====

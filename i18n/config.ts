@@ -71,7 +71,7 @@ export async function getInitialLanguage(): Promise<string> {
   if (stored && SUPPORTED_LANGUAGES.some(l => l.code === stored)) {
     return stored;
   }
-  return getSystemLanguage();
+  return 'zh-CN';
 }
 
 // i18n 配置

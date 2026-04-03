@@ -15,7 +15,8 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSMicrophoneUsageDescription": "需要使用麦克风进行语音输入",
-        "NSCameraUsageDescription": "需要使用相机进行扫码配置和实时视觉功能"
+        "NSCameraUsageDescription": "需要使用相机进行扫码配置和实时视觉功能",
+        "NSLocalNetworkUsageDescription": "需要访问本地网络连接到 N.E.K.O. 服务器"
       },
       "bundleIdentifier": "com.neko.app",
       "buildNumber": "1.1.0"
