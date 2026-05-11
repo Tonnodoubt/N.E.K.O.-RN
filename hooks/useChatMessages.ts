@@ -238,6 +238,11 @@ export const useChatMessages = (config: UseChatMessagesConfig = {}) => {
           return { type: 'catgirl_switched', characterName };
         }
 
+        else if (parsed.type === 'response_discarded') {
+          console.log('🗑️ 响应被丢弃');
+          return { type: 'response_discarded' };
+        }
+
         else {
           console.log('📋 其他类型消息:', parsed.type);
           return { type: 'other', data: parsed };

@@ -58,7 +58,7 @@ function generateMessageId(counter: number): string {
 }
 
 const MainUIScreen: React.FC<MainUIScreenProps> = () => {
-  const { t } = useTranslation();
+  const { t, i18n: i18nInstance } = useTranslation();
 
   const [isPageFocused, setIsPageFocused] = useState(true);
 
@@ -438,6 +438,12 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         return;
       }
 
+      // 处理 session_preparing 事件（服务端正在准备 session，如模型加载）
+      if (parsedMsg?.type === 'session_preparing') {
+        console.log('⏳ 收到 session_preparing，input_mode:', parsedMsg.input_mode);
+        return;
+      }
+
       // 处理文本消息并通过 MainManager 协调
       const result = await chat.handleWebSocketMessage(event);
 
@@ -448,6 +454,9 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         mainManager.onUserSpeechDetected();
       } else if (result?.type === 'turn_end') {
         mainManager.onTurnEnd(result.fullText);
+      } else if (result?.type === 'response_discarded') {
+        // 后端丢弃了当前响应（如用户打断或新轮覆盖），清理流式 UI 状态
+        console.log('🗑️ 收到 response_discarded');
       } else if ((result?.type === 'status' || result?.type === 'system_notice') && result.message) {
         // 系统状态消息通过 Toast 显示，不加入聊天列表
         statusToastRef.current?.show(result.message, 3000);
@@ -546,6 +555,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
             input_type: 'text',
             audio_format: 'PCM_48000HZ_MONO_16BIT',
             new_session: false,
+            language: i18nInstance?.language?.substring(0, 5) || 'zh-CN',
           });
           console.log('✅ start_session 已调用');
 

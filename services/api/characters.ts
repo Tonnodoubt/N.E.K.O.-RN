@@ -97,11 +97,11 @@ export function createCharactersApiClient(apiBase: string, p2pToken?: string) {
   return {
     /**
      * Get all characters data (master + catgirls)
-     * GET /api/characters/
+     * GET /api/characters
      */
     async getCharacters(language?: string): Promise<CharactersData> {
       const params = language ? { language } : {};
-      return client.get('/characters/', { params });
+      return client.get('/characters', { params });
     },
 
     /**
