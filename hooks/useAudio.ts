@@ -21,6 +21,7 @@ interface UseAudioConfig {
 export interface UseAudioReturn {
   // 状态
   isConnected: boolean;
+  isConnectedRef: React.MutableRefObject<boolean>;
   isRecording: boolean;
   connectionStatus: string;
   audioStats: AudioStats;
@@ -42,6 +43,7 @@ export interface UseAudioReturn {
 export const useAudio = (config: UseAudioConfig): UseAudioReturn => {
   // 状态管理
   const [isConnected, setIsConnected] = useState(false);
+  const isConnectedRef = useRef(false);
   const [isRecording, setIsRecording] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('未连接');
   const [audioStats, setAudioStats] = useState<AudioStats>({
@@ -97,6 +99,9 @@ export const useAudio = (config: UseAudioConfig): UseAudioReturn => {
     setReconnectKey(k => k + 1);
   }, []);
 
+  // 自动重连定时器
+  const autoReconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // 组件初始化
   useEffect(() => {
     // 配置未加载完成时不初始化连接，避免用 DEFAULT config 发起无效连接
@@ -119,8 +124,24 @@ export const useAudio = (config: UseAudioConfig): UseAudioReturn => {
       characterName: config.characterName,
       p2p: config.p2p,
       onConnectionChange: (connected) => {
+        isConnectedRef.current = connected;
         setIsConnected(connected);
         setConnectionStatus(connected ? '已连接' : '未连接');
+        if (connected) {
+          // 连接恢复，清除自动重连定时器
+          if (autoReconnectTimerRef.current) {
+            clearTimeout(autoReconnectTimerRef.current);
+            autoReconnectTimerRef.current = null;
+          }
+        } else {
+          // 连接断开，延迟后触发重建（兜底 realtime client 内部重连耗尽的情况）
+          if (autoReconnectTimerRef.current) clearTimeout(autoReconnectTimerRef.current);
+          autoReconnectTimerRef.current = setTimeout(() => {
+            autoReconnectTimerRef.current = null;
+            console.log('🔄 连接断开超时，触发完整重建');
+            setReconnectKey(k => k + 1);
+          }, 20_000); // realtime client 内部重连最多 5*3s=15s，给 20s 余量
+        }
         config.onConnectionChange?.(connected);
       },
       onMessage: (event) => {
@@ -169,12 +190,15 @@ export const useAudio = (config: UseAudioConfig): UseAudioReturn => {
     // 清理函数
     return () => {
       console.log('🧹 useAudio 清理中...');
+      if (autoReconnectTimerRef.current) {
+        clearTimeout(autoReconnectTimerRef.current);
+        autoReconnectTimerRef.current = null;
+      }
       audioServiceRef.current?.destroy();
       audioServiceRef.current = null;
       setAudioService(null);
       setIsRecording(false);
       setIsConnected(false);
-      // 🔥 修复：清理时重置 isReadyRef，避免 waitForConnection 误判
       isReadyRef.current = false;
     };
   }, [config.host, config.port, config.characterName, p2pToken, config.enabled, reconnectKey]);
@@ -182,6 +206,7 @@ export const useAudio = (config: UseAudioConfig): UseAudioReturn => {
   return {
     // 状态
     isConnected,
+    isConnectedRef,
     isRecording,
     connectionStatus,
     audioStats,

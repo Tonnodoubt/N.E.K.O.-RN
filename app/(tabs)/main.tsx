@@ -97,6 +97,9 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   // ref 持有最新值，供 useFocusEffect 闭包读取（避免 stale closure）
   const live2dModelRef = useRef(live2dModel);
   live2dModelRef.current = live2dModel;
+  // ref 持有 audio.reconnect 和连接状态，供 AppState 前台恢复时调用
+  const audioReconnectRef = useRef<() => void>(() => {});
+  const audioConnectedRef = useRef(false);
   const { config, isLoaded: isConfigLoaded, setConfig, applyQrRaw, refreshFromCloud } = useDevConnectionConfig();
 
   // UDP P2P 连接（自动尝试三层回退）
@@ -125,16 +128,22 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         isInBackgroundRef.current = true;
       } else if (nextAppState === 'active') {
         console.log('📱 应用回到前台，延迟重置后台状态');
-        // 标记是从后台恢复，用于显示"已恢复连接"提示
         wasInBackgroundRef.current = true;
-        // 延迟重置，给 WebSocket 重连时间，避免显示错误
         if (appStateTimerRef.current) clearTimeout(appStateTimerRef.current);
+        // 延迟 1.5s 后检查连接状态，如果仍断连则触发重连
         appStateTimerRef.current = setTimeout(() => {
           appStateTimerRef.current = null;
           isInBackgroundRef.current = false;
           wasInBackgroundRef.current = false;
           console.log('📱 后台状态标志已重置');
         }, 2000);
+        // 独立定时器：1.5s 后检查连接，给 realtime client 内部重连一点时间
+        setTimeout(() => {
+          if (!audioConnectedRef.current) {
+            console.log('📱 前台恢复但连接断开，触发重连');
+            audioReconnectRef.current();
+          }
+        }, 1500);
       }
     });
 
@@ -592,6 +601,10 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       }
     }
   });
+
+  // 同步 reconnect 和连接状态到 ref，供 AppState 前台恢复时使用
+  audioReconnectRef.current = audio.reconnect;
+  audioConnectedRef.current = audio.isConnectedRef.current;
 
   // 摄像头流式 hook
   const cameraStream = useCameraStream({
