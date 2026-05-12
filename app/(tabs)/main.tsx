@@ -1249,14 +1249,18 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         const clientMessageId = generateMessageId();
         sentClientMessageIds.current.set(clientMessageId, Date.now());
 
+        // 后端需要 data: 前缀的 base64（与 CameraStreamService 格式一致）
         audio.sendMessage({
           action: 'stream_data',
           data: imgBase64,
-          input_type: 'camera', // 与 N.E.K.O 主项目兼容
+          input_type: 'camera',
           clientMessageId,
         });
       }
-      chat.addMessage(`[已发送${imagesToSend.length}张照片]`, 'user');
+      // 每张图片作为独立消息显示（保留 data: 前缀供 Image 组件使用）
+      for (const imgBase64 of imagesToSend) {
+        chat.addMessage(`📷 照片`, 'user', { image: imgBase64 });
+      }
     }
 
     // 再发送文本

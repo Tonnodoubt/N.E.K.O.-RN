@@ -3,7 +3,7 @@ import MessageList from "./MessageList";
 import ChatInput from "./ChatInput";
 import { useT, tOrDefault } from "../i18n";
 import { useChatState, useSendMessage } from "./hooks";
-import type { ChatMessage, ExternalChatMessage, ChatContainerProps, ConnectionStatus, PendingScreenshot } from "./types";
+import type { ChatMessage, ExternalChatMessage, ChatContainerProps, ConnectionStatus, PendingScreenshot, MessageBlock } from "./types";
 
 /** 检测是否为移动端 */
 function isMobile(): boolean {
@@ -35,12 +35,15 @@ function convertExternalMessage(msg: ExternalChatMessage): ChatMessage {
     system: 'system',
   };
 
-  return {
-    id: msg.id,
-    role: roleMap[msg.sender],
-    content: msg.text,
-    createdAt: new Date(msg.timestamp).getTime() || Date.now(),
-  };
+  const text = msg.text || '';
+  const blocks: MessageBlock[] = [];
+  if (text) blocks.push({ type: 'text', text });
+  if (msg.image) blocks.push({ type: 'image', url: msg.image });
+
+  if (msg.image) {
+    return { id: msg.id, role: roleMap[msg.sender], image: msg.image, content: text || undefined, createdAt: new Date(msg.timestamp).getTime() || Date.now(), blocks };
+  }
+  return { id: msg.id, role: roleMap[msg.sender], content: text, createdAt: new Date(msg.timestamp).getTime() || Date.now(), ...(blocks.length > 0 ? { blocks } : {}) };
 }
 
 /** 获取连接状态指示器颜色 */

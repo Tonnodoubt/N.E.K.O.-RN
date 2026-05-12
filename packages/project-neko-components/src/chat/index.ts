@@ -13,5 +13,6 @@
 export { default as ChatContainer } from "./ChatContainer";
 export { default as ChatInput } from "./ChatInput";
 export { default as MessageList } from "./MessageList";
+export { getMessageText, getMessageImage, getMessageBlocks } from "./types";
 export * from "./types";
 export * from "./hooks";

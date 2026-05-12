@@ -5,7 +5,8 @@ export interface ChatMessage {
   text: string;
   sender: 'user' | 'gemini' | 'system';
   timestamp: string;
-  isComplete?: boolean; // 标记消息是否完成（用于流式消息）
+  isComplete?: boolean;
+  image?: string;
 }
 
 interface UseChatMessagesConfig {
@@ -59,9 +60,9 @@ export const useChatMessages = (config: UseChatMessagesConfig = {}) => {
 
   // 添加新消息
   const addMessage = useCallback((
-    text: string, 
+    text: string,
     sender: ChatMessage['sender'] = 'system',
-    options?: { skipTimestamp?: boolean; isComplete?: boolean }
+    options?: { skipTimestamp?: boolean; isComplete?: boolean; image?: string }
   ) => {
     const timestamp = getCurrentTimeString();
     const newMessage: ChatMessage = {
@@ -70,6 +71,7 @@ export const useChatMessages = (config: UseChatMessagesConfig = {}) => {
       sender,
       timestamp,
       isComplete: options?.isComplete ?? true,
+      ...(options?.image ? { image: options.image } : {}),
     };
 
     setMessages(prevMessages => {
