@@ -3,6 +3,26 @@ import type { CharactersData } from '@/services/api/characters';
 import { buildHttpBaseURL, appendP2PToken } from '@/utils/devConnectionConfig';
 import { useAudio } from '@/hooks/useAudio';
 import { useChatMessages } from '@/hooks/useChatMessages';
+import * as ImageManipulator from 'expo-image-manipulator';
+
+const MAX_IMAGE_BASE64_LENGTH = 1_500_000; // ~1.1MB decoded, safe for WS frames
+
+async function compressImageIfNeeded(dataURI: string): Promise<string> {
+  if (dataURI.length <= MAX_IMAGE_BASE64_LENGTH) return dataURI;
+  try {
+    const result = await ImageManipulator.manipulateAsync(
+      dataURI,
+      [{ resize: { width: 1280 } }],
+      { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+    );
+    if (result.base64) {
+      return `data:image/jpeg;base64,${result.base64}`;
+    }
+  } catch (e) {
+    console.warn('[compressImage] failed, sending original:', e);
+  }
+  return dataURI;
+}
 import { useDevConnectionConfig } from '@/hooks/useDevConnectionConfig';
 import { useUdpP2PConnection } from '@/hooks/useUdpP2PConnection';
 import { useLipSync } from '@/hooks/useLipSync';
@@ -1244,12 +1264,13 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
 
     // 发送图片
     if (imagesToSend.length > 0) {
-      for (const imgBase64 of imagesToSend) {
+      for (const rawBase64 of imagesToSend) {
         messageCounterRef.current += 1;
         const clientMessageId = generateMessageId();
         sentClientMessageIds.current.set(clientMessageId, Date.now());
 
-        // 后端需要 data: 前缀的 base64（与 CameraStreamService 格式一致）
+        const imgBase64 = await compressImageIfNeeded(rawBase64);
+
         audio.sendMessage({
           action: 'stream_data',
           data: imgBase64,

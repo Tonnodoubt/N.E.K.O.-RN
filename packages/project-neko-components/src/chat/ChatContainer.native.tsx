@@ -12,6 +12,9 @@ import type { ChatMessage, ExternalChatMessage, ChatContainerProps, ConnectionSt
 let HapticsImpact: ((style: number) => Promise<void>) | null = null;
 try { HapticsImpact = require('expo-haptics').impactAsync; } catch { /* not linked */ }
 
+let BlurView: React.ComponentType<{ intensity: number; tint: string; style: any; children?: React.ReactNode }> | null = null;
+try { BlurView = require('expo-blur').BlurView; } catch { /* not linked */ }
+
 function ensureDataURI(base64: string): string {
   if (base64.startsWith('data:')) return base64;
   return `data:image/jpeg;base64,${base64}`;
@@ -265,94 +268,102 @@ export default function ChatContainer({
   }
 
   // ===== Expanded =====
+  const panelContent = (
+    <>
+      {/* Header */}
+      <View style={s.header}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={s.headerTitle}>{tOrDefault(t, 'chat.title', 'N.E.K.O. Chat')}</Text>
+          {sendHandler && (
+            <View style={s.statusRow}>
+              <View style={[s.statusDot, { backgroundColor: getStatusColor(connectionStatus) }]} />
+              <Text style={s.statusText}>{getStatusText(connectionStatus, statusText, t)}</Text>
+            </View>
+          )}
+        </View>
+        <TouchableOpacity onPress={() => setCollapsed(true)} activeOpacity={0.7} style={s.closeButton}>
+          <Ionicons name="chevron-down" size={18} color="#666" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Message list */}
+      <View style={{ flex: 1 }}>
+        <MessageList messages={displayMessages} />
+      </View>
+
+      {/* Avatar tools */}
+      {onAvatarTool && (
+        <View style={s.toolRow}>
+          {AVATAR_TOOLS.map((tool) => (
+            <TouchableOpacity key={tool.action} onPress={() => handleAvatarTool(tool.action)} activeOpacity={0.6} style={s.toolButton}>
+              <Ionicons name={tool.icon} size={22} color="#44b7fe" />
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* Pending screenshots */}
+      {pendingScreenshots.length > 0 && (
+        <View style={s.pendingSection}>
+          <View style={s.pendingRow}>
+            <Text style={s.pendingText}>
+              {tOrDefault(t, 'chat.screenshot.pending', `待发送照片 (${pendingScreenshots.length})`)}
+            </Text>
+            <TouchableOpacity onPress={() => setPendingScreenshots([])} activeOpacity={0.7}>
+              <Text style={s.clearText}>{tOrDefault(t, 'chat.screenshot.clearAll', '清除全部')}</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView horizontal>
+            {pendingScreenshots.map((p) => (
+              <View key={p.id} style={{ marginRight: 8, position: 'relative' }}>
+                <Image source={{ uri: ensureDataURI(p.base64) }} style={{ width: 56, height: 56, borderRadius: 8 }} resizeMode="cover" />
+                <TouchableOpacity
+                  onPress={() => setPendingScreenshots((prev) => prev.filter((x) => x.id !== p.id))}
+                  activeOpacity={0.7} style={s.removeBadge}
+                >
+                  <Text style={{ color: '#fff', fontSize: 10 }}>x</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Input area */}
+      <View style={s.inputSection}>
+        <View style={s.inputRow}>
+          {(onPickImage || onTakePhotoProp) && (
+            <TouchableOpacity onPress={handleImageAction} activeOpacity={0.7} disabled={disabled} style={{ paddingVertical: 6 }}>
+              <Ionicons name="image-outline" size={20} color={disabled ? '#ccc' : '#44b7fe'} />
+            </TouchableOpacity>
+          )}
+          <TextInput
+            value={inputValue} onChangeText={setInputValue}
+            placeholder={tOrDefault(t, 'chat.input.placeholder', 'Text chat mode...')}
+            placeholderTextColor="rgba(0,0,0,0.3)"
+            multiline blurOnSubmit={false} editable={!disabled}
+            style={s.textInput}
+          />
+          <TouchableOpacity onPress={handleSend} activeOpacity={0.7} disabled={disabled}
+            style={[s.sendButton, disabled && s.sendButtonDisabled]}
+          >
+            <Ionicons name="send" size={14} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </>
+  );
+
   return (
     <Modal visible={!collapsed} transparent animationType="slide" onRequestClose={() => setCollapsed(true)}>
       <TouchableWithoutFeedback onPress={() => setCollapsed(true)}>
         <View style={s.backdrop}>
           <TouchableWithoutFeedback>
-            <View style={s.panel}>
-              {/* Header */}
-              <View style={s.header}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Text style={s.headerTitle}>{tOrDefault(t, 'chat.title', 'N.E.K.O. Chat')}</Text>
-                  {sendHandler && (
-                    <View style={s.statusRow}>
-                      <View style={[s.statusDot, { backgroundColor: getStatusColor(connectionStatus) }]} />
-                      <Text style={s.statusText}>{getStatusText(connectionStatus, statusText, t)}</Text>
-                    </View>
-                  )}
-                </View>
-                <TouchableOpacity onPress={() => setCollapsed(true)} activeOpacity={0.7} style={s.closeButton}>
-                  <Ionicons name="chevron-down" size={18} color="#666" />
-                </TouchableOpacity>
-              </View>
-
-              {/* Message list */}
-              <View style={{ flex: 1 }}>
-                <MessageList messages={displayMessages} />
-              </View>
-
-              {/* Avatar tools */}
-              {onAvatarTool && (
-                <View style={s.toolRow}>
-                  {AVATAR_TOOLS.map((tool) => (
-                    <TouchableOpacity key={tool.action} onPress={() => handleAvatarTool(tool.action)} activeOpacity={0.6} style={s.toolButton}>
-                      <Ionicons name={tool.icon} size={22} color="#44b7fe" />
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-
-              {/* Pending screenshots */}
-              {pendingScreenshots.length > 0 && (
-                <View style={s.pendingSection}>
-                  <View style={s.pendingRow}>
-                    <Text style={s.pendingText}>
-                      {tOrDefault(t, 'chat.screenshot.pending', `待发送照片 (${pendingScreenshots.length})`)}
-                    </Text>
-                    <TouchableOpacity onPress={() => setPendingScreenshots([])} activeOpacity={0.7}>
-                      <Text style={s.clearText}>{tOrDefault(t, 'chat.screenshot.clearAll', '清除全部')}</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <ScrollView horizontal>
-                    {pendingScreenshots.map((p) => (
-                      <View key={p.id} style={{ marginRight: 8, position: 'relative' }}>
-                        <Image source={{ uri: ensureDataURI(p.base64) }} style={{ width: 56, height: 56, borderRadius: 8 }} resizeMode="cover" />
-                        <TouchableOpacity
-                          onPress={() => setPendingScreenshots((prev) => prev.filter((x) => x.id !== p.id))}
-                          activeOpacity={0.7} style={s.removeBadge}
-                        >
-                          <Text style={{ color: '#fff', fontSize: 10 }}>x</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
-
-              {/* Input area */}
-              <View style={s.inputSection}>
-                <View style={s.inputRow}>
-                  {(onPickImage || onTakePhotoProp) && (
-                    <TouchableOpacity onPress={handleImageAction} activeOpacity={0.7} disabled={disabled} style={{ paddingVertical: 6 }}>
-                      <Ionicons name="image-outline" size={20} color={disabled ? '#ccc' : '#44b7fe'} />
-                    </TouchableOpacity>
-                  )}
-                  <TextInput
-                    value={inputValue} onChangeText={setInputValue}
-                    placeholder={tOrDefault(t, 'chat.input.placeholder', 'Text chat mode...')}
-                    placeholderTextColor="rgba(0,0,0,0.3)"
-                    multiline blurOnSubmit={false} editable={!disabled}
-                    style={s.textInput}
-                  />
-                  <TouchableOpacity onPress={handleSend} activeOpacity={0.7} disabled={disabled}
-                    style={[s.sendButton, disabled && s.sendButtonDisabled]}
-                  >
-                    <Ionicons name="send" size={14} color="#fff" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
+            {BlurView ? (
+              <BlurView intensity={40} tint="light" style={s.panel}>{panelContent}</BlurView>
+            ) : (
+              <View style={s.panel}>{panelContent}</View>
+            )}
           </TouchableWithoutFeedback>
 
           {renderFloatingOverlay && (
