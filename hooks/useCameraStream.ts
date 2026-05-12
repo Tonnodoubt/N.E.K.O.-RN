@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, AppState } from 'react-native';
 import { CameraView, useCameraPermissions, type CameraType } from 'expo-camera';
 import {
   CameraStreamService,
@@ -110,24 +110,22 @@ export function useCameraStream(
     setError(null);
   }, []);
 
-  // 后台暂停 / 前台恢复
+  // 后台暂停 / 前台恢复（事件驱动，替代轮询）
   useEffect(() => {
-    const checkBackground = () => {
-      const isInBackground = config.isInBackgroundRef.current;
+    const subscription = AppState.addEventListener('change', (nextState) => {
       const service = serviceRef.current;
-
       if (!service) return;
 
-      if (isInBackground && status === 'streaming') {
+      const goingBackground = nextState === 'background' || nextState === 'inactive';
+      if (goingBackground && status === 'streaming') {
         service.pause();
-      } else if (!isInBackground && status === 'paused') {
+      } else if (!goingBackground && status === 'paused') {
         service.resume();
       }
-    };
+    });
 
-    const interval = setInterval(checkBackground, 500);
-    return () => clearInterval(interval);
-  }, [config.isInBackgroundRef, status]);
+    return () => subscription.remove();
+  }, [status]);
 
   // WS 断连处理
   useEffect(() => {

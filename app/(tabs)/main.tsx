@@ -52,9 +52,9 @@ const SCALE_MIN = 0.3;
 const SCALE_MAX = 2.0;
 const clampScale = (v: number) => Math.max(SCALE_MIN, Math.min(SCALE_MAX, v));
 
-// 生成消息 ID
-function generateMessageId(counter: number): string {
-  return `msg-${Date.now()}-${counter}`;
+// 生成消息 ID（时间戳 + 随机后缀，避免碰撞）
+function generateMessageId(): string {
+  return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 const MainUIScreen: React.FC<MainUIScreenProps> = () => {
@@ -359,13 +359,14 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
 
   // 稳定 P2P 配置引用，避免不必要的重连（依赖整个 p2p 对象，而非只追踪 token）
   const p2pConfig = useMemo(() => config.p2p, [config.p2p]);
+  const isAudioConnectionEnabled = isConfigLoaded && (!p2pConfig || udpConnection.status === 'connected');
 
   const audio = useAudio({
     host: config.host,
     port: config.port,
     characterName: config.characterName,
     p2p: p2pConfig,  // P2P 配置（如果存在则使用 P2P 模式连接）
-    enabled: isConfigLoaded,  // 等待配置加载完成后再连接
+    enabled: isAudioConnectionEnabled,  // 等待配置和 LAN/P2P 连接确认后再连接
     isSwitchingRef: isSwitchingCharacterRef,  // 传入角色切换标志，用于在切换期间忽略错误
     isInBackgroundRef: isInBackgroundRef,  // 传入后台标志，用于在拍照等场景忽略错误
     onMessage: async (event) => {
@@ -374,7 +375,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       if (typeof event.data !== 'string') return;
 
       // 检查 clientMessageId 用于去重
-      let parsedMsg: any = null;
+      let parsedMsg: Record<string, unknown> | null = null;
       try {
         parsedMsg = JSON.parse(event.data);
         const clientMessageId = parsedMsg?.clientMessageId as string | undefined;
@@ -598,6 +599,17 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     isConnected: audio.isConnected,
     isInBackgroundRef,
   });
+
+  // 拍照和实时视觉共用相机资源；如果实时摄像头正在运行，先释放它再拉起系统相机。
+  const handleTakePhoto = useCallback(async () => {
+    if (cameraStream.isStreaming) {
+      console.log('📸 拍照前先暂停实时摄像头，避免相机资源冲突');
+      cameraStream.stopStreaming();
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    await camera.takePhoto();
+  }, [camera, cameraStream.isStreaming, cameraStream.stopStreaming]);
 
   // 监听摄像头流错误
   useEffect(() => {
@@ -1221,7 +1233,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     if (imagesToSend.length > 0) {
       for (const imgBase64 of imagesToSend) {
         messageCounterRef.current += 1;
-        const clientMessageId = generateMessageId(messageCounterRef.current);
+        const clientMessageId = generateMessageId();
         sentClientMessageIds.current.set(clientMessageId, Date.now());
 
         audio.sendMessage({
@@ -1237,7 +1249,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     // 再发送文本
     if (text.trim()) {
       messageCounterRef.current += 1;
-      const clientMessageId = generateMessageId(messageCounterRef.current);
+      const clientMessageId = generateMessageId();
       sentClientMessageIds.current.set(clientMessageId, Date.now());
 
       // 添加用户消息到 UI
@@ -1416,7 +1428,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
           disabled={!audio.isConnected}
           forceCollapsed={isChatForceCollapsed}
           onPickImage={imagePicker.pickImages}
-          onTakePhoto={camera.takePhoto}
+          onTakePhoto={handleTakePhoto}
           cameraEnabled={true}
           externalPendingImages={[
             ...imagePicker.images.map((img, index) => ({
@@ -1560,7 +1572,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       )}
 
       {/* 调试按钮 - 右下角浮动 */}
-      <TouchableOpacity
+      {__DEV__ && (<TouchableOpacity
         style={{
           position: 'absolute',
           bottom: 100,
@@ -1581,10 +1593,10 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         onPress={() => setDebugPanelVisible(true)}
       >
         <Ionicons name="construct" size={20} color="#fff" />
-      </TouchableOpacity>
+      </TouchableOpacity>)}
 
       {/* 调试信息面板 */}
-      <Modal
+      {__DEV__ && (<Modal
         visible={debugPanelVisible}
         transparent
         animationType="slide"
@@ -1659,7 +1671,7 @@ ${t('serverInfo.character')}: ${config.characterName || t('main.character.noChar
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
-      </Modal>
+      </Modal>)}
     </View>
   );
 }

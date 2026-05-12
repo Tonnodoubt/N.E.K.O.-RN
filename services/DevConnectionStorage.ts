@@ -11,26 +11,42 @@ function isValidPort(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 65536;
 }
 
-function sanitizePartial(input: any): Partial<DevConnectionConfig> {
+type DevConnectionConfigInput = Partial<DevConnectionConfig> & {
+  p2p?: DevConnectionConfig['p2p'] | null;
+};
+
+function sanitizeP2P(input: unknown): DevConnectionConfig['p2p'] | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const p2p = input as Record<string, unknown>;
+  if (!isNonEmptyString(p2p.token)) return undefined;
+
+  return {
+    token: p2p.token.trim(),
+    deviceId: isNonEmptyString(p2p.deviceId) ? p2p.deviceId : undefined,
+    // 第1层：LAN 直连
+    lanIp: isNonEmptyString(p2p.lanIp) ? p2p.lanIp : undefined,
+    lanPort: isValidPort(p2p.lanPort) ? p2p.lanPort : undefined,
+    // 第2层：STUN 打洞
+    stunIp: isNonEmptyString(p2p.stunIp) ? p2p.stunIp : undefined,
+    stunPort: isValidPort(p2p.stunPort) ? p2p.stunPort : undefined,
+  };
+}
+
+function sanitizePartial(input: unknown): Partial<DevConnectionConfig> {
+  const obj = input as Record<string, unknown> | null | undefined;
   const out: Partial<DevConnectionConfig> = {};
-  if (isNonEmptyString(input?.host)) out.host = input.host.trim();
-  if (isValidPort(input?.port)) out.port = input.port;
-  if (isNonEmptyString(input?.characterName)) out.characterName = input.characterName.trim();
+  if (isNonEmptyString(obj?.host)) out.host = (obj.host as string).trim();
+  if (isValidPort(obj?.port)) out.port = obj.port as number;
+  if (isNonEmptyString(obj?.characterName)) out.characterName = (obj.characterName as string).trim();
 
   // 支持 P2P 配置 (v3: 完整的两层连接信息)
-  if (input?.p2p && typeof input.p2p === 'object') {
-    const p2p = input.p2p;
-    if (isNonEmptyString(p2p.token)) {
-      out.p2p = {
-        token: p2p.token,
-        deviceId: isNonEmptyString(p2p.deviceId) ? p2p.deviceId : undefined,
-        // 第1层：LAN 直连
-        lanIp: isNonEmptyString(p2p.lanIp) ? p2p.lanIp : undefined,
-        lanPort: isValidPort(p2p.lanPort) ? p2p.lanPort : undefined,
-        // 第2层：STUN 打洞
-        stunIp: isNonEmptyString(p2p.stunIp) ? p2p.stunIp : undefined,
-        stunPort: isValidPort(p2p.stunPort) ? p2p.stunPort : undefined,
-      };
+  if (Object.prototype.hasOwnProperty.call(obj ?? {}, 'p2p')) {
+    const p2p = sanitizeP2P(obj?.p2p);
+    if (p2p) {
+      out.p2p = p2p;
+    } else {
+      // 显式传入 `p2p: undefined/null` 时，表示清掉旧的 P2P 配置。
+      out.p2p = undefined;
     }
   }
 
@@ -61,7 +77,7 @@ export async function getStoredDevConnectionConfig(): Promise<DevConnectionConfi
 }
 
 export async function setStoredDevConnectionConfig(
-  next: Partial<DevConnectionConfig> | DevConnectionConfig
+  next: DevConnectionConfigInput
 ): Promise<DevConnectionConfig> {
   let current: DevConnectionConfig = DEFAULT_DEV_CONNECTION_CONFIG;
   try {
@@ -101,4 +117,3 @@ export async function hasUserStoredConfig(): Promise<boolean> {
     return false;
   }
 }
-

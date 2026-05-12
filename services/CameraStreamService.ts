@@ -21,6 +21,7 @@ const yieldToMain = (ms: number = 0): Promise<void> =>
  * CameraView 刚 ready 时给原生预览一点稳定时间，避免首帧拍照过早失败。
  */
 const INITIAL_CAPTURE_DELAY_MS = 500;
+const CAPTURE_RETRY_DELAY_MS = 250;
 
 /**
  * 摄像头流式服务
@@ -31,6 +32,7 @@ export class CameraStreamService {
   private isCapturing = false;
   private status: CameraStreamStatus = 'idle';
   private timeoutId: ReturnType<typeof setTimeout> | null = null;
+  private hasCompletedCapture = false;
 
   private readonly config: CameraStreamConfig;
   private readonly frameInterval: number;
@@ -69,6 +71,7 @@ export class CameraStreamService {
 
     console.log('📹 启动摄像头流');
     this.setStatus('streaming');
+    this.hasCompletedCapture = false;
     this.scheduleNextCapture(INITIAL_CAPTURE_DELAY_MS);
   }
 
@@ -142,13 +145,26 @@ export class CameraStreamService {
 
       console.log('📷 开始捕获...');
 
-      // Step 2: 拍照（跳过处理，拿原始帧）
-      const photo = await this.cameraRef.takePictureAsync({
-        base64: false,
-        quality: 1,
-        shutterSound: false,
-        skipProcessing: true,
-      });
+      // Step 2: 拍照。首帧/部分机型上 skipProcessing 可能更容易失败，失败后回退重试。
+      let photo;
+      try {
+        photo = await this.cameraRef.takePictureAsync({
+          base64: false,
+          quality: 1,
+          shutterSound: false,
+          skipProcessing: this.hasCompletedCapture,
+        });
+      } catch (primaryError) {
+        console.warn('⚠️ 首次捕获失败，准备回退重试:', primaryError);
+        await yieldToMain(CAPTURE_RETRY_DELAY_MS);
+        if (!this.cameraRef) return;
+        photo = await this.cameraRef.takePictureAsync({
+          base64: false,
+          quality: 1,
+          shutterSound: false,
+          skipProcessing: false,
+        });
+      }
 
       // Step 3: 让出主线程
       await yieldToMain(100);
@@ -157,6 +173,8 @@ export class CameraStreamService {
         console.warn('⚠️ 拍照失败');
         return;
       }
+
+      this.hasCompletedCapture = true;
 
       // Step 4: resize 到 512px 以内，压缩到 ~50-100KB
       const resized = await ImageManipulator.manipulateAsync(
@@ -199,5 +217,6 @@ export class CameraStreamService {
   dispose() {
     this.stop();
     this.cameraRef = null;
+    this.hasCompletedCapture = false;
   }
 }

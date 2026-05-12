@@ -60,6 +60,7 @@ export function createWebAudioService(args: {
 
   let offs: (() => void)[] = [];
   let sessionResolver: ((mode?: string) => void) | null = null;
+  let sessionRejecter: ((error: Error) => void) | null = null;
   let sessionPromiseCreatedAt = 0;
 
   const handleIncomingJson = (json: NekoWsIncomingJson) => {
@@ -69,7 +70,17 @@ export function createWebAudioService(args: {
       if (sessionResolver) {
         const r = sessionResolver;
         sessionResolver = null;
+        sessionRejecter = null;
         r((json as any).input_mode);
+      }
+      return;
+    }
+    if ((json as any).type === "session_failed") {
+      if (sessionRejecter) {
+        const reject = sessionRejecter;
+        sessionResolver = null;
+        sessionRejecter = null;
+        reject(new Error(`Session failed: ${JSON.stringify(json)}`));
       }
       return;
     }
@@ -149,6 +160,7 @@ export function createWebAudioService(args: {
     }
     offs = [];
     sessionResolver = null;
+    sessionRejecter = null;
     interrupt.reset();
     player.stopPlayback({ resetDecoder: false });
     void mic.stop();
@@ -176,8 +188,9 @@ export function createWebAudioService(args: {
 
     sessionPromiseCreatedAt = nowMs();
     return withTimeout(
-      new Promise<void>((resolve) => {
+      new Promise<void>((resolve, reject) => {
         sessionResolver = () => resolve();
+        sessionRejecter = reject;
       }),
       timeoutMs,
       `Session start timeout after ${timeoutMs}ms`
@@ -251,4 +264,3 @@ export function createWebAudioService(args: {
     },
   };
 }
-

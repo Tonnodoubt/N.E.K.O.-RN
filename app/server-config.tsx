@@ -22,13 +22,11 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { useDevConnectionConfig } from '@/hooks/useDevConnectionConfig';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const STORAGE_KEY = 'NEKO_DEV_CONNECTION_CONFIG_V1';
+import { DEFAULT_DEV_CONNECTION_CONFIG } from '@/utils/devConnectionConfig';
 
 export default function ServerConfigScreen() {
   const router = useRouter();
-  const { config, isLoaded, setConfig } = useDevConnectionConfig();
+  const { config, isLoaded, setConfig, clear } = useDevConnectionConfig();
   const { t } = useTranslation();
 
   // Form state
@@ -72,6 +70,7 @@ export default function ServerConfigScreen() {
         host: trimmedHost,
         port: portNum,
         characterName: characterName.trim(),
+        p2p: undefined,
       };
 
       await setConfig(newConfig);
@@ -103,15 +102,15 @@ export default function ServerConfigScreen() {
           text: t('common.confirm'),
           style: 'destructive',
           onPress: async () => {
-            await AsyncStorage.removeItem(STORAGE_KEY);
-            setHost('192.168.77.252');
-            setPort('48911');
-            setCharacterName('test');
+            await clear();
+            setHost(DEFAULT_DEV_CONNECTION_CONFIG.host);
+            setPort(String(DEFAULT_DEV_CONNECTION_CONFIG.port));
+            setCharacterName(DEFAULT_DEV_CONNECTION_CONFIG.characterName);
           },
         },
       ]
     );
-  }, [t]);
+  }, [clear, t]);
 
   // Quick fill common local IP patterns
   const quickFillLocalhost = () => {

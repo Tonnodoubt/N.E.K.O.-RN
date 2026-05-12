@@ -37,6 +37,11 @@ function isServerMessage(value: unknown): value is ServerMessage {
   );
 }
 
+/** 生成唯一消息 ID（时间戳 + 随机后缀） */
+function generateChatId(): string {
+  return `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export const useChatMessages = (config: UseChatMessagesConfig = {}) => {
   const { maxMessages = 100, onMessageAdded, onMessageUpdated } = config;
 
@@ -44,7 +49,7 @@ export const useChatMessages = (config: UseChatMessagesConfig = {}) => {
 
   // 获取当前时间字符串
   const getCurrentTimeString = useCallback(() => {
-    return new Date().toLocaleTimeString('zh-CN', {
+    return new Date().toLocaleTimeString(undefined, {
       hour12: false,
       hour: '2-digit',
       minute: '2-digit',
@@ -60,7 +65,7 @@ export const useChatMessages = (config: UseChatMessagesConfig = {}) => {
   ) => {
     const timestamp = getCurrentTimeString();
     const newMessage: ChatMessage = {
-      id: Date.now().toString(),
+      id: generateChatId(),
       text: options?.skipTimestamp ? text : `[${timestamp}] ${sender === 'gemini' ? '🎀' : sender === 'user' ? '👤' : '📢'} ${text}`,
       sender,
       timestamp,
@@ -107,7 +112,7 @@ export const useChatMessages = (config: UseChatMessagesConfig = {}) => {
         console.log(`⚠️ 未找到 ${sender} 消息，创建新消息`);
         const timestamp = getCurrentTimeString();
         const newMessage: ChatMessage = {
-          id: Date.now().toString(),
+          id: generateChatId(),
           text: `[${timestamp}] ${sender === 'gemini' ? '🎀' : '👤'} ${text}`,
           sender,
           timestamp,

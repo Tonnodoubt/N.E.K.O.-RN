@@ -64,7 +64,7 @@ export class WSService {
 
     // 构建 WebSocket URL
     let wsUrl: string;
-    console.log('[WSService] init() called, isP2P:', this.isP2P, 'p2p config:', this.config.p2p);
+    console.log('[WSService] init() called, isP2P:', this.isP2P);
     if (this.isP2P && this.config.p2p) {
       // v2 P2P 模式：通过代理连接，token 放在 URL query 中
       // 使用 config.protocol 保持与标准模式一致（支持 wss://）

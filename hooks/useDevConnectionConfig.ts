@@ -62,7 +62,11 @@ export function useDevConnectionConfig(): {
       const parsed = parseDevConnectionConfig(raw);
       if (!parsed) return { ok: false, error: '二维码内容不可解析（请扫 JSON / URL / host:port 格式）' };
       const isP2p = !!parsed.p2p;
-      const next = await setConfig((prev) => ({ ...prev, ...parsed }));
+      const next = await setConfig((prev) => ({
+        ...prev,
+        ...parsed,
+        p2p: isP2p ? parsed.p2p : undefined,
+      }));
       return { ok: true, config: next, isP2p };
     },
     [setConfig]
@@ -113,4 +117,3 @@ export function useDevConnectionConfig(): {
 
   return { config, isLoaded, setConfig, applyQrRaw, refreshFromCloud, clear, reload };
 }
-

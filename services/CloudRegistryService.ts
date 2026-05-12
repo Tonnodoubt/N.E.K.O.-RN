@@ -47,7 +47,8 @@ export async function queryDeviceInfo(deviceId: string): Promise<DevConnectionCo
     }
 
     const data: CloudDeviceInfo = await response.json();
-    console.log('[CloudRegistry] 查询成功:', data);
+    const logSafe = { ...data, token: '***' };
+    console.log('[CloudRegistry] 查询成功:', logSafe);
 
     // 转换为 DevConnectionConfig 格式
     const config: DevConnectionConfig = {

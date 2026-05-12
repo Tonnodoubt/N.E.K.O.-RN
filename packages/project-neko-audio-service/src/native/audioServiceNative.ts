@@ -135,6 +135,7 @@ export function createNativeAudioService(args: {
   let errorSub: { remove: () => void } | null = null;
 
   let sessionResolver: (() => void) | null = null;
+  let sessionRejecter: ((error: Error) => void) | null = null;
   let recordingReject: ((error: Error) => void) | null = null;
   // 打断后短暂静音：避免扬声器末尾声音被麦克风回收为用户输入
   let micMutedUntil = 0;
@@ -249,7 +250,17 @@ export function createNativeAudioService(args: {
       if (sessionResolver) {
         const r = sessionResolver;
         sessionResolver = null;
+        sessionRejecter = null;
         r();
+      }
+      return;
+    }
+    if ((json as any).type === "session_failed") {
+      if (sessionRejecter) {
+        const reject = sessionRejecter;
+        sessionResolver = null;
+        sessionRejecter = null;
+        reject(new Error(`Session failed: ${JSON.stringify(json)}`));
       }
       return;
     }
@@ -312,6 +323,7 @@ export function createNativeAudioService(args: {
     }
     offs = [];
     sessionResolver = null;
+    sessionRejecter = null;
     manualInterruptActive = false;
     interrupt.reset();
     detachRecordingListeners();
@@ -327,12 +339,16 @@ export function createNativeAudioService(args: {
 
   const waitSessionStarted = (timeoutMs: number) => {
     return withTimeout(
-      new Promise<void>((resolve) => {
+      new Promise<void>((resolve, reject) => {
         sessionResolver = resolve;
+        sessionRejecter = reject;
       }),
       timeoutMs,
       `Session start timeout after ${timeoutMs}ms`
-    );
+    ).finally(() => {
+      sessionResolver = null;
+      sessionRejecter = null;
+    });
   };
 
   const startVoiceSession: AudioService["startVoiceSession"] = async (opts) => {
@@ -348,6 +364,7 @@ export function createNativeAudioService(args: {
 
       const cleanup = () => {
         recordingReject = null;
+        sessionRejecter = null;
       };
 
       // 超时处理
@@ -434,4 +451,3 @@ export function createNativeAudioService(args: {
     getState: () => state,
   };
 }
-

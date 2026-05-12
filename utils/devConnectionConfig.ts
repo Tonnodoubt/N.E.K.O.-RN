@@ -35,7 +35,8 @@ export function parseDevConnectionConfig(raw: string): Partial<DevConnectionConf
       const out: Partial<DevConnectionConfig> = {};
 
       // 检测 P2P 格式（包含 lan_ip 和 token）- v3 架构：两层回退
-      if (typeof obj.lan_ip === 'string' && obj.lan_ip.trim() && typeof obj.token === 'string') {
+      if (typeof obj.lan_ip === 'string' && obj.lan_ip.trim() && typeof obj.token === 'string'
+          && obj.token.length > 0 && obj.token.length <= 256 && !/[\x00-\x1f]/.test(obj.token)) {
         out.host = obj.lan_ip.trim();
         out.port = typeof obj.port === 'number' ? obj.port : 48920;
         out.characterName = obj.character || obj.name || 'test';
@@ -126,5 +127,5 @@ export function buildHttpBaseURL(config: Pick<DevConnectionConfig, 'host' | 'por
 export function appendP2PToken(url: string, token?: string): string {
   if (!token) return url;
   const sep = url.includes('?') ? '&' : '?';
-  return `${url}${sep}token=${token}`;
+  return `${url}${sep}token=${encodeURIComponent(token)}`;
 }
