@@ -8,10 +8,10 @@ interface SmartTextBlockProps {
 }
 
 const markdownStyles = {
-  body: { fontSize: 14, lineHeight: 20, color: '#333' },
-  heading1: { fontSize: 22, fontWeight: '700' as const, marginTop: 12, marginBottom: 4 },
-  heading2: { fontSize: 18, fontWeight: '700' as const, marginTop: 10, marginBottom: 4 },
-  heading3: { fontSize: 16, fontWeight: '600' as const, marginTop: 8, marginBottom: 2 },
+  body: { fontSize: 15, lineHeight: 22, color: '#333' },
+  heading1: { fontSize: 24, fontWeight: '700' as const, marginTop: 14, marginBottom: 6 },
+  heading2: { fontSize: 20, fontWeight: '700' as const, marginTop: 12, marginBottom: 4 },
+  heading3: { fontSize: 17, fontWeight: '600' as const, marginTop: 10, marginBottom: 4 },
   bold: { fontWeight: '700' as const },
   italic: { fontStyle: 'italic' as const },
   code_inline: {

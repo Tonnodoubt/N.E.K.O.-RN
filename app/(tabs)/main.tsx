@@ -787,90 +787,69 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     mainManager.onLive2DTap();
   }, []);
 
-  // 双指长按拖动状态
-  const dragStartPositionRef = useRef<{ x: number; y: number } | null>(null);
-  // 使用独立 ref 跟踪当前位置，不依赖 React 状态（因为 setPosition 不会触发 React 更新）
+  // 模型位置持久化 ref
   const currentModelPositionRef = useRef({ x: 0, y: 0 });
-  const [isDraggingModel, setIsDraggingModel] = useState(false);
-
-  // 双指缩放状态
-  const startScaleRef = useRef<number>(0.8);
+  // 模型缩放持久化 ref
   const currentScaleRef = useRef<number>(0.8);
-  const [isScalingModel, setIsScalingModel] = useState(false);
+  const [isAdjustingModel, setIsAdjustingModel] = useState(false);
 
-  // 拖动手势
-  const dragGesture = useMemo(() => {
-    let screenWidth = 1;
-    let screenHeight = 1;
-    return Gesture.Pan()
-      .minPointers(2)
-      .activateAfterLongPress(500)
-      .enabled(isPageFocused)
-      .runOnJS(true)
-      .onStart(() => {
-        const { width, height } = Dimensions.get('window');
-        screenWidth = width;
-        screenHeight = height;
-        // 使用持久化的位置 ref，而不是 React 状态
-        const pos = { ...currentModelPositionRef.current };
-        if (Math.abs(pos.x) > POSITION_LIMIT || Math.abs(pos.y) > POSITION_LIMIT) {
-          live2d.setModelPosition(0, 0);
-          currentModelPositionRef.current = { x: 0, y: 0 };
-          pos.x = 0;
-          pos.y = 0;
-        }
-        dragStartPositionRef.current = pos;
-        setIsDraggingModel(true);
-      })
-      .onUpdate((e) => {
-        const start = dragStartPositionRef.current;
-        if (!start) return;
-        // 大幅降低灵敏度：手指移动整个屏幕距离，模型仅移动 0.005 个逻辑单位
-        // 乘数越小灵敏度越低，0.005 = 低灵敏度（需要大幅度拖动才能移动模型）
-        const sensitivity = 0.005;
-        const newX = clampPos(start.x + (e.translationX / screenWidth) * sensitivity);
-        const newY = clampPos(start.y - (e.translationY / screenHeight) * sensitivity);
-        // 更新当前位置 ref，供下次拖动使用
-        currentModelPositionRef.current = { x: newX, y: newY };
-        live2d.setModelPosition(newX, newY);
-      })
-      .onFinalize(() => {
-        // 拖动结束时，保存最终位置到 ref（从 dragStartPositionRef 计算最终位置）
-        // 这样下次拖动时可以从上次结束的位置开始
-        dragStartPositionRef.current = null;
-        setIsDraggingModel(false);
-      });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPageFocused]);
+  // 双指手动手势：同时支持拖动 + 缩放，从原始触摸数据计算避免冲突
+  const manualTwoFingerRef = useRef({
+    startDist: 0,
+    startMidX: 0,
+    startMidY: 0,
+    startPosX: 0,
+    startPosY: 0,
+    startScale: 0.8,
+    active: false,
+  });
 
-  // 双指缩放手势（捏合/张开）
-  // 注意：Pinch 手势本身就需要双指，无需 minPointers
-  const pinchGesture = useMemo(() => {
-    return Gesture.Pinch()
-      .enabled(isPageFocused)
-      .runOnJS(true)
-      .onStart(() => {
-        // 记录开始时的缩放值
-        startScaleRef.current = currentScaleRef.current;
-        setIsScalingModel(true);
-      })
-      .onUpdate((e) => {
-        // 降低缩放灵敏度：缩放因子变化更平缓
-        const scaleSensitivity = 0.5;
-        const newScale = clampScale(startScaleRef.current * (1 + (e.scale - 1) * scaleSensitivity));
-        currentScaleRef.current = newScale;
-        live2d.setModelScale(newScale);
-      })
-      .onFinalize(() => {
-        setIsScalingModel(false);
-      });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPageFocused]);
-
-  // 组合手势：双指拖动 + 缩放同时识别
   const live2dGesture = useMemo(() => {
-    return Gesture.Simultaneous(dragGesture, pinchGesture);
-  }, [dragGesture, pinchGesture]);
+    return Gesture.Manual()
+      .runOnJS(true)
+      .onTouchesDown((e, manager) => {
+        if (e.numberOfTouches >= 2) {
+          manager.activate();
+          const [t1, t2] = [e.allTouches[0], e.allTouches[1]];
+          const s = manualTwoFingerRef.current;
+          s.startDist = Math.hypot(t1.x - t2.x, t1.y - t2.y);
+          s.startMidX = (t1.x + t2.x) / 2;
+          s.startMidY = (t1.y + t2.y) / 2;
+          s.startPosX = currentModelPositionRef.current.x;
+          s.startPosY = currentModelPositionRef.current.y;
+          s.startScale = currentScaleRef.current;
+          s.active = true;
+          setIsAdjustingModel(true);
+        } else {
+          manager.fail();
+        }
+      })
+      .onTouchesMove((e) => {
+        const s = manualTwoFingerRef.current;
+        if (!s.active || e.numberOfTouches < 2) return;
+        const [t1, t2] = [e.allTouches[0], e.allTouches[1]];
+        const dist = Math.hypot(t1.x - t2.x, t1.y - t2.y);
+        const midX = (t1.x + t2.x) / 2;
+        const midY = (t1.y + t2.y) / 2;
+
+        const scale = clampScale(s.startScale * (dist / (s.startDist || 1)));
+        const dx = clampPos(s.startPosX + (midX - s.startMidX) * 0.003);
+        const dy = clampPos(s.startPosY - (midY - s.startMidY) * 0.003);
+
+        live2d.setModelScale(scale);
+        live2d.setModelPosition(dx, dy);
+        currentModelPositionRef.current = { x: dx, y: dy };
+        currentScaleRef.current = scale;
+      })
+      .onTouchesUp(() => {
+        manualTwoFingerRef.current.active = false;
+        setIsAdjustingModel(false);
+      })
+      .onEnd(() => {
+        manualTwoFingerRef.current.active = false;
+        setIsAdjustingModel(false);
+      });
+  }, []);
 
   // 工具栏事件处理（与 Web 版本一致）
   const handleToolbarSettingsChange = useCallback((id: Live2DSettingsToggleId, next: boolean) => {
@@ -1371,10 +1350,10 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
             </View>
           )}
 
-          {(isDraggingModel || isScalingModel) && (
+          {isAdjustingModel && (
             <View style={styles.dragIndicator} pointerEvents="none">
               <Text style={styles.dragIndicatorText}>
-                {isDraggingModel && isScalingModel ? '拖动/缩放中' : isDraggingModel ? '拖动中' : '缩放中'}
+                调整中
               </Text>
             </View>
           )}

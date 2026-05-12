@@ -70,23 +70,23 @@ function getStatusText(status: ConnectionStatus, customText?: string, t?: any): 
 }
 
 const s = StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.3)' },
+  backdrop: { flex: 1, justifyContent: 'flex-end' },
   panel: {
-    height: '75%', borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    height: '65%', borderTopLeftRadius: 22, borderTopRightRadius: 22,
     overflow: 'hidden', backgroundColor: 'rgba(245,245,250,0.92)',
     borderColor: 'rgba(255,255,255,0.3)', borderWidth: 1, borderBottomWidth: 0,
   },
   header: {
-    height: 52, flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', paddingHorizontal: 16,
+    height: 56, flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', paddingHorizontal: 18,
     borderBottomColor: 'rgba(0,0,0,0.06)', borderBottomWidth: 1,
   },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#333' },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  statusDot: { width: 8, height: 8, borderRadius: 4 },
-  statusText: { fontSize: 11, color: '#888' },
+  headerTitle: { fontSize: 17, fontWeight: '700', color: '#333' },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  statusDot: { width: 9, height: 9, borderRadius: 5 },
+  statusText: { fontSize: 12, color: '#888' },
   closeButton: {
-    width: 30, height: 30, borderRadius: 15,
+    width: 36, height: 36, borderRadius: 18,
     backgroundColor: 'rgba(0,0,0,0.05)', justifyContent: 'center', alignItems: 'center',
   },
   toolRow: {
@@ -100,37 +100,37 @@ const s = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
     borderWidth: 1, borderColor: 'rgba(68,183,254,0.2)',
   },
-  pendingSection: { paddingHorizontal: 12, paddingVertical: 8, borderTopColor: 'rgba(0,0,0,0.06)', borderTopWidth: 1 },
-  pendingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  pendingText: { fontSize: 12, color: '#666' },
-  clearText: { fontSize: 12, color: '#ff4d4f' },
+  pendingSection: { paddingHorizontal: 14, paddingVertical: 10, borderTopColor: 'rgba(0,0,0,0.06)', borderTopWidth: 1 },
+  pendingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  pendingText: { fontSize: 13, color: '#666' },
+  clearText: { fontSize: 13, color: '#ff4d4f' },
   removeBadge: {
-    position: 'absolute', top: -4, right: -4,
-    width: 18, height: 18, borderRadius: 9,
+    position: 'absolute', top: -5, right: -5,
+    width: 20, height: 20, borderRadius: 10,
     backgroundColor: 'rgba(255,77,79,0.9)', justifyContent: 'center', alignItems: 'center',
   },
   inputSection: {
-    paddingHorizontal: 12, paddingTop: 10, paddingBottom: 20,
+    paddingHorizontal: 14, paddingTop: 12, paddingBottom: 24,
     borderTopColor: 'rgba(0,0,0,0.06)', borderTopWidth: 1,
     backgroundColor: 'rgba(255,255,255,0.5)',
   },
   inputRow: {
-    flexDirection: 'row', alignItems: 'flex-end', gap: 8,
-    backgroundColor: 'rgba(0,0,0,0.04)', borderRadius: 20,
-    paddingHorizontal: 12, paddingVertical: 4,
+    flexDirection: 'row', alignItems: 'flex-end', gap: 10,
+    backgroundColor: 'rgba(0,0,0,0.04)', borderRadius: 22,
+    paddingHorizontal: 14, paddingVertical: 4,
   },
-  textInput: { flex: 1, fontSize: 14, maxHeight: 80, paddingVertical: 6, color: '#333' },
+  textInput: { flex: 1, fontSize: 15, maxHeight: 90, paddingVertical: 8, color: '#333' },
   sendButton: {
-    width: 32, height: 32, borderRadius: 16,
+    width: 36, height: 36, borderRadius: 18,
     backgroundColor: '#44b7fe', justifyContent: 'center', alignItems: 'center',
   },
   sendButtonDisabled: { backgroundColor: '#ddd' },
   floatingButton: {
     position: 'absolute', right: 16, bottom: 16,
-    width: 56, height: 56, borderRadius: 28, backgroundColor: '#44b7fe',
+    width: 58, height: 58, borderRadius: 29, backgroundColor: '#44b7fe',
     justifyContent: 'center', alignItems: 'center',
     shadowColor: '#44b7fe', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4, shadowRadius: 12, elevation: 8,
+    shadowOpacity: 0.4, shadowRadius: 16, elevation: 8,
   },
 });
 
@@ -262,7 +262,7 @@ export default function ChatContainer({
   if (collapsed) {
     return (
       <TouchableOpacity onPress={() => setCollapsed(false)} activeOpacity={0.8} style={s.floatingButton}>
-        <Ionicons name="chatbubble-ellipses" size={24} color="#fff" />
+        <Ionicons name="chatbubble-ellipses" size={26} color="#fff" />
       </TouchableOpacity>
     );
   }
@@ -282,7 +282,7 @@ export default function ChatContainer({
           )}
         </View>
         <TouchableOpacity onPress={() => setCollapsed(true)} activeOpacity={0.7} style={s.closeButton}>
-          <Ionicons name="chevron-down" size={18} color="#666" />
+          <Ionicons name="chevron-down" size={22} color="#666" />
         </TouchableOpacity>
       </View>
 
@@ -316,7 +316,7 @@ export default function ChatContainer({
           <ScrollView horizontal>
             {pendingScreenshots.map((p) => (
               <View key={p.id} style={{ marginRight: 8, position: 'relative' }}>
-                <Image source={{ uri: ensureDataURI(p.base64) }} style={{ width: 56, height: 56, borderRadius: 8 }} resizeMode="cover" />
+                <Image source={{ uri: ensureDataURI(p.base64) }} style={{ width: 64, height: 64, borderRadius: 10 }} resizeMode="cover" />
                 <TouchableOpacity
                   onPress={() => setPendingScreenshots((prev) => prev.filter((x) => x.id !== p.id))}
                   activeOpacity={0.7} style={s.removeBadge}
@@ -334,7 +334,7 @@ export default function ChatContainer({
         <View style={s.inputRow}>
           {(onPickImage || onTakePhotoProp) && (
             <TouchableOpacity onPress={handleImageAction} activeOpacity={0.7} disabled={disabled} style={{ paddingVertical: 6 }}>
-              <Ionicons name="image-outline" size={20} color={disabled ? '#ccc' : '#44b7fe'} />
+              <Ionicons name="image-outline" size={22} color={disabled ? '#ccc' : '#44b7fe'} />
             </TouchableOpacity>
           )}
           <TextInput
@@ -347,7 +347,7 @@ export default function ChatContainer({
           <TouchableOpacity onPress={handleSend} activeOpacity={0.7} disabled={disabled}
             style={[s.sendButton, disabled && s.sendButtonDisabled]}
           >
-            <Ionicons name="send" size={14} color="#fff" />
+            <Ionicons name="send" size={16} color="#fff" />
           </TouchableOpacity>
         </View>
       </View>
@@ -356,23 +356,21 @@ export default function ChatContainer({
 
   return (
     <Modal visible={!collapsed} transparent animationType="slide" onRequestClose={() => setCollapsed(true)}>
-      <TouchableWithoutFeedback onPress={() => setCollapsed(true)}>
-        <View style={s.backdrop}>
-          <TouchableWithoutFeedback>
-            {BlurView ? (
-              <BlurView intensity={40} tint="light" style={s.panel}>{panelContent}</BlurView>
-            ) : (
-              <View style={s.panel}>{panelContent}</View>
-            )}
-          </TouchableWithoutFeedback>
-
-          {renderFloatingOverlay && (
-            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} pointerEvents="box-none">
-              {renderFloatingOverlay()}
-            </View>
+      <View style={s.backdrop} pointerEvents="box-none">
+        <TouchableWithoutFeedback>
+          {BlurView ? (
+            <BlurView intensity={40} tint="light" style={s.panel}>{panelContent}</BlurView>
+          ) : (
+            <View style={s.panel}>{panelContent}</View>
           )}
-        </View>
-      </TouchableWithoutFeedback>
+        </TouchableWithoutFeedback>
+
+        {renderFloatingOverlay && (
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} pointerEvents="box-none">
+            {renderFloatingOverlay()}
+          </View>
+        )}
+      </View>
     </Modal>
   );
 }
