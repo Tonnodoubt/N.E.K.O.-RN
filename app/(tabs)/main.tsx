@@ -4,25 +4,6 @@ import { buildHttpBaseURL, appendP2PToken } from '@/utils/devConnectionConfig';
 import { useAudio } from '@/hooks/useAudio';
 import { useChatMessages } from '@/hooks/useChatMessages';
 import * as ImageManipulator from 'expo-image-manipulator';
-
-const MAX_IMAGE_BASE64_LENGTH = 1_500_000; // ~1.1MB decoded, safe for WS frames
-
-async function compressImageIfNeeded(dataURI: string): Promise<string> {
-  if (dataURI.length <= MAX_IMAGE_BASE64_LENGTH) return dataURI;
-  try {
-    const result = await ImageManipulator.manipulateAsync(
-      dataURI,
-      [{ resize: { width: 1280 } }],
-      { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true },
-    );
-    if (result.base64) {
-      return `data:image/jpeg;base64,${result.base64}`;
-    }
-  } catch (e) {
-    console.warn('[compressImage] failed, sending original:', e);
-  }
-  return dataURI;
-}
 import { useDevConnectionConfig } from '@/hooks/useDevConnectionConfig';
 import { useUdpP2PConnection } from '@/hooks/useUdpP2PConnection';
 import { useLipSync } from '@/hooks/useLipSync';
@@ -37,18 +18,20 @@ import { ImageMessageService } from '@/services/imageMessage';
 import { mainManager } from '@/utils/MainManager';
 import { sessionStore } from '@/utils/sessionStore';
 import { VoicePrepareOverlay } from '@/components/VoicePrepareOverlay';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '@/constants/ThemeContext';
+import { useChatFont, FONT_OPTIONS } from '@/constants/FontContext';
+import { Live2DStage } from '@/components/Live2DStage';
+import { CharacterSelectionModal } from '@/components/CharacterSelectionModal';
+import { VoiceBlockModal } from '@/components/VoiceBlockModal';
+import { CharacterSwitchOverlay } from '@/components/CharacterSwitchOverlay';
 import { useFocusEffect } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert, AppState, Appearance, Dimensions, Image, Modal, Platform, ScrollView,
-  StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View,
+  Alert, AppState, Appearance, Dimensions, KeyboardAvoidingView, Platform, StyleSheet, Text, View,
 } from 'react-native';
-import { ReactNativeLive2dView } from 'react-native-live2d';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import {
   Live2DRightToolbar,
   ChatContainer,
@@ -63,22 +46,33 @@ import {
 
 type MainUIScreenProps = {}
 
-// 边界保护：逻辑视图范围为 ±1.0，设置为 0.9 确保模型始终大部分在屏幕内
-const POSITION_LIMIT = 0.9;
-const clampPos = (v: number) => Math.max(-POSITION_LIMIT, Math.min(POSITION_LIMIT, v));
+const MAX_IMAGE_BASE64_LENGTH = 1_500_000;
 
-// 缩放范围限制
-const SCALE_MIN = 0.3;
-const SCALE_MAX = 2.0;
-const clampScale = (v: number) => Math.max(SCALE_MIN, Math.min(SCALE_MAX, v));
+async function compressImageIfNeeded(dataURI: string): Promise<string> {
+  if (dataURI.length <= MAX_IMAGE_BASE64_LENGTH) return dataURI;
+  try {
+    const result = await ImageManipulator.manipulateAsync(
+      dataURI,
+      [{ resize: { width: 1280 } }],
+      { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+    );
+    if (result.base64) return `data:image/jpeg;base64,${result.base64}`;
+  } catch (e) {
+    console.warn('[compressImage] failed, sending original:', e);
+  }
+  return dataURI;
+}
 
-// 生成消息 ID（时间戳 + 随机后缀，避免碰撞）
 function generateMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   const { t, i18n: i18nInstance } = useTranslation();
+  const theme = useTheme();
+  const cc = theme.colors;
+  const insets = useSafeAreaInsets();
+  const { fontId: chatFontId, setFontId: setChatFontId } = useChatFont();
 
   const [isPageFocused, setIsPageFocused] = useState(true);
 
@@ -94,6 +88,8 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   const switchErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const characterLoadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isChatForceCollapsed, setIsChatForceCollapsed] = useState(false);
+  const [chatExpanded, setChatExpanded] = useState(false);
+  useEffect(() => { if (isChatForceCollapsed) setChatExpanded(false); }, [isChatForceCollapsed]);
   const [voicePrepareStatus, setVoicePrepareStatus] = useState<'preparing' | 'ready' | null>(null);
   const isSwitchingCharacterRef = useRef(false);
   // 🔥 新增：应用是否在后台的标志 ref，用于在拍照等场景忽略 WebSocket 错误
@@ -104,8 +100,6 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   const appStateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // StatusToast ref，用于显示连接状态提示
   const statusToastRef = useRef<StatusToastHandle>(null);
-  // 🔥 新增：调试信息面板
-  const [debugPanelVisible, setDebugPanelVisible] = useState(false);
   // 合并为单一对象，确保 modelName 和 modelUrl 同步更新，避免两次 setState 触发两次 useLive2D effect
   const [live2dModel, setLive2dModel] = useState<{ name: string; url: string | undefined; itemId?: string }>({
     name: 'mao_pro',
@@ -669,40 +663,29 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     // 这需要修改 useLive2D 以支持持久化
   });
 
-  // 口型同步 hook（无平滑模式，与 Web 版本一致）
+  // 口型同步（attack/release 平滑 + 非线性响应曲线）
   const lipSync = useLipSync({
-    minAmplitude: 0.005,    // 最小振幅阈值（降低以更敏感）
-    amplitudeScale: 1.0,    // 振幅缩放（调整嘴巴张开幅度）
-    autoStart: false,       // 不自动启动，等待模型加载完成
+    minAmplitude: 0.008,    // 噪声门限
+    amplitudeScale: 1.0,    // 整体灵敏度
+    attackMs: 25,           // 张嘴速度（快）
+    releaseMs: 90,          // 闭嘴速度（慢，更自然）
+    curvePower: 0.55,       // 非线性曲线（<1 放大轻声）
+    autoStart: false,
   });
 
   useFocusEffect(
     useCallback(() => {
-      console.log('Live2D页面获得焦点');
-
-      // 设置页面为焦点状态
       setIsPageFocused(true);
 
-      // 只有 url 已就绪（syncLive2dModel 完成后）才触发加载
-      // 避免启动时 url 还是 undefined，回退到自拼 URL 加载错误模型
       if (live2dModelRef.current.url) {
         live2d.loadModel();
       }
 
       return () => {
-        console.log('Live2D页面失去焦点');
-        // 停止口型同步（stop 应为幂等；避免把 isActive 放进依赖导致 focus effect 重跑）
         lipSync.stop();
-        console.log('👄 口型同步已停止（页面失焦）');
-        
-        // 设置页面为失去焦点状态
         setIsPageFocused(false);
-        // 页面失去焦点时，重置模型状态，避免在重新获得焦点时立即加载模型
-        // 这样可以确保 CubismFramework 有足够时间初始化
-        // 注意：原生视图会在 onDetachedFromWindow 中自动清理资源
-        live2d.unloadModel();
       };
-    }, [live2d.loadModel, live2d.unloadModel, lipSync.stop])
+    }, [live2d.loadModel, lipSync.stop])
   );
 
   // 角色切换后 modelUrl 变化时，页面已聚焦无法靠 useFocusEffect 触发，需单独监听
@@ -787,69 +770,10 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     mainManager.onLive2DTap();
   }, []);
 
-  // 模型位置持久化 ref
+  // Live2D 模型位置/缩放 ref（传给 Live2DStage）
   const currentModelPositionRef = useRef({ x: 0, y: 0 });
-  // 模型缩放持久化 ref
   const currentScaleRef = useRef<number>(0.8);
   const [isAdjustingModel, setIsAdjustingModel] = useState(false);
-
-  // 双指手动手势：同时支持拖动 + 缩放，从原始触摸数据计算避免冲突
-  const manualTwoFingerRef = useRef({
-    startDist: 0,
-    startMidX: 0,
-    startMidY: 0,
-    startPosX: 0,
-    startPosY: 0,
-    startScale: 0.8,
-    active: false,
-  });
-
-  const live2dGesture = useMemo(() => {
-    return Gesture.Manual()
-      .runOnJS(true)
-      .onTouchesDown((e, manager) => {
-        if (e.numberOfTouches >= 2) {
-          manager.activate();
-          const [t1, t2] = [e.allTouches[0], e.allTouches[1]];
-          const s = manualTwoFingerRef.current;
-          s.startDist = Math.hypot(t1.x - t2.x, t1.y - t2.y);
-          s.startMidX = (t1.x + t2.x) / 2;
-          s.startMidY = (t1.y + t2.y) / 2;
-          s.startPosX = currentModelPositionRef.current.x;
-          s.startPosY = currentModelPositionRef.current.y;
-          s.startScale = currentScaleRef.current;
-          s.active = true;
-          setIsAdjustingModel(true);
-        } else {
-          manager.fail();
-        }
-      })
-      .onTouchesMove((e) => {
-        const s = manualTwoFingerRef.current;
-        if (!s.active || e.numberOfTouches < 2) return;
-        const [t1, t2] = [e.allTouches[0], e.allTouches[1]];
-        const dist = Math.hypot(t1.x - t2.x, t1.y - t2.y);
-        const midX = (t1.x + t2.x) / 2;
-        const midY = (t1.y + t2.y) / 2;
-
-        const scale = clampScale(s.startScale * (dist / (s.startDist || 1)));
-        const dx = clampPos(s.startPosX + (midX - s.startMidX) * 0.003);
-        const dy = clampPos(s.startPosY - (midY - s.startMidY) * 0.003);
-
-        live2d.setModelScale(scale);
-        live2d.setModelPosition(dx, dy);
-        currentModelPositionRef.current = { x: dx, y: dy };
-        currentScaleRef.current = scale;
-      })
-      .onTouchesUp(() => {
-        manualTwoFingerRef.current.active = false;
-        setIsAdjustingModel(false);
-      })
-      .onEnd(() => {
-        manualTwoFingerRef.current.active = false;
-        setIsAdjustingModel(false);
-      });
-  }, []);
 
   // 工具栏事件处理（与 Web 版本一致）
   const handleToolbarSettingsChange = useCallback((id: Live2DSettingsToggleId, next: boolean) => {
@@ -1076,8 +1000,20 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       return;
     }
 
+    if (id === 'chatFont') {
+      const currentLabel = FONT_OPTIONS.find(f => f.id === chatFontId)?.label ?? '系统默认';
+      const buttons: Array<{ text: string; onPress?: () => void; style?: 'cancel' }> =
+        FONT_OPTIONS.map(f => ({
+          text: f.label + (f.id === chatFontId ? ' ✓' : ''),
+          onPress: () => setChatFontId(f.id),
+        }));
+      buttons.push({ text: t('common.cancel') as string, style: 'cancel' });
+      Alert.alert('聊天字体', `当前: ${currentLabel}`, buttons);
+      return;
+    }
+
     Alert.alert(t('common.alert'), `即将打开: ${id}`);
-  }, [config, toolbarMicEnabled, mainManager, chat, audio, syncLive2dModel]);
+  }, [config, toolbarMicEnabled, mainManager, chat, audio, syncLive2dModel, chatFontId, setChatFontId, t]);
 
   const handleSwitchCharacter = useCallback(async (name: string) => {
     // 检查是否在语音模式
@@ -1323,125 +1259,92 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     });
   }, [agent]);
 
+  const s = useMemo(() => StyleSheet.create({
+    container: { flex: 1, backgroundColor: cc.page },
+    live2dWrapper: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+    bottomSection: { position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 100 },
+    topBar: {
+      position: 'absolute', top: 0, left: 0, right: 0, zIndex: 200,
+      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+      paddingHorizontal: 20, paddingTop: insets.top + 8,
+    },
+  }), [cc, insets.top]);
+
+  // Wrap send to auto-expand chat
+  const handleSendAndExpand = useCallback(async (text: string, images?: string[]) => {
+    setChatExpanded(true);
+    await handleSendMessage(text, images);
+  }, [handleSendMessage]);
+
   return (
-    <View style={styles.container}>
-      {/* 状态提示 Toast */}
+    <View style={s.container}>
       <StatusToast ref={statusToastRef} />
 
-      {/* Live2D 舞台区域 */}
-      {/* GestureDetector 包裹整个容器，Android & iOS 共用双指拖动 + 捏合缩放 */}
-      <GestureDetector gesture={live2dGesture}>
-        <View style={styles.live2dContainer}>
-          {/* 页面获得焦点时渲染 Live2D */}
-          {isPageFocused && (
-            <ReactNativeLive2dView
-              style={styles.live2dView}
-              {...live2d.live2dPropsForLipSync}
-              onTap={handleLive2DTap}
-            />
-          )}
-
-          {/* 失去焦点时的显示 */}
-          {!isPageFocused && (
-            <View style={styles.pausedContainer}>
-              <Text style={styles.pausedText}>
-                {live2d.live2dProps.modelPath ? 'Live2D 已暂停' : '页面未激活'}
-              </Text>
-            </View>
-          )}
-
-          {isAdjustingModel && (
-            <View style={styles.dragIndicator} pointerEvents="none">
-              <Text style={styles.dragIndicatorText}>
-                调整中
-              </Text>
-            </View>
-          )}
-        </View>
-      </GestureDetector>
-
-      {/* 
-        【跨平台组件】Live2DRightToolbar 右侧工具栏
-        
-        策略更新（2026-01-11）：
-        - 已实现 RN 原生版本（Live2DRightToolbar.native.tsx）
-        - 使用共享的类型和业务逻辑（types.ts + hooks.ts）
-        - Metro Bundler 自动根据平台选择：
-          * Web: Live2DRightToolbar.tsx（HTML/CSS 完整版）
-          * Android/iOS: Live2DRightToolbar.native.tsx（Modal 简化版）
-        - 详见：docs/strategy/cross-platform-components.md
-        
-        功能包括：
-        - 麦克风/摄像头切换
-        - Agent 设置面板
-        - Settings 面板
-        - 设置菜单（Live2D设置、API密钥、角色管理等）
-      */}
-      <View style={styles.toolbarContainer}>
-        <Live2DRightToolbar
-          visible
-          isMobile={isMobile}
-          right={isMobile ? 12 : 24}
-          top={isMobile ? screenHeight * 0.05 : 24}
-          micEnabled={toolbarMicEnabled}
-          cameraEnabled={cameraStream.isStreaming}
-          goodbyeMode={toolbarGoodbyeMode}
-          openPanel={toolbarOpenPanel}
-          onOpenPanelChange={setToolbarOpenPanel}
-          settings={toolbarSettings}
-          onSettingsChange={handleToolbarSettingsChange}
-          agent={agent}
-          onAgentChange={handleToolbarAgentChange}
-          onToggleMic={handleToggleMic}
-          onToggleCamera={handleToggleCamera}
-          onGoodbye={handleGoodbye}
-          onReturn={handleReturn}
-          onSettingsMenuClick={handleSettingsMenuClick}
+      {/* Live2D always full screen — never resizes */}
+      <View style={s.live2dWrapper}>
+        <Live2DStage
+          isPageFocused={isPageFocused}
+          isAdjustingModel={isAdjustingModel}
+          live2dPropsForLipSync={live2d.live2dPropsForLipSync}
+          live2dProps={live2d.live2dProps}
+          onTap={handleLive2DTap}
+          setModelScale={live2d.setModelScale}
+          setModelPosition={live2d.setModelPosition}
+          onAdjustStart={() => setIsAdjustingModel(true)}
+          onAdjustEnd={() => setIsAdjustingModel(false)}
+          modelPositionRef={currentModelPositionRef}
+          scaleRef={currentScaleRef}
         />
       </View>
 
-      {/* 隐藏的摄像头视图（无预览模式）- 只在流传输时挂载，避免白占摄像头资源 */}
+      {/* Top bar (overlays Live2D) */}
+      <View style={s.topBar} pointerEvents="box-none">
+        <View pointerEvents="auto" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: audio.isConnected ? cc.success : cc.error }} />
+          <Text style={{ fontSize: 13, fontWeight: '600', color: cc.textSecondary }}>
+            {config.characterName || 'N.E.K.O.'}
+          </Text>
+        </View>
+      </View>
+
+      {/* Toolbar — floating buttons on the right side */}
+      <Live2DRightToolbar
+        visible
+        isMobile={isMobile}
+        right={8}
+        top={insets.top + 8}
+        micEnabled={toolbarMicEnabled}
+        cameraEnabled={cameraStream.isStreaming}
+        goodbyeMode={toolbarGoodbyeMode}
+        openPanel={toolbarOpenPanel}
+        onOpenPanelChange={setToolbarOpenPanel}
+        settings={toolbarSettings}
+        onSettingsChange={handleToolbarSettingsChange}
+        agent={agent}
+        onAgentChange={handleToolbarAgentChange}
+        onToggleMic={handleToggleMic}
+        onToggleCamera={handleToggleCamera}
+        onGoodbye={handleGoodbye}
+        onReturn={handleReturn}
+        onSettingsMenuClick={handleSettingsMenuClick}
+      />
+
       {cameraStream.shouldMount && cameraStream.hasPermission && (
         <CameraView
           ref={cameraStream.cameraRef}
-          style={{
-            position: 'absolute',
-            left: -9999,
-            top: -9999,
-            width: 1,
-            height: 1,
-            opacity: 0,
-          }}
+          style={{ position: 'absolute', left: -9999, top: -9999, width: 1, height: 1, opacity: 0 }}
           facing={cameraStream.facing}
           onCameraReady={cameraStream.onCameraReady}
           animateShutter={false}
         />
       )}
 
-      {/*
-        【跨平台组件】ChatContainer 聊天容器
-
-        策略更新（2026-01-11）：
-        - ✅ 已实现 RN 原生版本（ChatContainer.native.tsx）
-        - ✅ 使用共享的类型和业务逻辑（types.ts + hooks.ts）
-        - ✅ 已接入主界面 WS 文本消息数据流（P0-1 & P0-2）
-        - Metro Bundler 自动根据平台选择：
-          * Web: ChatContainer.tsx（HTML/CSS 完整版，支持截图）
-          * Android/iOS: ChatContainer.native.tsx（Modal 简化版）
-        - 详见：docs/strategy/cross-platform-components.md
-
-        功能包括：
-        - 浮动按钮（缩小态）
-        - 聊天面板（展开态）
-        - 消息列表（用户/系统/助手角色）- 实时显示 WS 消息
-        - 文本输入 - 发送到后端
-        - Web 平台支持截图功能
-      */}
-      <View style={styles.chatContainerWrapper}>
+      {/* Bottom section — floats above Live2D, keyboard-aware */}
+      <KeyboardAvoidingView behavior="padding" style={s.bottomSection}>
         <ChatContainer
           externalMessages={chat.messages}
           connectionStatus={connectionStatus}
-          onSendMessage={handleSendMessage}
+          onSendMessage={handleSendAndExpand}
           disabled={!audio.isConnected}
           forceCollapsed={isChatForceCollapsed}
           onPickImage={imagePicker.pickImages}
@@ -1458,492 +1361,34 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
             imagePicker.clearImages();
             setCameraPendingImages([]);
           }}
+          chatExpanded={chatExpanded}
+          onToggleChat={() => setChatExpanded(prev => !prev)}
         />
-      </View>
+      </KeyboardAvoidingView>
 
-      {/* 语音准备状态遮罩 */}
       <VoicePrepareOverlay status={voicePrepareStatus} />
 
-      {/* 角色选择 Modal */}
-      <Modal
+      <CharacterSelectionModal
         visible={characterModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCharacterModalVisible(false)}
-      >
-        <TouchableWithoutFeedback onPress={() => setCharacterModalVisible(false)}>
-          <View style={styles.characterModalOverlay}>
-            <TouchableWithoutFeedback>
-              <View style={styles.characterModalContent}>
-                {/* Header — 对应 neko-header 蓝色背景 */}
-                <View style={styles.characterModalHeader}>
-                  <Text style={styles.characterModalTitle}>{t('characterManager.title')}</Text>
-                  <TouchableOpacity
-                    style={styles.characterModalCloseBtn}
-                    onPress={() => setCharacterModalVisible(false)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Text style={styles.characterModalCloseBtnText}>✕</Text>
-                  </TouchableOpacity>
-                </View>
-                <Text style={styles.characterModalSubtitle}>
-                  <Text style={styles.characterModalSubtitleLabel}>{t('settings.language.current')}: </Text><Text style={styles.characterModalSubtitleHighlight}>{currentCatgirl || t('main.character.noCharacters')}</Text>
-                </Text>
-                <ScrollView style={styles.characterModalList} showsVerticalScrollIndicator={false}>
-                  {characterList.map((name) => {
-                    const isCurrent = name === currentCatgirl;
-                    return (
-                      <TouchableOpacity
-                        key={name}
-                        style={[
-                          styles.characterModalItem,
-                          isCurrent && styles.characterModalItemCurrent,
-                        ]}
-                        disabled={isCurrent || characterLoading}
-                        activeOpacity={0.7}
-                        onPress={() => handleSwitchCharacter(name)}
-                      >
-                        <Image
-                          source={require('@/assets/icons/dropdown_arrow.png')}
-                          style={styles.characterModalItemIcon}
-                        />
-                        <Text style={[
-                          styles.characterModalItemText,
-                          isCurrent && styles.characterModalItemTextCurrent,
-                        ]}>
-                          {name}
-                        </Text>
-                        {isCurrent ? (
-                          <View style={styles.characterModalBadgeWrap}>
-                            <Text style={styles.characterModalBadge}>{t('main.character.current')}</Text>
-                          </View>
-                        ) : (
-                          <View style={styles.characterModalBadgePlaceholder} />
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+        characterList={characterList}
+        currentCatgirl={currentCatgirl}
+        loading={characterLoading}
+        onSelect={handleSwitchCharacter}
+        onClose={() => setCharacterModalVisible(false)}
+      />
 
-      {/* 语音模式下无法切换角色提示 Modal */}
-      <Modal
+      <VoiceBlockModal
         visible={voiceBlockModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setVoiceBlockModalVisible(false)}
-      >
-        <TouchableWithoutFeedback onPress={() => setVoiceBlockModalVisible(false)}>
-          <View style={styles.characterModalOverlay}>
-            <TouchableWithoutFeedback>
-              <View style={[styles.characterModalContent, styles.voiceBlockModalContent]}>
-                <View style={[styles.characterModalHeader, styles.voiceBlockModalHeader]}>
-                  <Text style={styles.characterModalTitle}>{t('main.character.voiceBlockTitle')}</Text>
-                  <TouchableOpacity
-                    style={styles.characterModalCloseBtn}
-                    onPress={() => setVoiceBlockModalVisible(false)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Text style={styles.characterModalCloseBtnText}>✕</Text>
-                  </TouchableOpacity>
-                </View>
-                <Text style={styles.voiceBlockModalBody}>
-                  {t('main.voice.cannotSwitchCharacter')}
-                </Text>
-                <TouchableOpacity
-                  style={styles.voiceBlockModalBtn}
-                  onPress={() => setVoiceBlockModalVisible(false)}
-                >
-                  <Text style={styles.voiceBlockModalBtnText}>{t('common.ok')}</Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+        onClose={() => setVoiceBlockModalVisible(false)}
+      />
 
-      {/* 角色切换全屏加载遮罩 */}
-      {characterLoading && (
-        <View style={styles.switchingOverlay}>
-          <ActivityIndicator size="large" color="#40c5f1" />
-          <Text style={styles.switchingText}>{t('main.character.switching')}</Text>
-        </View>
-      )}
-
-      {/* 切换成功提示条 */}
-      {switchedCharacterName !== null && (
-        <View style={styles.switchingSuccessBanner} pointerEvents="none">
-          <Text style={styles.switchingSuccessText}>{t('main.character.switched', { name: switchedCharacterName })}</Text>
-        </View>
-      )}
-
-      {/* 切换失败提示条 */}
-      {switchError !== null && (
-        <View style={styles.switchingErrorBanner} pointerEvents="none">
-          <Text style={styles.switchingErrorText}>{switchError}</Text>
-        </View>
-      )}
-
-      {/* 调试按钮 - 右下角浮动 */}
-      {__DEV__ && (<TouchableOpacity
-        style={{
-          position: 'absolute',
-          bottom: 100,
-          right: 20,
-          backgroundColor: 'rgba(64, 197, 241, 0.9)',
-          borderRadius: 25,
-          width: 50,
-          height: 50,
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 9999,
-          elevation: 10,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.25,
-          shadowRadius: 3.84,
-        }}
-        onPress={() => setDebugPanelVisible(true)}
-      >
-        <Ionicons name="construct" size={20} color="#fff" />
-      </TouchableOpacity>)}
-
-      {/* 调试信息面板 */}
-      {__DEV__ && (<Modal
-        visible={debugPanelVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setDebugPanelVisible(false)}
-      >
-        <TouchableOpacity
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}
-          activeOpacity={1}
-          onPress={() => setDebugPanelVisible(false)}
-        >
-          <View
-            style={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              backgroundColor: '#1a1a1a',
-              borderTopLeftRadius: 20,
-              borderTopRightRadius: 20,
-              maxHeight: '70%',
-              padding: 20,
-            }}
-            onStartShouldSetResponder={() => true}
-          >
-            <Text style={{ color: '#40c5f1', fontSize: 18, fontWeight: 'bold', marginBottom: 15 }}>
-              {t('main.debug.title')}
-            </Text>
-            <ScrollView>
-              <Text style={{ color: '#fff', fontSize: 12, fontFamily: 'monospace', marginBottom: 10 }}>
-                {`${t('connection.status.connected')}: ${udpConnection.status}
-${t('main.debug.p2pLayer')}: ${udpConnection.layer || t('connection.status.disconnected')}
-${t('serverInfo.host')}: ${udpConnection.endpoint ? `${udpConnection.endpoint.ip}:${udpConnection.endpoint.port}` : t('common.unavailable')}
-
-${t('settings.sections.serverInfo')}:
-${t('serverInfo.host')}: ${config.host}:${config.port}
-${t('serverInfo.character')}: ${config.characterName || t('main.character.noCharacters')}
-`}
-              </Text>
-              <Text style={{ color: '#40c5f1', fontSize: 12, fontWeight: 'bold', marginBottom: 4 }}>
-                {t('main.debug.connection')}：
-              </Text>
-              <Text style={{ color: '#ccc', fontSize: 11, fontFamily: 'monospace' }}>
-                {udpConnection.logs.length > 0 ? udpConnection.logs.join('\n') : t('common.warning')}
-              </Text>
-            </ScrollView>
-            <TouchableOpacity
-              style={{
-                backgroundColor: '#e05555',
-                borderRadius: 8,
-                paddingVertical: 12,
-                alignItems: 'center',
-                marginTop: 15,
-              }}
-              onPress={async () => {
-                await live2d.live2dService?.clearModelCache();
-                setDebugPanelVisible(false);
-              }}
-            >
-              <Text style={{ color: '#fff', fontWeight: 'bold' }}>🗑️ 清除模型缓存</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={{
-                backgroundColor: '#40c5f1',
-                borderRadius: 8,
-                paddingVertical: 12,
-                alignItems: 'center',
-                marginTop: 10,
-              }}
-              onPress={() => setDebugPanelVisible(false)}
-            >
-              <Text style={{ color: '#fff', fontWeight: 'bold' }}>{t('common.close')}</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>)}
+      <CharacterSwitchOverlay
+        loading={characterLoading}
+        switchedName={switchedCharacterName}
+        error={switchError}
+      />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
-  live2dContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#1a1a2e',
-  },
-  live2dView: {
-    flex: 1,
-    width: '100%',
-    alignSelf: 'stretch',
-  },
-  pausedContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  pausedText: {
-    color: '#666',
-    fontSize: 16,
-  },
-  dragIndicator: {
-    position: 'absolute',
-    top: 16,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(64, 197, 241, 0.25)',
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(64, 197, 241, 0.6)',
-    zIndex: 10,
-  },
-  dragIndicatorText: {
-    color: '#40c5f1',
-    fontSize: 13,
-  },
-  toolbarContainer: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    zIndex: 1000,
-  },
-  chatContainerWrapper: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    zIndex: 100,
-    elevation: 100,
-    pointerEvents: 'box-none',
-  },
-  characterModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  characterModalContent: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    overflow: 'hidden',
-    width: '82%',
-    maxHeight: '65%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.3,
-    shadowRadius: 30,
-    elevation: 20,
-  },
-  characterModalHeader: {
-    backgroundColor: '#40C5F1',
-    paddingVertical: 18,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  characterModalCloseBtn: {
-    position: 'absolute',
-    right: 16,
-    top: '50%',
-    marginTop: -10,
-  },
-  characterModalCloseBtnText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '400',
-    lineHeight: 20,
-  },
-  characterModalTitle: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '600',
-    letterSpacing: 1,
-  },
-  characterModalSubtitle: {
-    color: '#666',
-    fontSize: 13,
-    textAlign: 'center',
-    marginTop: 12,
-    marginBottom: 12,
-    paddingHorizontal: 20,
-  },
-    characterModalSubtitle2: {
-    color: '#666',
-    fontSize: 6,
-    textAlign: 'center',
-    marginTop: 6,
-    marginBottom: 6,
-    paddingHorizontal: 10,
-  },
-  characterModalSubtitleLabel: {
-    color: '#40C5F1',
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  characterModalSubtitleHighlight: {
-    color: '#40C5F1',
-    fontWeight: '600',
-  },
-  characterModalList: {
-    maxHeight: 300,
-    paddingHorizontal: 16,
-    paddingBottom: 4,
-  },
-  characterModalItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 13,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    marginBottom: 8,
-    backgroundColor: '#f0f8ff',
-    borderWidth: 2,
-    borderColor: '#b3e5fc',
-    borderLeftWidth: 4,
-    borderLeftColor: '#40C5F1',
-  },
-  characterModalItemCurrent: {
-    backgroundColor: '#e3f4ff',
-    borderColor: '#40C5F1',
-    borderLeftColor: '#22b3ff',
-  },
-  characterModalItemIcon: {
-    width: 18,
-    height: 18,
-    marginRight: 10,
-    transform: [{ rotate: '-90deg' }],
-    tintColor: '#40C5F1',
-  },
-  characterModalItemText: {
-    flex: 1,
-    color: '#40C5F1',
-    fontSize: 15,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  characterModalItemTextCurrent: {
-    color: '#22b3ff',
-    fontWeight: '700',
-  },
-  characterModalBadgeWrap: {
-    backgroundColor: '#40C5F1',
-    borderRadius: 999,
-    paddingVertical: 2,
-    paddingHorizontal: 10,
-  },
-  characterModalBadgePlaceholder: {
-    width: 38,
-  },
-  characterModalBadge: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  switchingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 9999,
-  },
-  switchingText: {
-    color: '#fff',
-    fontSize: 16,
-    marginTop: 12,
-  },
-  switchingSuccessBanner: {
-    position: 'absolute',
-    bottom: 80,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(40, 40, 40, 0.9)',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-    zIndex: 9999,
-  },
-  switchingSuccessText: {
-    color: '#40c5f1',
-    fontSize: 15,
-  },
-  switchingErrorBanner: {
-    position: 'absolute',
-    bottom: 80,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(40, 40, 40, 0.9)',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-    zIndex: 9999,
-  },
-  switchingErrorText: {
-    color: '#f55',
-    fontSize: 15,
-  },
-  voiceBlockModalContent: {
-    backgroundColor: '#ffffff',
-    width: '72%',
-  },
-  voiceBlockModalHeader: {
-    backgroundColor: '#40C5F1',
-  },
-  voiceBlockModalBody: {
-    color: '#40C5F1',
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginVertical: 16,
-    paddingHorizontal: 20,
-    lineHeight: 22,
-  },
-  voiceBlockModalBtn: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    paddingVertical: 11,
-    borderRadius: 999,
-    backgroundColor: '#40C5F1',
-    alignItems: 'center',
-  },
-  voiceBlockModalBtnText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-});
 
 export default MainUIScreen;
