@@ -5,7 +5,7 @@ import { useAudio } from '@/hooks/useAudio';
 import { useChatMessages } from '@/hooks/useChatMessages';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useDevConnectionConfig } from '@/hooks/useDevConnectionConfig';
-import { useUdpP2PConnection } from '@/hooks/useUdpP2PConnection';
+import { useUdpP2PConnection, type UdpConnectionStatus } from '@/hooks/useUdpP2PConnection';
 import { useLipSync } from '@/hooks/useLipSync';
 import { useLive2D } from '@/hooks/useLive2D';
 import { useLive2DAgentBackend } from '@/hooks/useLive2DAgentBackend';
@@ -26,11 +26,11 @@ import { CharacterSelectionModal } from '@/components/CharacterSelectionModal';
 import { VoiceBlockModal } from '@/components/VoiceBlockModal';
 import { CharacterSwitchOverlay } from '@/components/CharacterSwitchOverlay';
 import { useFocusEffect } from '@react-navigation/native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert, AppState, Appearance, Dimensions, KeyboardAvoidingView, Platform, StyleSheet, Text, View,
+  Alert, AppState, Appearance, Dimensions, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View,
 } from 'react-native';
 import {
   Live2DRightToolbar,
@@ -45,6 +45,8 @@ import {
 } from '@project_neko/components';
 
 type MainUIScreenProps = {}
+
+type MobileRuntimePhase = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'failed';
 
 const MAX_IMAGE_BASE64_LENGTH = 1_500_000;
 
@@ -69,6 +71,7 @@ function generateMessageId(): string {
 
 const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   const { t, i18n: i18nInstance } = useTranslation();
+  const router = useRouter();
   const theme = useTheme();
   const cc = theme.colors;
   const insets = useSafeAreaInsets();
@@ -123,6 +126,10 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     setConfig,
     refreshFromCloud
   );
+  const udpRetryRef = useRef<() => void>(() => {});
+  const udpStatusRef = useRef<UdpConnectionStatus>('idle');
+  udpRetryRef.current = udpConnection.retry;
+  udpStatusRef.current = udpConnection.status;
 
   const params = useLocalSearchParams<{
     qr?: string;
@@ -153,6 +160,11 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         }, 2000);
         // 独立定时器：1.5s 后检查连接，给 realtime client 内部重连一点时间
         setTimeout(() => {
+          if (udpStatusRef.current === 'failed') {
+            console.log('📱 前台恢复后 P2P 仍失败，重试局域网/P2P 探测');
+            udpRetryRef.current();
+            return;
+          }
           if (!audioConnectedRef.current) {
             console.log('📱 前台恢复但连接断开，触发重连');
             audioReconnectRef.current();
@@ -645,11 +657,125 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     }
   }, [cameraStream.error]);
 
-  // 将 audio.connectionStatus 映射到 ConnectionStatus 类型
-  // 在角色切换期间，保持 'open' 状态，避免显示断开错误
+  const mobileRuntime = useMemo<{
+    phase: MobileRuntimePhase;
+    chatStatus: ConnectionStatus;
+    label: string;
+    detail: string;
+    canRetry: boolean;
+    canRescan: boolean;
+  }>(() => {
+    if (!isConfigLoaded) {
+      return {
+        phase: 'idle',
+        chatStatus: 'idle',
+        label: '正在读取连接配置',
+        detail: '',
+        canRetry: false,
+        canRescan: false,
+      };
+    }
+
+    if (p2pConfig?.token) {
+      if (udpConnection.status === 'idle' || udpConnection.status === 'connecting') {
+        return {
+          phase: 'connecting',
+          chatStatus: 'connecting',
+          label: '正在连接电脑端',
+          detail: '正在确认二维码里的局域网地址。',
+          canRetry: false,
+          canRescan: false,
+        };
+      }
+
+      if (udpConnection.status === 'failed') {
+        return {
+          phase: 'failed',
+          chatStatus: 'closed',
+          label: '无法连接电脑端',
+          detail: '请确认电脑端在线、手机和电脑在同一网络，或重新扫码。',
+          canRetry: true,
+          canRescan: true,
+        };
+      }
+    }
+
+    if (audio.connectionPhase === 'connected') {
+      return {
+        phase: 'connected',
+        chatStatus: 'open',
+        label: '已连接',
+        detail: '',
+        canRetry: false,
+        canRescan: false,
+      };
+    }
+
+    if (audio.connectionPhase === 'connecting') {
+      return {
+        phase: 'connecting',
+        chatStatus: 'connecting',
+        label: '连接中',
+        detail: '',
+        canRetry: false,
+        canRescan: false,
+      };
+    }
+
+    if (audio.connectionPhase === 'reconnecting') {
+      return {
+        phase: 'reconnecting',
+        chatStatus: 'reconnecting',
+        label: '正在重连',
+        detail: audio.connectionError || '网络切换或电脑端短暂不可用，正在尝试恢复。',
+        canRetry: true,
+        canRescan: !!p2pConfig?.token,
+      };
+    }
+
+    if (audio.connectionPhase === 'failed') {
+      return {
+        phase: 'failed',
+        chatStatus: 'closed',
+        label: '连接失败',
+        detail: audio.connectionError || '请确认后端已启动，或重新扫码。',
+        canRetry: true,
+        canRescan: !!p2pConfig?.token,
+      };
+    }
+
+    return {
+      phase: 'disconnected',
+      chatStatus: 'closed',
+      label: '未连接',
+      detail: '请扫码或检查服务器配置。',
+      canRetry: true,
+      canRescan: true,
+    };
+  }, [
+    audio.connectionError,
+    audio.connectionPhase,
+    isConfigLoaded,
+    p2pConfig?.token,
+    udpConnection.status,
+  ]);
+
+  const handleRetryConnection = useCallback(() => {
+    if (p2pConfig?.token && udpConnection.status === 'failed') {
+      udpConnection.retry();
+    } else {
+      audio.reconnect();
+    }
+    statusToastRef.current?.show('正在重新连接...', 2000);
+  }, [audio.reconnect, p2pConfig?.token, udpConnection.retry, udpConnection.status]);
+
+  const handleRescanConnection = useCallback(() => {
+    router.push({ pathname: '/qr-scanner', params: { returnTo: '/(tabs)/main' } });
+  }, [router]);
+
   const connectionStatus: ConnectionStatus = isSwitchingCharacterRef.current
     ? 'open'
-    : (audio.isConnected ? 'open' : 'closed');
+    : mobileRuntime.chatStatus;
 
   const live2d = useLive2D({
     modelName: live2dModel.name,
@@ -1264,10 +1390,33 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     live2dWrapper: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
     bottomSection: { position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 100 },
     topBar: {
-      position: 'absolute', top: 0, left: 0, right: 0, zIndex: 200,
-      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-      paddingHorizontal: 20, paddingTop: insets.top + 8,
+      position: 'absolute', top: 0, left: 0, right: 72, zIndex: 200,
+      alignItems: 'flex-start',
+      paddingLeft: 16, paddingTop: insets.top + 8,
     },
+    connectionChip: {
+      maxWidth: '100%',
+      minHeight: 34,
+      borderRadius: 16,
+      backgroundColor: 'rgba(15, 23, 42, 0.72)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.12)',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    connectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    connectionTitle: { fontSize: 13, fontWeight: '600', color: cc.textOnAccent, flexShrink: 1 },
+    connectionDetail: { marginTop: 4, fontSize: 12, color: 'rgba(255,255,255,0.78)', lineHeight: 16 },
+    connectionActions: { flexDirection: 'row', gap: 8, marginTop: 8 },
+    connectionActionButton: {
+      minHeight: 28,
+      paddingHorizontal: 10,
+      borderRadius: 14,
+      backgroundColor: 'rgba(255,255,255,0.14)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    connectionActionText: { color: cc.textOnAccent, fontSize: 12, fontWeight: '600' },
   }), [cc, insets.top]);
 
   // Wrap send to auto-expand chat
@@ -1299,11 +1448,39 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
 
       {/* Top bar (overlays Live2D) */}
       <View style={s.topBar} pointerEvents="box-none">
-        <View pointerEvents="auto" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: audio.isConnected ? cc.success : cc.error }} />
-          <Text style={{ fontSize: 13, fontWeight: '600', color: cc.textSecondary }}>
-            {config.characterName || 'N.E.K.O.'}
-          </Text>
+        <View pointerEvents="auto" style={s.connectionChip}>
+          <View style={s.connectionHeader}>
+            <View style={{
+              width: 8,
+              height: 8,
+              borderRadius: 4,
+              backgroundColor: mobileRuntime.chatStatus === 'open'
+                ? cc.success
+                : mobileRuntime.chatStatus === 'connecting' || mobileRuntime.chatStatus === 'reconnecting'
+                  ? cc.warning
+                  : cc.error,
+            }} />
+            <Text numberOfLines={1} style={s.connectionTitle}>
+              {config.characterName || 'N.E.K.O.'} · {mobileRuntime.label}
+            </Text>
+          </View>
+          {!!mobileRuntime.detail && mobileRuntime.phase !== 'connected' && (
+            <Text numberOfLines={2} style={s.connectionDetail}>{mobileRuntime.detail}</Text>
+          )}
+          {(mobileRuntime.canRetry || mobileRuntime.canRescan) && (
+            <View style={s.connectionActions}>
+              {mobileRuntime.canRetry && (
+                <Pressable style={s.connectionActionButton} onPress={handleRetryConnection}>
+                  <Text style={s.connectionActionText}>重试</Text>
+                </Pressable>
+              )}
+              {mobileRuntime.canRescan && (
+                <Pressable style={s.connectionActionButton} onPress={handleRescanConnection}>
+                  <Text style={s.connectionActionText}>重新扫码</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
         </View>
       </View>
 
@@ -1344,6 +1521,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         <ChatContainer
           externalMessages={chat.messages}
           connectionStatus={connectionStatus}
+          statusText={mobileRuntime.label}
           onSendMessage={handleSendAndExpand}
           disabled={!audio.isConnected}
           forceCollapsed={isChatForceCollapsed}

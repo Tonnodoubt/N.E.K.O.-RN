@@ -4,8 +4,7 @@
  * 自动处理 UDP P2P 两层连接，并更新 config 中的 host 和 port
  */
 
-import { useEffect, useRef, useState } from 'react';
-import { Alert } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { UdpP2PClient, type TcpEndpoint } from '@/services/UdpP2PClient';
 import type { DevConnectionConfig } from '@/utils/devConnectionConfig';
 
@@ -21,6 +20,7 @@ export function useUdpP2PConnection(
   endpoint: TcpEndpoint | null;
   layer: number | null;
   isConnecting: boolean;
+  retry: () => void;
   logs: string[];
 } {
   const [status, setStatus] = useState<UdpConnectionStatus>('idle');
@@ -36,6 +36,26 @@ export function useUdpP2PConnection(
 
   // 使用 ref 防止重复连接
   const hasAttemptedRef = useRef(false);
+  const lastTokenRef = useRef<string | undefined>(undefined);
+  const [retryKey, setRetryKey] = useState(0);
+
+  const retry = useCallback(() => {
+    hasAttemptedRef.current = false;
+    setEndpoint(null);
+    setLayer(null);
+    setStatus('idle');
+    setRetryKey(key => key + 1);
+  }, []);
+
+  useEffect(() => {
+    const token = config.p2p?.token;
+    if (lastTokenRef.current === token) return;
+    lastTokenRef.current = token;
+    hasAttemptedRef.current = false;
+    setEndpoint(null);
+    setLayer(null);
+    setStatus(token ? 'idle' : 'connected');
+  }, [config.p2p?.token]);
 
   useEffect(() => {
     // 如果配置未加载，跳过
@@ -143,13 +163,14 @@ export function useUdpP2PConnection(
     return () => {
       clearTimeout(timer);
     };
-  }, [isConfigLoaded, config.p2p?.token]);  // 只在 token 变化时重新连接
+  }, [isConfigLoaded, config.p2p?.token, retryKey]);  // token 变化或手动 retry 时重新连接
 
   return {
     status,
     endpoint,
     layer,
     isConnecting: status === 'connecting',
+    retry,
     logs,
   };
 }
