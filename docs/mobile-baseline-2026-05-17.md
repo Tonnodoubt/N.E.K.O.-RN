@@ -187,9 +187,30 @@ PC runtime smoke:
 - `npm install` was required in the new PC worktree to restore `node_modules`; `package-lock.json` was restored afterward and the PC worktree remained clean.
 - Runtime log: `/tmp/neko-pc-mobile-connect-start.log`.
 
+## Manual End-To-End Check - 2026-05-17
+
+Manual three-side validation passed on the real LAN.
+
+Validated flow:
+
+- Backend was run from `/Users/tongqianqiu/N.E.K.O.TONG-mobile-backend` on `mobile-backend`.
+- PC was run from `/Users/tongqianqiu/N.E.K.O.-PC-mobile-connect` on `mobile-connect`.
+- RN used the debug APK from this baseline.
+- PC tray Mobile Connect QR rendered correctly.
+- Phone scanned the QR and entered the mobile connection flow.
+- Desktop yielded silently.
+- Phone-side takeover worked.
+- Basic mobile chat, TTS, and Live2D paths ran successfully.
+- Disconnect and re-scan path was acceptable.
+
+Runtime note:
+
+- A stale main server from `/Users/tongqianqiu/N.E.K.O.TONG` was previously occupying `48911`, causing `/p2p-info` to return HTML instead of JSON.
+- The valid manual run requires `48911` to be served by `/Users/tongqianqiu/N.E.K.O.TONG-mobile-backend`, with LAN proxy on `48920`.
+
 ## Next Step
 
 Continue from the verified baseline:
 
-1. Run an end-to-end three-device check on the real LAN.
-2. Decide whether to push the three baseline branches and the RN native package branches.
+1. Decide whether to push the three baseline branches and the RN native package branches.
+2. Start the next mobile feature pass from this baseline.
