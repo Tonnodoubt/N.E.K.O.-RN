@@ -122,6 +122,7 @@ cd /Users/tongqianqiu/N.E.K.O.-RN
 npm run type-check
 npm run test
 npm run lint
+cd android && JAVA_HOME=/opt/homebrew/opt/openjdk@17 ANDROID_HOME=/Users/tongqianqiu/Library/Android/sdk ./gradlew assembleDebug --no-daemon
 ```
 
 Results:
@@ -130,6 +131,10 @@ Results:
 - Workspace tests passed
 - Lint passed with `0` errors
 - Lint still reports existing formatting/import warnings
+- Android debug APK build passed
+  - APK: `/Users/tongqianqiu/N.E.K.O.-RN/android/app/build/outputs/apk/debug/app-debug.apk`
+  - Size: `215M`
+  - SHA-256: `eae3a7745485422f78c6322850174e725b25e10c57af3eb92988f73b2e0b700b`
 
 Current RN working tree notes:
 
@@ -146,11 +151,45 @@ Pushing later requires an explicit decision about submodule remotes:
 - `react-native-live2d` is ahead of and behind its upstream `main`.
 - `react-native-pcm-stream` uses local branch `mobile-rn-support`.
 
+## Artifact And Runtime Check - 2026-05-17
+
+Second-step checks are complete.
+
+RN artifact:
+
+- `./gradlew assembleDebug --no-daemon` passed.
+- APK: `/Users/tongqianqiu/N.E.K.O.-RN/android/app/build/outputs/apk/debug/app-debug.apk`
+- Size: `215M`
+- SHA-256: `eae3a7745485422f78c6322850174e725b25e10c57af3eb92988f73b2e0b700b`
+- Gradle reported existing deprecation warnings and the existing Expo `NODE_ENV` warning.
+
+Backend runtime smoke:
+
+- Default main port `48911` was occupied during the check, so the isolated smoke used main `50911` and LAN proxy `50920`.
+- Main `/health`: passed.
+- LAN proxy `/health`: passed.
+- Main `/p2p-info`: `200`.
+- LAN proxy `/p2p-info`: `200`.
+- `/lanproxyqrcode`: `200`, `2110` bytes.
+- QR payload confirmed:
+  - `lan_ip: 192.168.1.8`
+  - `port: 50920`
+  - `character: test`
+  - token present
+  - `pairing_supported: true`
+  - direct URL uses the same LAN proxy port.
+
+PC runtime smoke:
+
+- `/Users/tongqianqiu/N.E.K.O.-PC-mobile-connect` was started with `npm start` for about 30 seconds.
+- Startup produced useful Electron/app output and no failure pattern was detected.
+- The test harness terminated the app after the timeout; the final renderer/GPU termination lines are from that controlled shutdown.
+- `npm install` was required in the new PC worktree to restore `node_modules`; `package-lock.json` was restored afterward and the PC worktree remained clean.
+- Runtime log: `/tmp/neko-pc-mobile-connect-start.log`.
+
 ## Next Step
 
-Build and runtime artifact checks:
+Continue from the verified baseline:
 
-1. Build RN Android debug APK.
-2. Start backend on default ports from `mobile-backend`.
-3. Start PC from `mobile-connect`.
-4. Confirm the tray QR still drives the already-tested phone takeover path.
+1. Run an end-to-end three-device check on the real LAN.
+2. Decide whether to push the three baseline branches and the RN native package branches.
