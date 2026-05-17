@@ -288,6 +288,17 @@ export default function HomeScreen() {
               <Text style={{ fontSize: 15, color: cc.textPrimary, flex: 1 }}>{t('home.actions.qrConfig')}</Text>
               <Ionicons name="chevron-forward" size={16} color={cc.textMuted} />
             </TouchableOpacity>
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderRadius: 16 }}
+              onPress={() => {
+                setMenuOpen(false);
+                router.push('/vrm-poc');
+              }}
+            >
+              <Ionicons name="cube-outline" size={18} color={cc.accent} />
+              <Text style={{ fontSize: 15, color: cc.textPrimary, flex: 1 }}>VRM PoC</Text>
+              <Ionicons name="chevron-forward" size={16} color={cc.textMuted} />
+            </TouchableOpacity>
           </Pressable>
         </Pressable>
       </Modal>
