@@ -1,41 +1,51 @@
 import React from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import Markdown from 'react-native-markdown-display';
+import { useTheme } from '@/constants/ThemeContext';
+import { useChatFont } from '@/constants/FontContext';
 
 interface SmartTextBlockProps {
   text: string;
   isStreaming?: boolean;
+  textColor?: string;
 }
 
-const markdownStyles = {
-  body: { fontSize: 15, lineHeight: 22, color: '#333' },
-  heading1: { fontSize: 24, fontWeight: '700' as const, marginTop: 14, marginBottom: 6 },
-  heading2: { fontSize: 20, fontWeight: '700' as const, marginTop: 12, marginBottom: 4 },
-  heading3: { fontSize: 17, fontWeight: '600' as const, marginTop: 10, marginBottom: 4 },
-  bold: { fontWeight: '700' as const },
-  italic: { fontStyle: 'italic' as const },
-  code_inline: {
-    fontFamily: 'Courier', fontSize: 13,
-    backgroundColor: 'rgba(0,0,0,0.06)', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3,
-  },
-  code_block: {
-    fontFamily: 'Courier', fontSize: 12,
-    backgroundColor: 'rgba(0,0,0,0.04)', padding: 8, borderRadius: 6, marginVertical: 4,
-  },
-  bullet_list: { marginLeft: 12 },
-  ordered_list: { marginLeft: 12 },
-  blockquote: { borderLeftWidth: 3, borderLeftColor: '#ccc', paddingLeft: 8, opacity: 0.85 },
-  link: { color: '#44b7fe', textDecorationLine: 'underline' as const },
-};
+export default function SmartTextBlock({ text, isStreaming, textColor }: SmartTextBlockProps) {
+  const t = useTheme();
+  const { fontFamily } = useChatFont();
 
-export default function SmartTextBlock({ text, isStreaming }: SmartTextBlockProps) {
+  const markdownStyles = {
+    body: {
+      fontSize: t.fontSize.body, lineHeight: t.lineHeight.body, fontWeight: '500' as const,
+      color: textColor ?? t.colors.textPrimary,
+      ...(fontFamily ? { fontFamily } : {}),
+    },
+    heading1: { fontSize: t.fontSize.title, fontWeight: t.fontWeight.bold, marginTop: t.spacing.lg, marginBottom: t.spacing.xs },
+    heading2: { fontSize: t.fontSize.callout, fontWeight: t.fontWeight.bold, marginTop: t.spacing.md, marginBottom: t.spacing.xs },
+    heading3: { fontSize: t.fontSize.callout, fontWeight: t.fontWeight.semibold, marginTop: t.spacing.md, marginBottom: t.spacing.xs },
+    bold: { fontWeight: t.fontWeight.bold },
+    italic: { fontStyle: 'italic' as const },
+    code_inline: {
+      fontFamily: 'Courier', fontSize: t.fontSize.footnote,
+      backgroundColor: t.colors.separator, paddingHorizontal: t.spacing.xs, paddingVertical: 1, borderRadius: t.radius.xs,
+    },
+    code_block: {
+      fontFamily: 'Courier', fontSize: t.fontSize.caption,
+      backgroundColor: t.colors.separator, padding: t.spacing.sm, borderRadius: t.radius.xs, marginVertical: t.spacing.xs,
+    },
+    bullet_list: { marginLeft: t.spacing.md },
+    ordered_list: { marginLeft: t.spacing.md },
+    blockquote: { borderLeftWidth: 3, borderLeftColor: t.colors.border, paddingLeft: t.spacing.sm, opacity: 0.85 },
+    link: { color: t.colors.accent, textDecorationLine: 'underline' as const },
+  };
+
   return (
     <View>
       <Markdown style={markdownStyles}>{text}</Markdown>
       {isStreaming && (
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2, gap: 4 }}>
-          <View style={{ width: 6, height: 14, backgroundColor: '#44b7fe', borderRadius: 1, opacity: 0.7 }} />
-          <ActivityIndicator size="small" color="#44b7fe" />
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2, gap: t.spacing.xs }}>
+          <View style={{ width: 6, height: 14, backgroundColor: t.colors.accent, borderRadius: 1, opacity: 0.7 }} />
+          <ActivityIndicator size="small" color={t.colors.accent} />
         </View>
       )}
     </View>

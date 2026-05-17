@@ -35,7 +35,9 @@
     "actions": {
       "manualConfig": "Manual Config",
       "qrConfig": "Scan QR",
-      "currentRole": "Character"
+      "currentRole": "Character",
+      "startChat": "Start Chat",
+      "scanToConnect": "Scan to Connect"
     }
   },
   "main": {
@@ -60,7 +62,11 @@
       "switched": "Switched to {{name}}",
       "switchError": "Failed to switch character",
       "select": "Select Character",
-      "noCharacters": "No characters available"
+      "noCharacters": "No characters available",
+      "manage": "Character Manager",
+      "currentLabel": "Current: ",
+      "noCharacter": "No Character",
+      "current": "Current"
     },
     "voice": {
       "start": "Start Voice",
@@ -68,13 +74,28 @@
       "rest": "Rest",
       "preparing": "Preparing...",
       "ready": "Ready",
-      "blocked": "Voice input blocked"
+      "blocked": "Voice input blocked",
+      "voiceBlockTitle": "Cannot Switch Character",
+      "voiceBlockBody": "Cannot switch character during a voice call. Please end the call first.",
+      "voiceBlockOk": "OK",
+      "systemPreparing": "Preparing voice system...",
+      "systemReady": "Voice Ready"
     },
     "debug": {
       "title": "Debug Info",
       "toggle": "Show/Hide",
       "connection": "Connection Info",
-      "p2pLayer": "P2P Connection Layer"
+      "p2pLayer": "P2P Connection Layer",
+      "clearCache": "Clear Model Cache",
+      "notConnected": "Not Connected",
+      "unavailable": "Unavailable",
+      "noLogs": "No logs yet",
+      "connectionLogs": "Connection Logs"
+    },
+    "live2d": {
+      "paused": "Live2D Paused",
+      "pageInactive": "Page Inactive",
+      "adjusting": "Adjusting"
     }
   },
   "settings": {

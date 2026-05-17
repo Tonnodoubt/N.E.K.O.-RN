@@ -67,7 +67,7 @@ export const useChatMessages = (config: UseChatMessagesConfig = {}) => {
     const timestamp = getCurrentTimeString();
     const newMessage: ChatMessage = {
       id: generateChatId(),
-      text: options?.skipTimestamp ? text : `[${timestamp}] ${sender === 'gemini' ? '🎀' : sender === 'user' ? '👤' : '📢'} ${text}`,
+      text: text,
       sender,
       timestamp,
       isComplete: options?.isComplete ?? true,
@@ -115,7 +115,7 @@ export const useChatMessages = (config: UseChatMessagesConfig = {}) => {
         const timestamp = getCurrentTimeString();
         const newMessage: ChatMessage = {
           id: generateChatId(),
-          text: `[${timestamp}] ${sender === 'gemini' ? '🎀' : '👤'} ${text}`,
+          text: text,
           sender,
           timestamp,
           isComplete: false,
@@ -156,7 +156,7 @@ export const useChatMessages = (config: UseChatMessagesConfig = {}) => {
     if (!lastMessage) return undefined;
     
     // 移除时间戳和表情符号前缀
-    return lastMessage.text.replace(/^\[\d{2}:\d{2}:\d{2}\] [🎀👤📢] /, '');
+    return lastMessage.text;
   }, [getLastMessage]);
 
   // 清空所有消息

@@ -188,4 +188,18 @@ export interface ChatContainerProps {
    * 用户点击 avatar 工具按钮时触发
    */
   onAvatarTool?: (action: string) => void;
+
+  // ─── Doubao-style inline mode props ───
+
+  /** Parent-controlled chat expansion state. When defined, enables inline mode (no Modal/FAB). */
+  chatExpanded?: boolean;
+
+  /** Toggle chat sheet visibility */
+  onToggleChat?: () => void;
+
+  /** Mic toggle callback for inline input bar */
+  onToggleMic?: () => void;
+
+  /** Whether mic is currently enabled */
+  micEnabled?: boolean;
 }

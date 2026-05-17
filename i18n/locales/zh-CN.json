@@ -35,7 +35,9 @@
     "actions": {
       "manualConfig": "手动配置",
       "qrConfig": "扫码配置",
-      "currentRole": "角色"
+      "currentRole": "角色",
+      "startChat": "开始聊天",
+      "scanToConnect": "扫码连接"
     }
   },
   "main": {
@@ -61,6 +63,9 @@
       "switchError": "角色切换失败",
       "select": "选择角色",
       "noCharacters": "暂无可用角色",
+      "manage": "角色管理",
+      "currentLabel": "当前角色: ",
+      "noCharacter": "无角色",
       "current": "当前",
       "voiceBlockTitle": "无法切换角色"
     },
@@ -71,13 +76,28 @@
       "preparing": "准备中...",
       "ready": "就绪",
       "blocked": "语音输入被阻止",
-      "cannotSwitchCharacter": "语音模式下无法切换角色，请先停止语音对话后再切换。"
+      "cannotSwitchCharacter": "语音通话中无法切换角色，请先结束语音通话。",
+      "voiceBlockTitle": "无法切换角色",
+      "voiceBlockBody": "语音通话中无法切换角色，请先结束语音通话。",
+      "voiceBlockOk": "好的",
+      "systemPreparing": "语音系统准备中...",
+      "systemReady": "语音已就绪"
     },
     "debug": {
       "title": "调试信息",
       "toggle": "显示/隐藏",
       "connection": "连接信息",
-      "p2pLayer": "P2P 连接层"
+      "p2pLayer": "P2P 连接层",
+      "clearCache": "清除模型缓存",
+      "notConnected": "未连接",
+      "unavailable": "不可用",
+      "noLogs": "暂无日志",
+      "connectionLogs": "连接日志："
+    },
+    "live2d": {
+      "paused": "Live2D 已暂停",
+      "pageInactive": "页面未激活",
+      "adjusting": "调整中"
     }
   },
   "settings": {

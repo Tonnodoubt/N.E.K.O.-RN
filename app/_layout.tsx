@@ -9,6 +9,8 @@ import { useEffect, useState } from 'react';
 
 import { initI18n, i18n } from '@/i18n';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { ThemeProvider as AppThemeProvider } from '@/constants/ThemeContext';
+import { FontProvider } from '@/constants/FontContext';
 import PrivacyConsentModal, { PRIVACY_AGREED_KEY } from '@/components/PrivacyConsentModal';
 
 export const unstable_settings = {
@@ -42,16 +44,19 @@ export default function RootLayout() {
           <PrivacyConsentModal onAgree={() => setPrivacyStatus('agreed')} />
         ) : (
           <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-            <Stack>
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              {/* <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} /> */}
-              <Stack.Screen name="audio-test" options={{ title: '音频测试' }} />
-              <Stack.Screen name="audio-debug" options={{ title: '🎤 音频诊断' }} />
-              <Stack.Screen name="qr-scanner" options={{ title: '扫码（Dev）' }} />
-              <Stack.Screen name="request-lab" options={{ title: 'Request/组件实验室' }} />
-              <Stack.Screen name="vrm-poc" options={{ title: 'VRM R3F PoC' }} />
-              <Stack.Screen name="webapp" options={{ title: 'WebApp（对齐 frontend/src/web/App.tsx）' }} />
-            </Stack>
+            <AppThemeProvider>
+              <FontProvider>
+              <Stack>
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                {/* <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} /> */}
+                <Stack.Screen name="audio-test" options={{ title: '音频测试' }} />
+                <Stack.Screen name="audio-debug" options={{ title: '🎤 音频诊断' }} />
+                <Stack.Screen name="qr-scanner" options={{ title: '扫码（Dev）' }} />
+                <Stack.Screen name="request-lab" options={{ title: 'Request/组件实验室' }} />
+                <Stack.Screen name="vrm-poc" options={{ title: 'VRM R3F PoC' }} />
+              </Stack>
+              </FontProvider>
+            </AppThemeProvider>
             <StatusBar style="auto" />
           </ThemeProvider>
         )}

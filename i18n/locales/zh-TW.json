@@ -33,7 +33,9 @@
     "actions": {
       "manualConfig": "手動配置",
       "qrConfig": "掃描配置",
-      "currentRole": "角色"
+      "currentRole": "角色",
+      "startChat": "開始聊天",
+      "scanToConnect": "掃碼連接"
     }
   },
   "main": {
@@ -58,7 +60,11 @@
       "switched": "已切換到 {{name}}",
       "switchError": "角色切換失敗",
       "select": "選擇角色",
-      "noCharacters": "暫無可用角色"
+      "noCharacters": "暫無可用角色",
+      "manage": "角色管理",
+      "currentLabel": "目前角色: ",
+      "noCharacter": "無角色",
+      "current": "目前"
     },
     "voice": {
       "start": "開始語音",
@@ -66,13 +72,28 @@
       "rest": "休息一下",
       "preparing": "準備中...",
       "ready": "就緒",
-      "blocked": "語音輸入被阻止"
+      "blocked": "語音輸入被阻止",
+      "voiceBlockTitle": "無法切換角色",
+      "voiceBlockBody": "語音通話中無法切換角色，請先結束語音通話。",
+      "voiceBlockOk": "好的",
+      "systemPreparing": "語音系統準備中...",
+      "systemReady": "語音已就緒"
     },
     "debug": {
       "title": "除錯資訊",
       "toggle": "顯示/隱藏",
       "connection": "連線資訊",
-      "p2pLayer": "P2P 連線層"
+      "p2pLayer": "P2P 連線層",
+      "clearCache": "清除模型快取",
+      "notConnected": "未連線",
+      "unavailable": "不可用",
+      "noLogs": "暫無日誌",
+      "connectionLogs": "連線日誌："
+    },
+    "live2d": {
+      "paused": "Live2D 已暫停",
+      "pageInactive": "頁面未啟用",
+      "adjusting": "調整中"
     }
   },
   "settings": {

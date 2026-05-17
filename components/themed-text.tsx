@@ -1,61 +1,59 @@
 import { StyleSheet, Text, type TextProps } from 'react-native';
 import type { PropsWithChildren } from 'react';
 
-import { useThemeColor } from '@/hooks/use-theme-color';
+import { useTheme } from '@/constants/ThemeContext';
+import type { TextVariant } from '@/constants/tokens/typography';
 
 export type ThemedTextProps = PropsWithChildren<TextProps & {
   lightColor?: string;
   darkColor?: string;
+  /** @deprecated Use `variant` instead */
   type?: 'default' | 'title' | 'defaultSemiBold' | 'subtitle' | 'link';
+  variant?: TextVariant;
 }>;
+
+const typeToVariant: Record<string, TextVariant> = {
+  default: 'body',
+  title: 'largeTitle',
+  defaultSemiBold: 'body',
+  subtitle: 'headline',
+  link: 'body',
+};
 
 export function ThemedText({
   style,
   lightColor,
   darkColor,
-  type = 'default',
+  type,
+  variant,
   ...rest
 }: ThemedTextProps) {
-  const color = useThemeColor({ light: lightColor, dark: darkColor }, 'text');
+  const theme = useTheme();
+
+  const resolvedVariant: TextVariant = variant ?? typeToVariant[type ?? 'default'] ?? 'body';
+
+  const color = lightColor && theme.isDark
+    ? undefined
+    : darkColor && !theme.isDark
+      ? undefined
+      : (lightColor ?? darkColor ?? theme.colors.textPrimary);
 
   return (
     <Text
       style={[
-        { color },
-        type === 'default' ? styles.default : undefined,
-        type === 'title' ? styles.title : undefined,
-        type === 'defaultSemiBold' ? styles.defaultSemiBold : undefined,
-        type === 'subtitle' ? styles.subtitle : undefined,
-        type === 'link' ? styles.link : undefined,
+        {
+          color,
+          fontSize: theme.fontSize[resolvedVariant],
+          lineHeight: theme.lineHeight[resolvedVariant],
+        },
+        resolvedVariant === 'largeTitle' && { fontWeight: theme.fontWeight.bold },
+        resolvedVariant === 'title' && { fontWeight: theme.fontWeight.bold },
+        resolvedVariant === 'headline' && { fontWeight: theme.fontWeight.bold },
+        resolvedVariant === 'body' && type === 'defaultSemiBold' && { fontWeight: theme.fontWeight.semibold },
+        type === 'link' && { color: theme.colors.accent, textDecorationLine: 'underline' },
         style,
       ]}
       {...rest}
     />
   );
 }
-
-const styles = StyleSheet.create({
-  default: {
-    fontSize: 16,
-    lineHeight: 24,
-  },
-  defaultSemiBold: {
-    fontSize: 16,
-    lineHeight: 24,
-    fontWeight: '600',
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    lineHeight: 32,
-  },
-  subtitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  link: {
-    lineHeight: 30,
-    fontSize: 16,
-    color: '#0a7ea4',
-  },
-});

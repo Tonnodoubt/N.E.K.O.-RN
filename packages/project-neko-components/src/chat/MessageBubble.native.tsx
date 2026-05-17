@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, Linking, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import SmartTextBlock from './SmartTextBlock.native';
+import { useTheme } from '@/constants/ThemeContext';
 import type { ChatMessage, MessageBlock, TextBlock, ImageBlock, LinkBlock, StatusBlock, ButtonBlock } from './types';
 
 function ensureDataURI(url: string): string {
@@ -21,13 +22,7 @@ const STATUS_ICONS: Record<StatusBlock['level'], keyof typeof Ionicons.glyphMap>
   error: 'close-circle',
 };
 
-const STATUS_COLORS: Record<StatusBlock['level'], string> = {
-  info: '#44b7fe',
-  warn: '#faad14',
-  error: '#ff4d4f',
-};
-
-function renderBlock(block: MessageBlock, isUser: boolean, isStreaming: boolean, key: string) {
+function renderBlock(block: MessageBlock, isUser: boolean, isStreaming: boolean, key: string, t: ReturnType<typeof useTheme>, textColor?: string) {
   switch (block.type) {
     case 'text':
       return (
@@ -35,6 +30,7 @@ function renderBlock(block: MessageBlock, isUser: boolean, isStreaming: boolean,
           key={key}
           text={block.text}
           isStreaming={isStreaming}
+          textColor={textColor}
         />
       );
 
@@ -46,11 +42,11 @@ function renderBlock(block: MessageBlock, isUser: boolean, isStreaming: boolean,
           style={{
             width: 200,
             height: 150,
-            borderRadius: 8,
-            marginTop: 6,
+            borderRadius: t.radius.sm,
+            marginTop: t.spacing.xs,
           }}
           resizeMode="cover"
-          onError={(e) => console.warn('❌ Image render error:', e.nativeEvent?.error)}
+          onError={(e) => console.warn('Image render error:', e.nativeEvent?.error)}
         />
       );
 
@@ -71,8 +67,8 @@ function renderBlock(block: MessageBlock, isUser: boolean, isStreaming: boolean,
             paddingVertical: 4,
           }}
         >
-          <Ionicons name="link-outline" size={14} color="#44b7fe" />
-          <Text style={{ color: '#44b7fe', fontSize: 13, textDecorationLine: 'underline' }}>
+          <Ionicons name="link-outline" size={14} color={t.colors.accent} />
+          <Text style={{ color: t.colors.accent, fontSize: t.fontSize.footnote, textDecorationLine: 'underline' }}>
             {block.title || block.url}
           </Text>
         </TouchableOpacity>
@@ -89,16 +85,16 @@ function renderBlock(block: MessageBlock, isUser: boolean, isStreaming: boolean,
             marginTop: 4,
             paddingHorizontal: 10,
             paddingVertical: 6,
-            borderRadius: 6,
-            backgroundColor: `${STATUS_COLORS[block.level]}15`,
+            borderRadius: t.radius.xs,
+            backgroundColor: t.colors[block.level === 'info' ? 'accent' : block.level === 'warn' ? 'warning' : 'error'] + '15',
           }}
         >
           <Ionicons
             name={STATUS_ICONS[block.level]}
             size={14}
-            color={STATUS_COLORS[block.level]}
+            color={t.colors[block.level === 'info' ? 'accent' : block.level === 'warn' ? 'warning' : 'error']}
           />
-          <Text style={{ fontSize: 12, color: STATUS_COLORS[block.level] }}>
+          <Text style={{ fontSize: t.fontSize.footnote, color: t.colors[block.level === 'info' ? 'accent' : block.level === 'warn' ? 'warning' : 'error'] }}>
             {block.text}
           </Text>
         </View>
@@ -110,17 +106,17 @@ function renderBlock(block: MessageBlock, isUser: boolean, isStreaming: boolean,
           key={key}
           onPress={() => {}}
           style={{
-            marginTop: 6,
-            paddingHorizontal: 14,
-            paddingVertical: 8,
-            borderRadius: 8,
-            backgroundColor: isUser ? 'rgba(255,255,255,0.25)' : '#44b7fe',
+            marginTop: t.spacing.xs,
+            paddingHorizontal: t.spacing.lg,
+            paddingVertical: t.spacing.sm,
+            borderRadius: t.radius.sm,
+            backgroundColor: isUser ? t.colors.border : t.colors.accent,
           }}
         >
           <Text style={{
-            fontSize: 13,
-            fontWeight: '600',
-            color: '#fff',
+            fontSize: t.fontSize.footnote,
+            fontWeight: t.fontWeight.semibold,
+            color: t.colors.textOnAccent,
             textAlign: 'center',
           }}>
             {block.label}
@@ -134,14 +130,15 @@ function renderBlock(block: MessageBlock, isUser: boolean, isStreaming: boolean,
 }
 
 export default function MessageBubble({ message, isGrouped }: MessageBubbleProps) {
+  const t = useTheme();
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
   const isStreaming = (message as ChatMessage & { isStreaming?: boolean }).isStreaming === true;
 
   if (isSystem) {
     return (
-      <Animated.View entering={FadeIn.duration(150)} style={{ paddingHorizontal: 12, paddingVertical: 4 }}>
-        <Text style={{ fontSize: 12, color: '#999', textAlign: 'center' }}>
+      <Animated.View entering={FadeIn.duration(t.duration.instant)} style={{ paddingHorizontal: t.spacing.md, paddingVertical: 4 }}>
+        <Text style={{ fontSize: t.fontSize.footnote, color: t.colors.textMuted, textAlign: 'center' }}>
           {message.content || ''}
         </Text>
       </Animated.View>
@@ -155,48 +152,34 @@ export default function MessageBubble({ message, isGrouped }: MessageBubbleProps
         ...(message.image ? [{ type: 'image' as const, url: message.image }] : []),
       ];
 
+  const textColor = isUser ? t.colors.userBubbleText : t.colors.aiBubbleText;
+
   return (
     <Animated.View
-      entering={FadeIn.duration(150)}
+      entering={FadeIn.duration(t.duration.instant)}
       style={{
-        maxWidth: '85%',
+        maxWidth: '80%',
         alignSelf: isUser ? 'flex-end' : 'flex-start',
-        marginTop: isGrouped ? 2 : 8,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 16,
-        borderBottomRightRadius: isUser ? 4 : 16,
-        borderBottomLeftRadius: isUser ? 16 : 4,
-        backgroundColor: isUser
-          ? '#44b7fe'
-          : 'rgba(255, 255, 255, 0.85)',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 3,
-        elevation: 1,
+        marginTop: isGrouped ? 2 : t.spacing.sm,
+        paddingHorizontal: t.spacing.md,
+        paddingVertical: t.spacing.sm,
+        borderRadius: t.radius.lg,
+        borderBottomRightRadius: isUser ? t.radius.xs : t.radius.lg,
+        borderBottomLeftRadius: isUser ? t.radius.lg : t.radius.xs,
+        backgroundColor: isUser ? t.colors.userBubbleBg : t.colors.aiBubbleBg,
+        borderWidth: isUser ? 0 : 0.5,
+        borderColor: isUser ? 'transparent' : t.colors.aiBubbleBorder,
       }}
     >
-      {!isGrouped && (
-        <Text style={{
-          fontSize: 10,
-          fontWeight: '600',
-          color: isUser ? 'rgba(255,255,255,0.7)' : '#999',
-          marginBottom: 4,
-        }}>
-          {isUser ? 'You' : 'N.E.K.O.'}
-        </Text>
-      )}
-
       {blocks.map((block, i) =>
-        renderBlock(block, isUser, isStreaming, `${message.id}-block-${i}`)
+        renderBlock(block, isUser, isStreaming, `${message.id}-block-${i}`, t, textColor)
       )}
 
       {isStreaming && !isUser && blocks.length === 0 && (
         <View style={{ flexDirection: 'row', gap: 2, paddingVertical: 4 }}>
-          <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: '#44b7fe' }} />
-          <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: '#44b7fe', opacity: 0.6 }} />
-          <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: '#44b7fe', opacity: 0.3 }} />
+          <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: t.colors.accent }} />
+          <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: t.colors.accent, opacity: 0.6 }} />
+          <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: t.colors.accent, opacity: 0.3 }} />
         </View>
       )}
     </Animated.View>

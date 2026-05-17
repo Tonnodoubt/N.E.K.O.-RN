@@ -37,7 +37,8 @@ export type Live2DSettingsMenuId =
   | "voiceClone"
   | "memoryBrowser"
   | "steamWorkshop"
-  | "connectionHelp";
+  | "connectionHelp"
+  | "chatFont";
 
 export interface Live2DRightToolbarProps {
   visible?: boolean;

@@ -1,15 +1,15 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useDevConnectionConfig } from '@/hooks/useDevConnectionConfig';
+import { useTheme } from '@/constants/ThemeContext';
 
 type ReturnToParam = string | undefined;
 type AllowedReturnTo =
   | '/explore'
   | '/audio-test'
-  | '/modal'
   | '/pcmstream-test'
   | '/rnlive2d'
   | '/(tabs)'
@@ -22,6 +22,22 @@ export default function QrScannerScreen() {
   const returnTo: ReturnToParam = typeof params.returnTo === 'string' ? params.returnTo : undefined;
   const devConfig = useDevConnectionConfig();
   const { t } = useTranslation();
+  const theme = useTheme();
+  const cc = theme.colors;
+
+  const s = useMemo(() => StyleSheet.create({
+    container: { flex: 1, backgroundColor: '#000' },
+    center: { flex: 1, padding: theme.spacing.xl, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0b0b0b' },
+    title: { fontSize: theme.fontSize.headline, fontWeight: theme.fontWeight.bold, color: cc.textOnAccent, marginBottom: theme.spacing.md },
+    text: { fontSize: theme.fontSize.body, color: cc.textSecondary, textAlign: 'center' },
+    overlay: { position: 'absolute', top: 0, left: 0, right: 0, paddingTop: 64, paddingHorizontal: theme.spacing.lg },
+    overlayTitle: { fontSize: theme.fontSize.headline, fontWeight: theme.fontWeight.bold, color: cc.textOnAccent },
+    overlayText: { marginTop: theme.spacing.xs, fontSize: theme.fontSize.footnote, color: 'rgba(255,255,255,0.85)' },
+    bottomBar: { position: 'absolute', left: theme.spacing.lg, right: theme.spacing.lg, bottom: theme.spacing.xxl, flexDirection: 'row', justifyContent: 'center' },
+    button: { paddingVertical: theme.spacing.md, paddingHorizontal: theme.spacing.lg, borderRadius: theme.radius.md, backgroundColor: cc.accent },
+    buttonSecondary: { backgroundColor: 'rgba(255,255,255,0.15)' },
+    buttonText: { color: cc.textOnAccent, fontSize: theme.fontSize.body, fontWeight: theme.fontWeight.semibold },
+  }), [theme, cc]);
 
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
@@ -47,7 +63,6 @@ export default function QrScannerScreen() {
       const target: AllowedReturnTo =
         returnTo === '/explore' ||
         returnTo === '/audio-test' ||
-        returnTo === '/modal' ||
         returnTo === '/pcmstream-test' ||
         returnTo === '/rnlive2d' ||
         returnTo === '/(tabs)' ||
@@ -98,11 +113,11 @@ export default function QrScannerScreen() {
 
   if (!permission) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.title}>{titleText}</Text>
-        <Text style={styles.text}>{t('qrScanner.checkingPermission')}</Text>
-        <Pressable style={styles.button} onPress={handleCancel}>
-          <Text style={styles.buttonText}>{t('common.back')}</Text>
+      <View style={s.center}>
+        <Text style={s.title}>{titleText}</Text>
+        <Text style={s.text}>{t('qrScanner.checkingPermission')}</Text>
+        <Pressable style={s.button} onPress={handleCancel}>
+          <Text style={s.buttonText}>{t('common.back')}</Text>
         </Pressable>
       </View>
     );
@@ -110,108 +125,43 @@ export default function QrScannerScreen() {
 
   if (!permission.granted) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.title}>{titleText}</Text>
-        <Text style={styles.text}>{t('qrScanner.cameraPermissionRequired')}</Text>
-        <View style={{ height: 12 }} />
-        <Pressable style={styles.button} onPress={() => requestPermission()}>
-          <Text style={styles.buttonText}>{t('qrScanner.grantCameraPermission')}</Text>
+      <View style={s.center}>
+        <Text style={s.title}>{titleText}</Text>
+        <Text style={s.text}>{t('qrScanner.cameraPermissionRequired')}</Text>
+        <View style={{ height: theme.spacing.md }} />
+        <Pressable style={s.button} onPress={() => requestPermission()}>
+          <Text style={s.buttonText}>{t('qrScanner.grantCameraPermission')}</Text>
         </Pressable>
-        <View style={{ height: 12 }} />
-        <Pressable style={[styles.button, styles.buttonSecondary]} onPress={handleCancel}>
-          <Text style={styles.buttonText}>{t('common.back')}</Text>
+        <View style={{ height: theme.spacing.md }} />
+        <Pressable style={[s.button, s.buttonSecondary]} onPress={handleCancel}>
+          <Text style={s.buttonText}>{t('common.back')}</Text>
         </Pressable>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={s.container}>
       <CameraView
         style={StyleSheet.absoluteFill}
         facing="back"
         onBarcodeScanned={handleBarcodeScanned}
       />
 
-      <View pointerEvents="none" style={styles.overlay}>
-        <Text style={styles.overlayTitle}>{titleText}</Text>
-        <Text style={styles.overlayText}>{t('qrScanner.autoDetectHint')}</Text>
+      <View pointerEvents="none" style={s.overlay}>
+        <Text style={s.overlayTitle}>{titleText}</Text>
+        <Text style={s.overlayText}>{t('qrScanner.autoDetectHint')}</Text>
       </View>
 
-      <View style={styles.bottomBar}>
-        <Pressable style={[styles.button, styles.buttonSecondary]} onPress={handleCancel}>
-          <Text style={styles.buttonText}>{t('common.cancel')}</Text>
+      <View style={s.bottomBar}>
+        <Pressable style={[s.button, s.buttonSecondary]} onPress={handleCancel}>
+          <Text style={s.buttonText}>{t('common.cancel')}</Text>
         </Pressable>
-        <View style={{ width: 12 }} />
-        <Pressable style={styles.button} onPress={() => setScanned(false)}>
-          <Text style={styles.buttonText}>{scanned ? t('qrScanner.continueScan') : t('qrScanner.refocus')}</Text>
+        <View style={{ width: theme.spacing.md }} />
+        <Pressable style={s.button} onPress={() => setScanned(false)}>
+          <Text style={s.buttonText}>{scanned ? t('qrScanner.continueScan') : t('qrScanner.refocus')}</Text>
         </Pressable>
       </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
-  center: {
-    flex: 1,
-    padding: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#0b0b0b',
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#fff',
-    marginBottom: 12,
-  },
-  text: {
-    fontSize: 14,
-    color: '#cfcfcf',
-    textAlign: 'center',
-  },
-  overlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    paddingTop: 64,
-    paddingHorizontal: 16,
-  },
-  overlayTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  overlayText: {
-    marginTop: 6,
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.85)',
-  },
-  bottomBar: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 24,
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  button: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    backgroundColor: '#2f6fed',
-  },
-  buttonSecondary: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-});

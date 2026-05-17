@@ -33,7 +33,9 @@
     "actions": {
       "manualConfig": "手動設定",
       "qrConfig": "QRスキャン",
-      "currentRole": "キャラクター"
+      "currentRole": "キャラクター",
+      "startChat": "チャット開始",
+      "scanToConnect": "QRスキャンで接続"
     }
   },
   "main": {
@@ -58,7 +60,11 @@
       "switched": "{{name}}に切り替えました",
       "switchError": "キャラクターの切り替えに失敗しました",
       "select": "キャラクターを選択",
-      "noCharacters": "利用可能なキャラクターがいません"
+      "noCharacters": "利用可能なキャラクターがいません",
+      "manage": "キャラクター管理",
+      "currentLabel": "現在: ",
+      "noCharacter": "キャラクターなし",
+      "current": "現在"
     },
     "voice": {
       "start": "音声開始",
@@ -66,13 +72,28 @@
       "rest": "休憩",
       "preparing": "準備中...",
       "ready": "準備完了",
-      "blocked": "音声入力がブロックされています"
+      "blocked": "音声入力がブロックされています",
+      "voiceBlockTitle": "キャラクターを切り替えられません",
+      "voiceBlockBody": "音声通話中はキャラクターを切り替えられません。先に通話を終了してください。",
+      "voiceBlockOk": "OK",
+      "systemPreparing": "音声システム準備中...",
+      "systemReady": "音声準備完了"
     },
     "debug": {
       "title": "デバッグ情報",
       "toggle": "表示/非表示",
       "connection": "接続情報",
-      "p2pLayer": "P2P接続レイヤー"
+      "p2pLayer": "P2P接続レイヤー",
+      "clearCache": "モデルキャッシュをクリア",
+      "notConnected": "未接続",
+      "unavailable": "利用不可",
+      "noLogs": "ログなし",
+      "connectionLogs": "接続ログ："
+    },
+    "live2d": {
+      "paused": "Live2D 一時停止中",
+      "pageInactive": "ページ非アクティブ",
+      "adjusting": "調整中"
     }
   },
   "settings": {

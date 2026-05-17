@@ -1,12 +1,3 @@
-/**
- * Live2DRightToolbar - React Native 版本
- * 
- * 使用 RN 组件实现的简化版工具栏
- * - 浮动按钮组
- * - Modal 面板（替代浮动面板）
- * - 原生 Switch 组件
- */
-
 import React from 'react';
 import {
   View,
@@ -17,9 +8,9 @@ import {
   Switch,
   Text,
   TouchableWithoutFeedback,
-  useColorScheme,
 } from 'react-native';
 import { useT } from '../i18n';
+import { useTheme } from '@/constants/ThemeContext';
 import {
   usePanelToggle,
   useToolbarButtons,
@@ -58,14 +49,12 @@ export function Live2DRightToolbar({
   onReturn,
   onSettingsMenuClick,
 }: Live2DRightToolbarProps) {
-  const t = useT();
-  const colorScheme = useColorScheme();
-  const styles = createToolbarStyles(colorScheme === 'dark');
+  const tt = useT();
+  const theme = useTheme();
+  const styles = createToolbarStyles(theme);
 
-  // 使用共享的面板切换逻辑
   const { togglePanel } = usePanelToggle(openPanel, onOpenPanelChange);
 
-  // 使用共享的按钮配置（RN 使用本地 require() 资源）
   const buttons = useToolbarButtons<number>({
     micEnabled,
     cameraEnabled,
@@ -76,8 +65,7 @@ export function Live2DRightToolbar({
     onToggleCamera,
     onGoodbye,
     togglePanel,
-    t,
-    // RN: 使用本地打包的图标资源（确保这些文件存在于 assets/icons/）
+    t: tt,
     icons: {
       mic: require('../../../../assets/icons/mic_icon_off.png'),
       camera: require('../../../../assets/icons/screen_icon_off.png'),
@@ -87,12 +75,9 @@ export function Live2DRightToolbar({
     },
   });
 
-  // 使用共享的 toggle rows 配置
-  const settingsToggleRows = useSettingsToggleRows(settings, t);
-  const agentToggleRows = useAgentToggleRows(agent, t);
-  const settingsMenuItems = useSettingsMenuItems<number>(t, {
-    // RN: 这里可以替换为更细粒度的图标资源，以便与 Web 端一致展示
-    // 目前仓库内仅有少量通用图标，先复用 set_off 作为占位，保证结构与渲染一致
+  const settingsToggleRows = useSettingsToggleRows(settings, tt);
+  const agentToggleRows = useAgentToggleRows(agent, tt);
+  const settingsMenuItems = useSettingsMenuItems<number>(tt, {
     icons: {
       live2dSettings: require('../../../../assets/icons/set_off.png'),
       apiKeys: require('../../../../assets/icons/set_off.png'),
@@ -102,8 +87,11 @@ export function Live2DRightToolbar({
       memoryBrowser: require('../../../../assets/icons/set_off.png'),
       steamWorkshop: require('../../../../assets/icons/set_off.png'),
       connectionHelp: require('../../../../assets/icons/set_off.png'),
+      chatFont: require('../../../../assets/icons/set_off.png'),
     },
   });
+
+  const switchTrackColor = { false: theme.colors.textMuted, true: theme.colors.accent };
 
   if (!visible) return null;
 
@@ -159,8 +147,8 @@ export function Live2DRightToolbar({
                         value={row.checked}
                         onValueChange={(value) => onAgentChange(row.id as Live2DAgentToggleId, value)}
                         disabled={row.disabled}
-                        trackColor={{ false: '#ccc', true: '#44b7fe' }}
-                        thumbColor="#fff"
+                        trackColor={switchTrackColor}
+                        thumbColor={theme.colors.textOnAccent}
                       />
                       <Text style={[styles.label, row.disabled && styles.labelDisabled]}>
                         {row.label}
@@ -173,7 +161,7 @@ export function Live2DRightToolbar({
                   style={styles.closeButton}
                   onPress={() => onOpenPanelChange(null)}
                 >
-                  <Text style={styles.closeButtonText}>{t('close')}</Text>
+                  <Text style={styles.closeButtonText}>{tt('close')}</Text>
                 </TouchableOpacity>
               </View>
             </TouchableWithoutFeedback>
@@ -192,23 +180,21 @@ export function Live2DRightToolbar({
           <View style={styles.modalOverlay}>
             <TouchableWithoutFeedback>
               <View style={styles.panelContainer}>
-                <Text style={styles.panelTitle}>{t('settings')}</Text>
+                <Text style={styles.panelTitle}>{tt('settings')}</Text>
 
                 <ScrollView style={styles.scrollView}>
-                  {/* Settings Toggles */}
                   {settingsToggleRows.map((row) => (
                     <View key={row.id} style={styles.row}>
                       <Switch
                         value={row.checked}
                         onValueChange={(value) => onSettingsChange(row.id as Live2DSettingsToggleId, value)}
-                        trackColor={{ false: '#ccc', true: '#44b7fe' }}
-                        thumbColor="#fff"
+                        trackColor={switchTrackColor}
+                        thumbColor={theme.colors.textOnAccent}
                       />
                       <Text style={styles.label}>{row.label}</Text>
                     </View>
                   ))}
 
-                  {/* Settings Menu Items (仅非移动端) */}
                   {!isMobile && (
                     <>
                       <View style={styles.separator} />
@@ -227,7 +213,6 @@ export function Live2DRightToolbar({
                     </>
                   )}
 
-                  {/* 移动端：仅显示角色管理入口 */}
                   {isMobile && (
                     <>
                       <View style={styles.separator} />
@@ -253,7 +238,7 @@ export function Live2DRightToolbar({
                   style={styles.closeButton}
                   onPress={() => onOpenPanelChange(null)}
                 >
-                  <Text style={styles.closeButtonText}>{t('close')}</Text>
+                  <Text style={styles.closeButtonText}>{tt('close')}</Text>
                 </TouchableOpacity>
               </View>
             </TouchableWithoutFeedback>

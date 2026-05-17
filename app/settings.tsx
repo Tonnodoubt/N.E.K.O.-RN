@@ -1,11 +1,4 @@
-/**
- * Settings Screen
- *
- * Configure API keys and preferences.
- * Similar to Web's ApiKeySettings.tsx
- */
-
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -24,54 +17,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useDevConnectionConfig } from '@/hooks/useDevConnectionConfig';
 import { createConfigApiClient, type CoreConfig, type ApiProvider } from '@/services/api/config';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-
-// 亮色/暗色主题色板（参照主项目 theme.css 与 dark-mode.css）
-const LIGHT = {
-  container:          '#e3f4ff',
-  header:             '#f0f8ff',
-  headerBorder:       '#b3e5fc',
-  card:               '#f0f8ff',
-  input:              '#fff',
-  inputBorder:        '#b3e5fc',
-  textPrimary:        '#1a1a2e',
-  textLabel:          '#555',
-  textMuted:          '#777',
-  sectionTitle:       '#0d6e92',
-  accent:             '#40c5f1',
-  accentText:         '#1a1a2e',
-  pickerOptionBg:     '#f0f8ff',
-  pickerOptionBorder: '#b3e5fc',
-  infoSeparator:      '#b3e5fc',
-  infoLabel:          '#555',
-  infoValue:          '#1a1a2e',
-  loadingText:        '#1a1a2e',
-  inputText:          '#1a1a2e',
-  placeholder:        '#999',
-};
-
-const DARK = {
-  container:          '#1a1a2e',
-  header:             '#1a1a2e',
-  headerBorder:       '#333',
-  card:               '#16213e',
-  input:              '#1a1a2e',
-  inputBorder:        '#333',
-  textPrimary:        '#fff',
-  textLabel:          '#aaa',
-  textMuted:          '#888',
-  sectionTitle:       '#fff',
-  accent:             '#00d9ff',
-  accentText:         '#1a1a2e',
-  pickerOptionBg:     '#1a1a2e',
-  pickerOptionBorder: '#333',
-  infoSeparator:      '#333',
-  infoLabel:          '#888',
-  infoValue:          '#fff',
-  loadingText:        '#fff',
-  inputText:          '#fff',
-  placeholder:        '#666',
-};
+import { useTheme } from '@/constants/ThemeContext';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -79,23 +25,201 @@ export default function SettingsScreen() {
   const apiBase = `http://${config.host}:${config.port}`;
   const p2pToken = config.p2p?.token;
   const { t } = useTranslation();
-
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-  const theme = isDark ? DARK : LIGHT;
+  const theme = useTheme();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Config state
   const [coreConfig, setCoreConfig] = useState<CoreConfig>({});
   const [coreProviders, setCoreProviders] = useState<ApiProvider[]>([]);
   const [assistProviders, setAssistProviders] = useState<ApiProvider[]>([]);
   const [p2pConfig, setP2pConfig] = useState<any>(null);
 
-  // Load P2P config from server
+  const s = useMemo(() => StyleSheet.create({
+    container: { flex: 1, backgroundColor: theme.colors.page },
+    keyboardView: { flex: 1 },
+    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    loadingText: { fontSize: theme.fontSize.callout, color: theme.colors.textPrimary },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.md,
+      borderBottomWidth: 1,
+      backgroundColor: theme.colors.page,
+      borderBottomColor: theme.colors.border,
+    },
+    backButton: { padding: theme.spacing.sm },
+    headerTitle: {
+      flex: 1,
+      fontSize: theme.fontSize.headline,
+      fontWeight: theme.fontWeight.bold,
+      textAlign: 'center',
+      color: theme.colors.textPrimary,
+    },
+    refreshButton: { padding: theme.spacing.sm },
+    messageBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.sm,
+    },
+    messageRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+      flex: 1,
+    },
+    messageText: { color: '#fff' },
+    messageErrorBg: { backgroundColor: theme.colors.error },
+    messageSuccessBg: { backgroundColor: theme.colors.success },
+    content: { flex: 1, paddingHorizontal: theme.spacing.lg },
+    section: { marginTop: theme.spacing.xl },
+    sectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: theme.spacing.md,
+    },
+    sectionIcon: { marginRight: theme.spacing.sm },
+    sectionTitle: {
+      flex: 1,
+      fontSize: theme.fontSize.callout,
+      fontWeight: theme.fontWeight.semibold,
+      color: theme.colors.textPrimary,
+    },
+    card: {
+      borderRadius: theme.radius.md,
+      padding: theme.spacing.lg,
+      backgroundColor: theme.colors.elevated,
+    },
+    field: { marginBottom: theme.spacing.lg },
+    label: {
+      fontSize: theme.fontSize.caption,
+      marginBottom: theme.spacing.xs,
+      color: theme.colors.textSecondary,
+    },
+    input: {
+      borderRadius: theme.radius.sm,
+      padding: theme.spacing.md,
+      fontSize: theme.fontSize.callout,
+      borderWidth: 1,
+      backgroundColor: theme.colors.page,
+      borderColor: theme.colors.border,
+      color: theme.colors.textPrimary,
+    },
+    pickerContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm },
+    pickerOption: {
+      borderRadius: theme.radius.sm,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+      borderWidth: 1,
+      backgroundColor: theme.colors.elevated,
+      borderColor: theme.colors.border,
+    },
+    pickerOptionSelected: {
+      backgroundColor: theme.colors.accent,
+      borderColor: theme.colors.accent,
+    },
+    pickerOptionText: {
+      fontSize: theme.fontSize.body,
+      color: theme.colors.textPrimary,
+    },
+    pickerOptionTextSelected: {
+      color: theme.colors.textOnAccent,
+      fontWeight: theme.fontWeight.bold,
+    },
+    infoRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingVertical: theme.spacing.sm,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    infoLabel: { fontSize: theme.fontSize.body, color: theme.colors.textMuted },
+    infoValue: { fontSize: theme.fontSize.body, color: theme.colors.textPrimary },
+    saveContainer: { paddingVertical: theme.spacing.xl, paddingBottom: theme.spacing.xxxxl },
+    saveButton: {
+      borderRadius: theme.radius.sm,
+      padding: theme.spacing.lg,
+      alignItems: 'center',
+      backgroundColor: theme.colors.accent,
+    },
+    saveButtonDisabled: { opacity: 0.5 },
+    saveButtonText: {
+      fontSize: theme.fontSize.callout,
+      fontWeight: theme.fontWeight.bold,
+      color: theme.colors.textOnAccent,
+    },
+    qrContainer: {
+      padding: theme.spacing.lg,
+      borderRadius: theme.radius.md,
+      backgroundColor: theme.colors.elevated,
+      marginBottom: theme.spacing.md,
+    },
+    qrDesc: {
+      fontSize: theme.fontSize.body,
+      lineHeight: theme.lineHeight.body,
+      marginBottom: theme.spacing.md,
+      color: theme.colors.textSecondary,
+    },
+    qrSteps: {
+      borderWidth: 1,
+      borderRadius: theme.radius.md,
+      padding: theme.spacing.md,
+      marginBottom: theme.spacing.lg,
+      gap: theme.spacing.md,
+      borderColor: theme.colors.border,
+    },
+    qrStepRow: { flexDirection: 'row', alignItems: 'flex-start' },
+    qrStepNum: {
+      width: theme.spacing.xl + 2,
+      height: theme.spacing.xl + 2,
+      borderRadius: theme.radius.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: theme.spacing.md,
+      marginTop: 1,
+      backgroundColor: theme.colors.accent,
+    },
+    qrStepNumText: {
+      fontSize: theme.fontSize.caption,
+      fontWeight: theme.fontWeight.bold,
+      color: '#fff',
+    },
+    qrStepText: {
+      flex: 1,
+      fontSize: theme.fontSize.body,
+      lineHeight: 20,
+      color: theme.colors.textSecondary,
+    },
+    qrInfoBlock: {
+      borderWidth: 1,
+      borderRadius: theme.radius.md,
+      overflow: 'hidden',
+      borderColor: theme.colors.border,
+    },
+    qrInfoRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    qrInfoLabel: { fontSize: theme.fontSize.footnote, color: theme.colors.textMuted },
+    qrInfoValue: {
+      flex: 1,
+      fontSize: theme.fontSize.footnote,
+      textAlign: 'right',
+      marginLeft: theme.spacing.md,
+      color: theme.colors.textSecondary,
+    },
+  }), [theme]);
+
   const loadP2PConfig = useCallback(async () => {
     try {
       const response = await fetch(`${apiBase}/p2p-info`);
@@ -108,7 +232,6 @@ export default function SettingsScreen() {
     }
   }, [apiBase]);
 
-  // Load config
   const loadConfig = useCallback(async () => {
     try {
       setLoading(true);
@@ -137,7 +260,6 @@ export default function SettingsScreen() {
     loadP2PConfig();
   }, [isLoaded, loadConfig, loadP2PConfig]);
 
-  // Save config
   const handleSave = useCallback(async () => {
     try {
       setSaving(true);
@@ -161,44 +283,41 @@ export default function SettingsScreen() {
     }
   }, [apiBase, coreConfig]);
 
-  // Update config field
   const updateField = (field: keyof CoreConfig, value: string | boolean) => {
     setCoreConfig(prev => ({ ...prev, [field]: value }));
   };
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.container }]}>
-        <View style={styles.loadingContainer}>
-          <Text style={[styles.loadingText, { color: theme.loadingText }]}>{t('common.loading')}</Text>
+      <SafeAreaView style={s.container}>
+        <View style={s.loadingContainer}>
+          <Text style={s.loadingText}>{t('common.loading')}</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.container }]}>
+    <SafeAreaView style={s.container}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
+        style={s.keyboardView}
       >
-        {/* Header */}
-        <View style={[styles.header, { backgroundColor: theme.header, borderBottomColor: theme.headerBorder }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="chevron-back" size={24} color={theme.accent} />
+        <View style={s.header}>
+          <TouchableOpacity onPress={() => router.back()} style={s.backButton}>
+            <Ionicons name="chevron-back" size={24} color={theme.colors.accent} />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>{t('settings.title')}</Text>
-          <TouchableOpacity onPress={loadConfig} style={styles.refreshButton}>
-            <Ionicons name="refresh" size={22} color={theme.accent} />
+          <Text style={s.headerTitle}>{t('settings.title')}</Text>
+          <TouchableOpacity onPress={loadConfig} style={s.refreshButton}>
+            <Ionicons name="refresh" size={22} color={theme.colors.accent} />
           </TouchableOpacity>
         </View>
 
-        {/* Messages */}
         {error && (
-          <View style={styles.errorBox}>
-            <View style={styles.errorRow}>
+          <View style={[s.messageBox, s.messageErrorBg]}>
+            <View style={s.messageRow}>
               <Ionicons name="close-circle" size={16} color="#fff" />
-              <Text style={styles.errorText}>{error}</Text>
+              <Text style={s.messageText}>{error}</Text>
             </View>
             <TouchableOpacity onPress={() => setError(null)}>
               <Ionicons name="close" size={18} color="#fff" />
@@ -206,45 +325,41 @@ export default function SettingsScreen() {
           </View>
         )}
         {success && (
-          <View style={styles.successBox}>
-            <View style={styles.successRow}>
+          <View style={[s.messageBox, s.messageSuccessBg]}>
+            <View style={s.messageRow}>
               <Ionicons name="checkmark-circle" size={16} color="#fff" />
-              <Text style={styles.successText}>{success}</Text>
+              <Text style={s.messageText}>{success}</Text>
             </View>
           </View>
         )}
 
         <ScrollView
-          style={styles.content}
+          style={s.content}
           refreshControl={<RefreshControl refreshing={loading} onRefresh={loadConfig} />}
         >
           {/* Core API Section */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="key" size={20} color={theme.accent} style={styles.sectionIcon} />
-              <Text style={[styles.sectionTitle, { color: theme.sectionTitle }]}>{t('settings.sections.api')}</Text>
+          <View style={s.section}>
+            <View style={s.sectionHeader}>
+              <Ionicons name="key" size={20} color={theme.colors.accent} style={s.sectionIcon} />
+              <Text style={s.sectionTitle}>{t('settings.sections.api')}</Text>
             </View>
-            <View style={[styles.card, { backgroundColor: theme.card }]}>
-              <View style={styles.field}>
-                <Text style={[styles.label, { color: theme.textLabel }]}>{t('settings.api.coreProvider')}</Text>
-                <View style={styles.pickerContainer}>
+            <View style={s.card}>
+              <View style={s.field}>
+                <Text style={s.label}>{t('settings.api.coreProvider')}</Text>
+                <View style={s.pickerContainer}>
                   {coreProviders.map((provider, index) => (
                     <TouchableOpacity
                       key={provider.id || `core-${index}`}
                       style={[
-                        styles.pickerOption,
-                        { backgroundColor: theme.pickerOptionBg, borderColor: theme.pickerOptionBorder },
-                        coreConfig.coreApi === provider.id && { backgroundColor: theme.accent, borderColor: theme.accent },
+                        s.pickerOption,
+                        coreConfig.coreApi === provider.id && s.pickerOptionSelected,
                       ]}
                       onPress={() => updateField('coreApi', provider.id)}
                     >
-                      <Text
-                        style={[
-                          styles.pickerOptionText,
-                          { color: theme.textPrimary },
-                          coreConfig.coreApi === provider.id && { color: theme.accentText, fontWeight: 'bold' },
-                        ]}
-                      >
+                      <Text style={[
+                        s.pickerOptionText,
+                        coreConfig.coreApi === provider.id && s.pickerOptionTextSelected,
+                      ]}>
                         {provider.name}
                       </Text>
                     </TouchableOpacity>
@@ -252,14 +367,14 @@ export default function SettingsScreen() {
                 </View>
               </View>
 
-              <View style={styles.field}>
-                <Text style={[styles.label, { color: theme.textLabel }]}>{t('settings.api.apiKey')}</Text>
+              <View style={s.field}>
+                <Text style={s.label}>{t('settings.api.apiKey')}</Text>
                 <TextInput
-                  style={[styles.input, { backgroundColor: theme.input, borderColor: theme.inputBorder, color: theme.inputText }]}
+                  style={s.input}
                   value={coreConfig.api_key || ''}
                   onChangeText={(text) => updateField('api_key', text)}
                   placeholder={t('settings.api.enterKey')}
-                  placeholderTextColor={theme.placeholder}
+                  placeholderTextColor={theme.colors.textMuted}
                   secureTextEntry
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -269,32 +384,28 @@ export default function SettingsScreen() {
           </View>
 
           {/* Assist API Section */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="settings" size={20} color={theme.accent} style={styles.sectionIcon} />
-              <Text style={[styles.sectionTitle, { color: theme.sectionTitle }]}>{t('settings.sections.provider')}</Text>
+          <View style={s.section}>
+            <View style={s.sectionHeader}>
+              <Ionicons name="settings" size={20} color={theme.colors.accent} style={s.sectionIcon} />
+              <Text style={s.sectionTitle}>{t('settings.sections.provider')}</Text>
             </View>
-            <View style={[styles.card, { backgroundColor: theme.card }]}>
-              <View style={styles.field}>
-                <Text style={[styles.label, { color: theme.textLabel }]}>{t('settings.api.assistProvider')}</Text>
-                <View style={styles.pickerContainer}>
+            <View style={s.card}>
+              <View style={s.field}>
+                <Text style={s.label}>{t('settings.api.assistProvider')}</Text>
+                <View style={s.pickerContainer}>
                   {assistProviders.map((provider, index) => (
                     <TouchableOpacity
                       key={provider.id || `assist-${index}`}
                       style={[
-                        styles.pickerOption,
-                        { backgroundColor: theme.pickerOptionBg, borderColor: theme.pickerOptionBorder },
-                        coreConfig.assistApi === provider.id && { backgroundColor: theme.accent, borderColor: theme.accent },
+                        s.pickerOption,
+                        coreConfig.assistApi === provider.id && s.pickerOptionSelected,
                       ]}
                       onPress={() => updateField('assistApi', provider.id)}
                     >
-                      <Text
-                        style={[
-                          styles.pickerOptionText,
-                          { color: theme.textPrimary },
-                          coreConfig.assistApi === provider.id && { color: theme.accentText, fontWeight: 'bold' },
-                        ]}
-                      >
+                      <Text style={[
+                        s.pickerOptionText,
+                        coreConfig.assistApi === provider.id && s.pickerOptionTextSelected,
+                      ]}>
                         {provider.name}
                       </Text>
                     </TouchableOpacity>
@@ -305,12 +416,12 @@ export default function SettingsScreen() {
           </View>
 
           {/* Provider-specific API Keys */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="key" size={20} color={theme.accent} style={styles.sectionIcon} />
-              <Text style={[styles.sectionTitle, { color: theme.sectionTitle }]}>{t('settings.title')}</Text>
+          <View style={s.section}>
+            <View style={s.sectionHeader}>
+              <Ionicons name="key" size={20} color={theme.colors.accent} style={s.sectionIcon} />
+              <Text style={s.sectionTitle}>{t('settings.title')}</Text>
             </View>
-            <View style={[styles.card, { backgroundColor: theme.card }]}>
+            <View style={s.card}>
               {[
                 { label: 'Qwen (Alibaba Cloud)', field: 'assistApiKeyQwen' as keyof CoreConfig },
                 { label: 'OpenAI',               field: 'assistApiKeyOpenai' as keyof CoreConfig },
@@ -319,14 +430,14 @@ export default function SettingsScreen() {
                 { label: 'Step (阶跃星辰)',        field: 'assistApiKeyStep' as keyof CoreConfig },
                 { label: 'Silicon Flow (硅基流动)', field: 'assistApiKeySilicon' as keyof CoreConfig },
               ].map(({ label, field }) => (
-                <View key={field} style={styles.field}>
-                  <Text style={[styles.label, { color: theme.textLabel }]}>{label}</Text>
+                <View key={field} style={s.field}>
+                  <Text style={s.label}>{label}</Text>
                   <TextInput
-                    style={[styles.input, { backgroundColor: theme.input, borderColor: theme.inputBorder, color: theme.inputText }]}
+                    style={s.input}
                     value={(coreConfig[field] as string) || ''}
                     onChangeText={(text) => updateField(field, text)}
                     placeholder={t('settings.api.enterKey')}
-                    placeholderTextColor={theme.placeholder}
+                    placeholderTextColor={theme.colors.textMuted}
                     secureTextEntry
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -337,20 +448,20 @@ export default function SettingsScreen() {
           </View>
 
           {/* MCP Section */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="cog" size={20} color={theme.accent} style={styles.sectionIcon} />
-              <Text style={[styles.sectionTitle, { color: theme.sectionTitle }]}>MCP Token</Text>
+          <View style={s.section}>
+            <View style={s.sectionHeader}>
+              <Ionicons name="cog" size={20} color={theme.colors.accent} style={s.sectionIcon} />
+              <Text style={s.sectionTitle}>MCP Token</Text>
             </View>
-            <View style={[styles.card, { backgroundColor: theme.card }]}>
-              <View style={styles.field}>
-                <Text style={[styles.label, { color: theme.textLabel }]}>MCP Router Token</Text>
+            <View style={s.card}>
+              <View style={s.field}>
+                <Text style={s.label}>MCP Router Token</Text>
                 <TextInput
-                  style={[styles.input, { backgroundColor: theme.input, borderColor: theme.inputBorder, color: theme.inputText }]}
+                  style={s.input}
                   value={coreConfig.mcpToken || ''}
                   onChangeText={(text) => updateField('mcpToken', text)}
                   placeholder={t('settings.api.enterKey')}
-                  placeholderTextColor={theme.placeholder}
+                  placeholderTextColor={theme.colors.textMuted}
                   secureTextEntry
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -360,20 +471,20 @@ export default function SettingsScreen() {
           </View>
 
           {/* Server Info */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="information-circle" size={20} color={theme.accent} style={styles.sectionIcon} />
-              <Text style={[styles.sectionTitle, { color: theme.sectionTitle }]}>{t('settings.sections.serverInfo')}</Text>
+          <View style={s.section}>
+            <View style={s.sectionHeader}>
+              <Ionicons name="information-circle" size={20} color={theme.colors.accent} style={s.sectionIcon} />
+              <Text style={s.sectionTitle}>{t('settings.sections.serverInfo')}</Text>
             </View>
-            <View style={[styles.card, { backgroundColor: theme.card }]}>
+            <View style={s.card}>
               {[
                 { label: 'Host',      value: config.host },
                 { label: 'Port',      value: String(config.port) },
                 { label: 'Character', value: config.characterName },
               ].map(({ label, value }) => (
-                <View key={label} style={[styles.infoRow, { borderBottomColor: theme.infoSeparator }]}>
-                  <Text style={[styles.infoLabel, { color: theme.infoLabel }]}>{label}</Text>
-                  <Text style={[styles.infoValue, { color: theme.infoValue }]}>{value}</Text>
+                <View key={label} style={s.infoRow}>
+                  <Text style={s.infoLabel}>{label}</Text>
+                  <Text style={s.infoValue}>{value}</Text>
                 </View>
               ))}
             </View>
@@ -381,51 +492,47 @@ export default function SettingsScreen() {
 
           {/* P2P Connection QR Code */}
           {p2pConfig && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Ionicons name="phone-portrait" size={20} color={theme.accent} style={styles.sectionIcon} />
-                <Text style={[styles.sectionTitle, { color: theme.sectionTitle }]}>{t('settings.sections.p2p')}</Text>
+            <View style={s.section}>
+              <View style={s.sectionHeader}>
+                <Ionicons name="phone-portrait" size={20} color={theme.colors.accent} style={s.sectionIcon} />
+                <Text style={s.sectionTitle}>{t('settings.sections.p2p')}</Text>
               </View>
-              <View style={[styles.card, { backgroundColor: theme.card }]}>
-                {/* 说明文字 */}
-                <Text style={[styles.qrDesc, { color: theme.textLabel }]}>
+              <View style={s.card}>
+                <Text style={s.qrDesc}>
                   {t('settings.p2p.desc')}
                 </Text>
 
-                {/* 步骤 */}
-                <View style={[styles.qrSteps, { borderColor: theme.inputBorder }]}>
+                <View style={s.qrSteps}>
                   {(['step1', 'step2', 'step3'] as const).map((key, i) => (
-                    <View key={key} style={styles.qrStepRow}>
-                      <View style={[styles.qrStepNum, { backgroundColor: theme.accent }]}>
-                        <Text style={styles.qrStepNumText}>{i + 1}</Text>
+                    <View key={key} style={s.qrStepRow}>
+                      <View style={s.qrStepNum}>
+                        <Text style={s.qrStepNumText}>{i + 1}</Text>
                       </View>
-                      <Text style={[styles.qrStepText, { color: theme.textLabel }]}>
+                      <Text style={s.qrStepText}>
                         {t(`settings.p2p.${key}`)}
                       </Text>
                     </View>
                   ))}
                 </View>
 
-                {/* 二维码 */}
-                <View style={styles.qrContainer}>
+                <View style={s.qrContainer}>
                   <QRCode
                     value={JSON.stringify(p2pConfig)}
                     size={200}
-                    color={isDark ? '#fff' : '#000'}
-                    backgroundColor={isDark ? '#1a1a2e' : '#f0f8ff'}
+                    color={theme.isDark ? '#fff' : '#000'}
+                    backgroundColor={theme.isDark ? theme.colors.page : theme.colors.elevated}
                   />
                 </View>
 
-                {/* 连接参数 */}
-                <View style={[styles.qrInfoBlock, { borderColor: theme.inputBorder }]}>
+                <View style={s.qrInfoBlock}>
                   {[
                     { label: t('settings.p2p.lanIp'), value: p2pConfig.lan_ip || '--' },
                     { label: t('settings.p2p.port'),  value: String(p2pConfig.port || '--') },
                     { label: t('settings.p2p.token'), value: t('settings.p2p.tokenHidden') },
                   ].map(({ label, value }) => (
-                    <View key={label} style={[styles.qrInfoRow, { borderBottomColor: theme.inputBorder }]}>
-                      <Text style={[styles.qrInfoLabel, { color: theme.textMuted }]}>{label}</Text>
-                      <Text style={[styles.qrInfoValue, { color: theme.textLabel }]}>{value}</Text>
+                    <View key={label} style={s.qrInfoRow}>
+                      <Text style={s.qrInfoLabel}>{label}</Text>
+                      <Text style={s.qrInfoValue}>{value}</Text>
                     </View>
                   ))}
                 </View>
@@ -434,13 +541,13 @@ export default function SettingsScreen() {
           )}
 
           {/* Save Button */}
-          <View style={styles.saveContainer}>
+          <View style={s.saveContainer}>
             <TouchableOpacity
-              style={[styles.saveButton, { backgroundColor: theme.accent }, saving && styles.saveButtonDisabled]}
+              style={[s.saveButton, saving && s.saveButtonDisabled]}
               onPress={handleSave}
               disabled={saving}
             >
-              <Text style={[styles.saveButtonText, { color: theme.accentText }]}>
+              <Text style={s.saveButtonText}>
                 {saving ? t('settings.api.saving') : t('settings.api.save')}
               </Text>
             </TouchableOpacity>
@@ -450,240 +557,3 @@ export default function SettingsScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 16,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  backButton: {
-    padding: 8,
-  },
-  backButtonText: {
-    fontSize: 24,
-  },
-  headerTitle: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  refreshButton: {
-    padding: 8,
-  },
-  refreshButtonText: {
-    fontSize: 20,
-  },
-  errorBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#ff4444',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  errorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1,
-  },
-  errorText: {
-    color: '#fff',
-  },
-  errorClose: {
-    color: '#fff',
-    fontSize: 18,
-    padding: 4,
-  },
-  successBox: {
-    backgroundColor: '#00c853',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  successRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  successText: {
-    color: '#fff',
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
-  section: {
-    marginTop: 20,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  sectionIcon: {
-    marginRight: 8,
-  },
-  sectionTitle: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  card: {
-    borderRadius: 12,
-    padding: 16,
-  },
-  field: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 12,
-    marginBottom: 6,
-  },
-  input: {
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    borderWidth: 1,
-  },
-  pickerContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  pickerOption: {
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    position: 'relative',
-  },
-  pickerOptionText: {
-    fontSize: 14,
-  },
-  checkmark: {
-    position: 'absolute',
-    right: 8,
-    fontSize: 12,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-  },
-  infoLabel: {
-    fontSize: 14,
-  },
-  infoValue: {
-    fontSize: 14,
-  },
-  saveContainer: {
-    paddingVertical: 20,
-    paddingBottom: 40,
-  },
-  saveButton: {
-    borderRadius: 8,
-    padding: 16,
-    alignItems: 'center',
-  },
-  saveButtonDisabled: {
-    opacity: 0.5,
-  },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  qrContainer: {
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: '#fff',
-    marginBottom: 12,
-  },
-  qrDesc: {
-    fontSize: 14,
-    lineHeight: 22,
-    marginBottom: 12,
-  },
-  qrSteps: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-    gap: 10,
-  },
-  qrStepRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  qrStepNum: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-    marginTop: 1,
-  },
-  qrStepNumText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  qrStepText: {
-    flex: 1,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  qrInfoBlock: {
-    borderWidth: 1,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  qrInfoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-  },
-  qrInfoLabel: {
-    fontSize: 13,
-  },
-  qrInfoValue: {
-    flex: 1,
-    fontSize: 13,
-    textAlign: 'right',
-    marginLeft: 12,
-  },
-  qrHint: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  p2pInfo: {
-    marginTop: 8,
-  },
-  p2pInfoText: {
-    fontSize: 12,
-    textAlign: 'center',
-  },
-});
