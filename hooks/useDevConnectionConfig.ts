@@ -6,9 +6,10 @@ import {
 } from '@/utils/devConnectionConfig';
 import { clearStoredDevConnectionConfig, getStoredDevConnectionConfig, setStoredDevConnectionConfig } from '@/services/DevConnectionStorage';
 import { queryDeviceInfo } from '@/services/CloudRegistryService';
+import { registerMobilePairing, resolveMobilePairing } from '@/services/MobilePairingService';
 
 export type ApplyQrResult =
-  | { ok: true; config: DevConnectionConfig; isP2p?: boolean }
+  | { ok: true; config: DevConnectionConfig; isP2p?: boolean; pairingRegistered?: boolean; pairingError?: string }
   | { ok: false; error: string };
 
 export function useDevConnectionConfig(): {
@@ -17,6 +18,7 @@ export function useDevConnectionConfig(): {
   setConfig: (next: Partial<DevConnectionConfig> | ((prev: DevConnectionConfig) => DevConnectionConfig)) => Promise<DevConnectionConfig>;
   applyQrRaw: (raw: string) => Promise<ApplyQrResult>;
   refreshFromCloud: () => Promise<boolean>;  // 从云端刷新
+  refreshPairing: () => Promise<boolean>;  // 用持久 pairing 换新 token
   clear: () => Promise<void>;
   reload: () => Promise<void>;  // 重新加载配置
 } {
@@ -31,7 +33,11 @@ export function useDevConnectionConfig(): {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const stored = await getStoredDevConnectionConfig();
+      let stored = await getStoredDevConnectionConfig();
+      const resolved = await resolveMobilePairing(stored);
+      if (resolved.ok) {
+        stored = await setStoredDevConnectionConfig(resolved.config);
+      }
       if (cancelled) return;
       _setConfig(stored);
       setIsLoaded(true);
@@ -67,7 +73,16 @@ export function useDevConnectionConfig(): {
         ...parsed,
         p2p: isP2p ? parsed.p2p : undefined,
       }));
-      return { ok: true, config: next, isP2p };
+      if (!isP2p) return { ok: true, config: next, isP2p };
+      if (!next.p2p?.pairingSupported) return { ok: true, config: next, isP2p };
+
+      const registered = await registerMobilePairing(next);
+      if (registered.ok) {
+        const finalConfig = await setConfig(registered.config);
+        return { ok: true, config: finalConfig, isP2p, pairingRegistered: true };
+      }
+
+      return { ok: true, config: next, isP2p, pairingError: registered.error };
     },
     [setConfig]
   );
@@ -115,5 +130,17 @@ export function useDevConnectionConfig(): {
     }
   }, [setConfig]);
 
-  return { config, isLoaded, setConfig, applyQrRaw, refreshFromCloud, clear, reload };
+  const refreshPairing = useCallback(async (): Promise<boolean> => {
+    const currentConfig = configRef.current;
+    const resolved = await resolveMobilePairing(currentConfig);
+    if (!resolved.ok) {
+      console.log('[useDevConnectionConfig] pairing resolve failed:', resolved.error);
+      return false;
+    }
+    await setConfig(resolved.config);
+    console.log('[useDevConnectionConfig] pairing resolve succeeded');
+    return true;
+  }, [setConfig]);
+
+  return { config, isLoaded, setConfig, applyQrRaw, refreshFromCloud, refreshPairing, clear, reload };
 }

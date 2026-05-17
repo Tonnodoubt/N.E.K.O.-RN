@@ -14,6 +14,17 @@ export type DevConnectionConfig = {
     // 第2层：STUN 打洞
     stunIp?: string;                // STUN 公网 IP
     stunPort?: number;              // STUN 公网端口
+
+    // 持久配对：首次扫码后保存，后续启动用它换新 token / LAN 地址
+    pairingSupported?: boolean;
+    pairingRegisterPath?: string;
+    pairingResolvePath?: string;
+    pairing?: {
+      pairingId: string;
+      pairingSecret: string;
+      deviceId?: string;
+      createdAt?: number;
+    };
   };
 };
 
@@ -53,6 +64,10 @@ export function parseDevConnectionConfig(raw: string): Partial<DevConnectionConf
           // 第2层：STUN 打洞
           stunIp: obj.stun_ip,
           stunPort: obj.stun_port,
+
+          pairingSupported: obj.pairing_supported === true,
+          pairingRegisterPath: typeof obj.pairing_register_path === 'string' ? obj.pairing_register_path : undefined,
+          pairingResolvePath: typeof obj.pairing_resolve_path === 'string' ? obj.pairing_resolve_path : undefined,
         };
         return out;
       }

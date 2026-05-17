@@ -117,7 +117,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   // ref 持有 audio.reconnect 和连接状态，供 AppState 前台恢复时调用
   const audioReconnectRef = useRef<() => void>(() => {});
   const audioConnectedRef = useRef(false);
-  const { config, isLoaded: isConfigLoaded, setConfig, applyQrRaw, refreshFromCloud } = useDevConnectionConfig();
+  const { config, isLoaded: isConfigLoaded, setConfig, applyQrRaw, refreshFromCloud, refreshPairing } = useDevConnectionConfig();
 
   // UDP P2P 连接（自动尝试三层回退）
   const udpConnection = useUdpP2PConnection(
@@ -760,14 +760,22 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     udpConnection.status,
   ]);
 
-  const handleRetryConnection = useCallback(() => {
+  const handleRetryConnection = useCallback(async () => {
+    const pairingRefreshed = p2pConfig?.pairing ? await refreshPairing() : false;
+    if (pairingRefreshed) {
+      if (udpConnection.status === 'failed') {
+        udpConnection.retry();
+      }
+      statusToastRef.current?.show('已刷新配对，正在重新连接...', 2000);
+      return;
+    }
     if (p2pConfig?.token && udpConnection.status === 'failed') {
       udpConnection.retry();
     } else {
       audio.reconnect();
     }
     statusToastRef.current?.show('正在重新连接...', 2000);
-  }, [audio.reconnect, p2pConfig?.token, udpConnection.retry, udpConnection.status]);
+  }, [audio.reconnect, p2pConfig?.pairing, p2pConfig?.token, refreshPairing, udpConnection.retry, udpConnection.status]);
 
   const handleRescanConnection = useCallback(() => {
     router.push({ pathname: '/qr-scanner', params: { returnTo: '/(tabs)/main' } });

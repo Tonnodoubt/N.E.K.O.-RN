@@ -29,6 +29,27 @@ function sanitizeP2P(input: unknown): DevConnectionConfig['p2p'] | undefined {
     // 第2层：STUN 打洞
     stunIp: isNonEmptyString(p2p.stunIp) ? p2p.stunIp : undefined,
     stunPort: isValidPort(p2p.stunPort) ? p2p.stunPort : undefined,
+    pairingSupported: typeof p2p.pairingSupported === 'boolean' ? p2p.pairingSupported : undefined,
+    pairingRegisterPath: isNonEmptyString(p2p.pairingRegisterPath) ? p2p.pairingRegisterPath : undefined,
+    pairingResolvePath: isNonEmptyString(p2p.pairingResolvePath) ? p2p.pairingResolvePath : undefined,
+    pairing: sanitizePairing(p2p.pairing),
+  };
+}
+
+function sanitizePairing(input: unknown): NonNullable<DevConnectionConfig['p2p']>['pairing'] | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const pairing = input as Record<string, unknown>;
+  if (!isNonEmptyString(pairing.pairingId) || !isNonEmptyString(pairing.pairingSecret)) {
+    return undefined;
+  }
+
+  return {
+    pairingId: pairing.pairingId.trim(),
+    pairingSecret: pairing.pairingSecret.trim(),
+    deviceId: isNonEmptyString(pairing.deviceId) ? pairing.deviceId.trim() : undefined,
+    createdAt: typeof pairing.createdAt === 'number' && Number.isFinite(pairing.createdAt)
+      ? pairing.createdAt
+      : undefined,
   };
 }
 

@@ -80,13 +80,18 @@ export default function QrScannerScreen() {
         }
 
         if (applied.isP2p) {
+          const pairingNote = applied.pairingRegistered
+            ? '\n\n已保存这台电脑的配对信息，下次打开 App 会自动尝试恢复连接。'
+            : applied.pairingError
+              ? `\n\n配对保存失败：${applied.pairingError}`
+              : '';
           Alert.alert(
             t('qrScanner.p2pConfigSuccess'),
             t('qrScanner.p2pConfigMessage', {
               host: applied.config.host,
               port: applied.config.port,
               character: applied.config.characterName,
-            }),
+            }) + pairingNote,
             [
               {
                 text: t('common.ok'),
