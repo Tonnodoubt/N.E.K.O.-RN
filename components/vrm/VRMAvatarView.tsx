@@ -25,7 +25,7 @@ export type VRMEmotion =
   | "surprised"
   | "sad"
   | "angry";
-export type VRMGesture = "none" | "nod" | "recoil" | "bounce";
+export type VRMGesture = "none" | "nod" | "recoil" | "bounce" | "tilt" | "shake";
 type VRMMotionMode =
   | "idle"
   | "attentive"
@@ -132,6 +132,7 @@ type MouthSyncState = {
 };
 
 type ExpressionKey = "happy" | "relaxed" | "surprised" | "sad" | "angry";
+type LookExpressionKey = "lookLeft" | "lookRight" | "lookUp" | "lookDown";
 
 type EmotionExpressionState = {
   current: Record<ExpressionKey, number>;
@@ -200,6 +201,12 @@ const expressionKeys: ExpressionKey[] = [
   "surprised",
   "sad",
   "angry",
+];
+const lookExpressionKeys: LookExpressionKey[] = [
+  "lookLeft",
+  "lookRight",
+  "lookUp",
+  "lookDown",
 ];
 const poseBiasKeys = [
   "spineX",
@@ -868,6 +875,8 @@ function getGestureDuration(gesture: VRMGesture): number {
   if (gesture === "nod") return 0.58;
   if (gesture === "recoil") return 0.46;
   if (gesture === "bounce") return 0.52;
+  if (gesture === "tilt") return 0.72;
+  if (gesture === "shake") return 0.62;
   return 0;
 }
 
@@ -957,6 +966,24 @@ function getMotionModePoseBias(
       headY: 0.004 * Math.sin(elapsed * 3.1),
       leftUpperArmX: -0.007,
       rightUpperArmX: -0.007,
+    });
+  }
+
+  if (mode === "attentive") {
+    const listenPulse = Math.pow(Math.max(0, Math.sin(elapsed * 1.72 + 0.4)), 9);
+    const settle = Math.sin(elapsed * 0.62 + 0.3);
+    return createPoseBias({
+      spineX: 0.005 + 0.0015 * settle,
+      chestX: 0.006 + 0.004 * listenPulse,
+      neckX: -0.004 + 0.011 * listenPulse,
+      neckY: 0.003 * settle,
+      headX: -0.006 + 0.022 * listenPulse,
+      headY: 0.004 * settle,
+      headZ: -0.002 * settle,
+      leftUpperArmZ: -0.012 - 0.004 * listenPulse,
+      rightUpperArmZ: 0.012 + 0.004 * listenPulse,
+      leftLowerArmZ: -0.006 * listenPulse,
+      rightLowerArmZ: 0.006 * listenPulse,
     });
   }
 
@@ -1205,6 +1232,38 @@ function advanceGestureMotion(
       rightUpperArmX: -0.03 * bounce,
       leftHandZ: -0.02 * bounce,
       rightHandZ: 0.02 * bounce,
+    });
+  }
+
+  if (state.kind === "tilt") {
+    const settle = Math.sin(progress * Math.PI);
+    const glance = Math.sin(progress * Math.PI * 1.4) * (1 - progress * 0.25);
+    return createPoseBias({
+      spineX: 0.004 * settle,
+      chestX: 0.006 * settle,
+      neckX: -0.01 * settle,
+      neckY: 0.018 * glance,
+      headX: -0.014 * settle,
+      headY: 0.032 * glance,
+      headZ: -0.026 * settle,
+      leftUpperArmY: 0.006 * settle,
+      rightUpperArmY: -0.006 * settle,
+    });
+  }
+
+  if (state.kind === "shake") {
+    const fade = 1 - progress;
+    const shake = Math.sin(progress * Math.PI * 5.2) * fade;
+    return createPoseBias({
+      spineX: -0.004 * pulse,
+      chestX: -0.006 * pulse,
+      neckX: -0.012 * pulse,
+      neckY: 0.04 * shake,
+      headX: -0.018 * pulse,
+      headY: 0.075 * shake,
+      headZ: -0.01 * shake,
+      leftShoulderZ: -0.01 * pulse,
+      rightShoulderZ: 0.01 * pulse,
     });
   }
 
@@ -1493,6 +1552,31 @@ function applyEmotionExpressions(
     state.current[key] += (targets[key] - state.current[key]) * alpha;
     if (manager.getExpression(key)) {
       manager.setValue(key, state.current[key]);
+    }
+  }
+}
+
+function applyLookExpressions(
+  vrm: VRM,
+  focus: FocusMotionState,
+  calibration: Required<VRMMotionCalibration>,
+): void {
+  const manager = vrm.expressionManager;
+  if (!manager) return;
+
+  const gazeScale = Math.max(0, calibration.gaze);
+  const yawWeight = Math.min(0.38, Math.abs(focus.yaw) * 8.5 * gazeScale);
+  const pitchWeight = Math.min(0.32, Math.abs(focus.pitch) * 8 * gazeScale);
+  const targets: Record<LookExpressionKey, number> = {
+    lookLeft: focus.yaw < -0.002 ? yawWeight : 0,
+    lookRight: focus.yaw > 0.002 ? yawWeight : 0,
+    lookUp: focus.pitch < -0.002 ? pitchWeight : 0,
+    lookDown: focus.pitch > 0.002 ? pitchWeight : 0,
+  };
+
+  for (const key of lookExpressionKeys) {
+    if (manager.getExpression(key)) {
+      manager.setValue(key, targets[key]);
     }
   }
 }
@@ -1852,6 +1936,7 @@ function VRMModel({
           speechEnergy,
           resolvedCalibration,
         );
+        applyLookExpressions(current.vrm, machine.focus, resolvedCalibration);
         const gestureBias = advanceQueuedGestureMotion(machine, delta);
         applyIdleAnimation(
           current.vrm,

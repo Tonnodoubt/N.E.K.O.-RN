@@ -68,7 +68,7 @@ const debugEmotions: VRMEmotion[] = [
   "sad",
   "angry",
 ];
-const debugGestures: VRMGesture[] = ["nod", "recoil", "bounce"];
+const debugGestures: VRMGesture[] = ["nod", "recoil", "bounce", "tilt", "shake"];
 const calibrationRows: { key: keyof VRMMotionCalibration; label: string }[] = [
   { key: "gaze", label: "Gaze" },
   { key: "body", label: "Body" },

@@ -83,6 +83,8 @@ export function resolveVRMBehaviorEvent(
         flashEmotion: 'sad',
         fallbackEmotion: 'neutral',
         durationMs: 900,
+        gesture: 'shake',
+        gestureCooldownMs: 1800,
         priority: 3,
       };
     case 'session_started':
@@ -93,6 +95,8 @@ export function resolveVRMBehaviorEvent(
     case 'session_preparing':
       return {
         baseEmotion: context.isVoiceMode ? 'attentive' : 'thinking',
+        gesture: context.isVoiceMode ? 'tilt' : undefined,
+        gestureCooldownMs: 1800,
         priority: 2,
       };
     case 'session_failed':
@@ -103,6 +107,8 @@ export function resolveVRMBehaviorEvent(
         flashEmotion: 'sad',
         fallbackEmotion: defaultFallbackEmotion,
         durationMs: 1300,
+        gesture: 'shake',
+        gestureCooldownMs: 1500,
         priority: 4,
       };
     case 'vision_failed':
@@ -110,10 +116,17 @@ export function resolveVRMBehaviorEvent(
         flashEmotion: 'sad',
         fallbackEmotion: context.isVoiceMode ? 'attentive' : 'neutral',
         durationMs: 1300,
+        gesture: 'shake',
+        gestureCooldownMs: 1500,
         priority: 4,
       };
     case 'user_message_sent':
-      return { baseEmotion: 'thinking', priority: 2 };
+      return {
+        baseEmotion: 'thinking',
+        gesture: 'tilt',
+        gestureCooldownMs: 2200,
+        priority: 2,
+      };
     case 'assistant_response':
       if (!event.isNewMessage) return null;
       return {
@@ -147,7 +160,12 @@ export function resolveVRMBehaviorEvent(
       };
     case 'voice_ready':
     case 'vision_preparing':
-      return { baseEmotion: 'attentive', priority: 2 };
+      return {
+        baseEmotion: 'attentive',
+        gesture: 'tilt',
+        gestureCooldownMs: 1400,
+        priority: 2,
+      };
     case 'vision_stream_started':
       return {
         flashEmotion: 'happy',
@@ -169,7 +187,12 @@ export function resolveVRMBehaviorEvent(
     case 'vision_stream_stopped':
       return { baseEmotion: context.isVoiceMode ? 'attentive' : 'neutral', priority: 2 };
     case 'vision_capture_requested':
-      return { baseEmotion: 'attentive', priority: 2 };
+      return {
+        baseEmotion: 'attentive',
+        gesture: 'tilt',
+        gestureCooldownMs: 1600,
+        priority: 2,
+      };
     case 'vision_image_captured':
       return {
         flashEmotion: 'surprised',

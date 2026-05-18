@@ -111,6 +111,11 @@ export function Live2DStage({
     setModelPosition(nextPosition.x, nextPosition.y);
   }, [avatarType, modelPositionRef, scaleRef, setModelScale, setModelPosition]);
 
+  const resetVrmTransform = useCallback(() => {
+    applyStageTransform(VRM_BASE_SCALE, { x: 0, y: 0 });
+    onAdjustEnd();
+  }, [applyStageTransform, onAdjustEnd]);
+
   const beginGesture = useCallback((type: 'pan' | 'pinch') => {
     const active = activeGestureRef.current;
     if (active[type]) return;
@@ -162,6 +167,18 @@ export function Live2DStage({
   }, [applyStageTransform, beginGesture, endGesture, modelPositionRef, scaleRef]);
 
   const vrmStageGesture = useMemo(() => {
+    const resetGesture = Gesture.Tap()
+      .runOnJS(true)
+      .numberOfTaps(2)
+      .maxDuration(280)
+      .maxDelay(260)
+      .maxDistance(18)
+      .onEnd((_event, success) => {
+        if (success) {
+          resetVrmTransform();
+        }
+      });
+
     const tapGesture = Gesture.Tap()
       .runOnJS(true)
       .numberOfTaps(1)
@@ -173,8 +190,8 @@ export function Live2DStage({
         }
       });
 
-    return Gesture.Simultaneous(transformGesture, tapGesture);
-  }, [onTap, transformGesture]);
+    return Gesture.Simultaneous(transformGesture, Gesture.Exclusive(resetGesture, tapGesture));
+  }, [onTap, resetVrmTransform, transformGesture]);
 
   const s = useMemo(() => StyleSheet.create({
     container: {
