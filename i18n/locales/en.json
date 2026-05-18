@@ -9,6 +9,7 @@
     "delete": "Delete",
     "edit": "Edit",
     "loading": "Loading...",
+    "alert": "Alert",
     "error": "Error",
     "success": "Success",
     "close": "Close",
@@ -96,6 +97,11 @@
       "paused": "Live2D Paused",
       "pageInactive": "Page Inactive",
       "adjusting": "Adjusting"
+    },
+    "vrm": {
+      "loading": "Loading VRM",
+      "failed": "VRM failed to load",
+      "failedHint": "Check the model file or network connection"
     }
   },
   "settings": {

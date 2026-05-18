@@ -9,6 +9,7 @@
     "delete": "删除",
     "edit": "编辑",
     "loading": "加载中...",
+    "alert": "提示",
     "error": "错误",
     "success": "成功",
     "close": "关闭",
@@ -98,6 +99,11 @@
       "paused": "Live2D 已暂停",
       "pageInactive": "页面未激活",
       "adjusting": "调整中"
+    },
+    "vrm": {
+      "loading": "正在加载 VRM",
+      "failed": "VRM 加载失败",
+      "failedHint": "请检查模型文件或网络连接"
     }
   },
   "settings": {

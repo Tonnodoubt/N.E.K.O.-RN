@@ -1,11 +1,6 @@
-/* eslint-disable react/no-unknown-property */
-import { VRMLoaderPlugin, VRMUtils, type VRM } from "@pixiv/three-vrm";
-import { Canvas, useFrame } from "@react-three/fiber/native";
-import { Directory, File, Paths } from "expo-file-system";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,10 +9,20 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import * as THREE from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
+import {
+  isVrmPath,
+  NEKO_DEFAULT_VRM_MOTION_CALIBRATION,
+  VRMAvatarView,
+  type VRMEmotion,
+  type VRMGesture,
+  type VRMMotionCalibration,
+  type VRMMotionDebugTelemetry,
+  type VRMRenderMode,
+  type VRMRenderPhase,
+} from "@/components/vrm/VRMAvatarView";
 import { useDevConnectionConfig } from "@/hooks/useDevConnectionConfig";
+import { useVrmMotionCalibration } from "@/hooks/useVrmMotionCalibration";
 import {
   createPageConfigApiClient,
   type PageConfigResponse,
@@ -25,14 +30,6 @@ import {
 import { buildHttpBaseURL } from "@/utils/devConnectionConfig";
 
 type CheckStatus = "pass" | "warn" | "fail";
-type RenderPhase =
-  | "idle"
-  | "canvas-ready"
-  | "fetching"
-  | "parsing"
-  | "loaded"
-  | "fallback-loaded"
-  | "failed";
 
 type CheckItem = {
   id: string;
@@ -44,23 +41,10 @@ type CheckItem = {
 type RenderAttempt = {
   id: number;
   url: string;
-  mode: RenderMode;
+  mode: VRMRenderMode;
 };
 
-type RenderMode = "compat" | "texture" | "mtoon";
-
-type LoadedAvatar =
-  | {
-      kind: "vrm";
-      scene: THREE.Object3D;
-      vrm: VRM;
-    }
-  | {
-      kind: "gltf-fallback";
-      scene: THREE.Object3D;
-    };
-
-const renderPhaseLabel: Record<RenderPhase, string> = {
+const renderPhaseLabel: Record<VRMRenderPhase, string> = {
   idle: "未开始",
   "canvas-ready": "Canvas 已创建",
   fetching: "正在下载 VRM",
@@ -70,25 +54,34 @@ const renderPhaseLabel: Record<RenderPhase, string> = {
   failed: "失败",
 };
 
-const renderModes: { label: string; value: RenderMode }[] = [
+const renderModes: { label: string; value: VRMRenderMode }[] = [
   { label: "色块稳定", value: "compat" },
   { label: "主贴图", value: "texture" },
   { label: "MToon", value: "mtoon" },
 ];
+const debugEmotions: VRMEmotion[] = [
+  "neutral",
+  "attentive",
+  "thinking",
+  "happy",
+  "surprised",
+  "sad",
+  "angry",
+];
+const debugGestures: VRMGesture[] = ["nod", "recoil", "bounce"];
+const calibrationRows: { key: keyof VRMMotionCalibration; label: string }[] = [
+  { key: "gaze", label: "Gaze" },
+  { key: "body", label: "Body" },
+  { key: "arms", label: "Arms" },
+  { key: "speech", label: "Speech" },
+  { key: "gesture", label: "Gesture" },
+  { key: "idle", label: "Idle" },
+];
+const defaultDebugCalibration: Required<VRMMotionCalibration> = NEKO_DEFAULT_VRM_MOTION_CALIBRATION;
 
 const SAMPLE_VRM_PATH = "/static/vrm/sister1.0.vrm";
 const POC_PASSED_SUBTITLE =
   "VRM 下载解析、主贴图与 MToon 渲染已在真机跑通；本页保留三种模式用于后续诊断。";
-const textureCacheDirectory = new Directory(Paths.cache, "neko-vrm-textures");
-let textureCacheCounter = 0;
-
-function isVrmPath(path: string): boolean {
-  return /\.vrm(?:[?#].*)?$/i.test(path.trim());
-}
-
-function isMmdPath(path: string): boolean {
-  return /\.(?:pmx|pmd|vmd)(?:[?#].*)?$/i.test(path.trim());
-}
 
 function resolveModelUrl(
   modelPath: string,
@@ -109,560 +102,6 @@ function resolveModelUrl(
   } catch {
     return raw;
   }
-}
-
-function readAsciiPreview(buffer: ArrayBuffer, limit = 120): string {
-  const bytes = new Uint8Array(buffer, 0, Math.min(buffer.byteLength, limit));
-  return Array.from(bytes)
-    .map((byte) =>
-      byte >= 32 && byte <= 126 ? String.fromCharCode(byte) : ".",
-    )
-    .join("");
-}
-
-function decodeUtf8(buffer: ArrayBuffer): string {
-  if (typeof TextDecoder !== "undefined") {
-    return new TextDecoder("utf-8").decode(buffer);
-  }
-  return readAsciiPreview(buffer, buffer.byteLength);
-}
-
-function validateVrmPayload(buffer: ArrayBuffer, modelUrl: string): void {
-  if (isMmdPath(modelUrl)) {
-    throw new Error("当前 URL 是 MMD 文件，VRM PoC 只支持 .vrm。");
-  }
-
-  if (buffer.byteLength < 20) {
-    throw new Error("下载到的文件太小，不像 VRM。");
-  }
-
-  const preview = readAsciiPreview(buffer);
-  if (preview.startsWith("glTF")) {
-    const version = new DataView(buffer).getUint32(4, true);
-    if (version < 2) {
-      throw new Error(`下载到的是 glTF ${version}，VRM 需要 glTF 2.0。`);
-    }
-    return;
-  }
-
-  if (/^\s*</.test(preview)) {
-    throw new Error(`下载到的是 HTML，不是 VRM。开头: ${preview.slice(0, 80)}`);
-  }
-
-  if (preview.startsWith("PMX") || preview.startsWith("Pmd")) {
-    throw new Error("下载到的是 MMD 模型，不是 VRM。");
-  }
-
-  if (/^\s*\{/.test(preview)) {
-    try {
-      const json = JSON.parse(decodeUtf8(buffer));
-      const version = String(json?.asset?.version || "");
-      if (!version) {
-        throw new Error(
-          `下载到的是 JSON，但不是 glTF/VRM。开头: ${preview.slice(0, 80)}`,
-        );
-      }
-      if (Number.parseFloat(version) < 2) {
-        throw new Error(`下载到的是 glTF ${version}，VRM 需要 glTF 2.0。`);
-      }
-      return;
-    } catch (err: any) {
-      throw new Error(err?.message || `下载到的 JSON 不能作为 VRM 解析。`);
-    }
-  }
-
-  throw new Error(`下载内容不像 VRM/GLB。开头: ${preview.slice(0, 80)}`);
-}
-
-function getLoaderResourcePath(modelUrl: string): string {
-  try {
-    const url = new URL(modelUrl);
-    url.hash = "";
-    url.search = "";
-    url.pathname = url.pathname.slice(0, url.pathname.lastIndexOf("/") + 1);
-    return url.toString();
-  } catch {
-    const slash = modelUrl.lastIndexOf("/");
-    return slash >= 0 ? modelUrl.slice(0, slash + 1) : "";
-  }
-}
-
-function getTextureExtension(mimeType?: string): string {
-  switch (mimeType) {
-    case "image/jpeg":
-      return "jpg";
-    case "image/webp":
-      return "webp";
-    default:
-      return "png";
-  }
-}
-
-function guessMimeType(uri: string, mimeType?: string): string | undefined {
-  if (mimeType) return mimeType;
-  if (/\.jpe?g(?:[?#].*)?$/i.test(uri)) return "image/jpeg";
-  if (/\.webp(?:[?#].*)?$/i.test(uri)) return "image/webp";
-  if (/\.png(?:[?#].*)?$/i.test(uri)) return "image/png";
-  return undefined;
-}
-
-function resolveTextureUri(uri: string, resourcePath: string): string {
-  if (/^(?:blob|content|data|file|https?):/i.test(uri)) return uri;
-  try {
-    return new URL(uri, resourcePath).toString();
-  } catch {
-    return `${resourcePath}${uri}`;
-  }
-}
-
-function writeTextureToCache(bytes: Uint8Array, mimeType?: string): string {
-  textureCacheDirectory.create({ idempotent: true, intermediates: true });
-  const file = new File(
-    textureCacheDirectory,
-    `texture-${Date.now()}-${textureCacheCounter++}.${getTextureExtension(
-      mimeType,
-    )}`,
-  );
-  (file as any).create({ intermediates: true, overwrite: true });
-  (file as any).write(bytes);
-  return file.uri;
-}
-
-function getImageSize(uri: string): Promise<{ width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    Image.getSize(uri, (width, height) => resolve({ width, height }), reject);
-  });
-}
-
-function prepareTextureForExpo(texture: THREE.Texture): THREE.Texture {
-  texture.colorSpace = THREE.NoColorSpace;
-  texture.flipY = false;
-  texture.generateMipmaps = false;
-  texture.magFilter = THREE.LinearFilter;
-  texture.minFilter = THREE.LinearFilter;
-  texture.wrapS = THREE.ClampToEdgeWrapping;
-  texture.wrapT = THREE.ClampToEdgeWrapping;
-  texture.unpackAlignment = 1;
-  texture.needsUpdate = true;
-  return texture;
-}
-
-async function createNativeTextureFromUri(
-  uri: string,
-  mimeType?: string,
-): Promise<THREE.Texture> {
-  let localUri = uri;
-  const resolvedMimeType = guessMimeType(uri, mimeType);
-
-  if (/^(?:blob|data|https?):/i.test(uri)) {
-    const response = await fetch(uri);
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    localUri = writeTextureToCache(bytes, resolvedMimeType);
-  }
-
-  const { width, height } = await getImageSize(localUri);
-  const texture = new THREE.Texture();
-  texture.image = {
-    uri: localUri,
-    localUri,
-    width,
-    height,
-  };
-  prepareTextureForExpo(texture);
-  texture.userData.mimeType = resolvedMimeType;
-  return texture;
-}
-
-async function createNativeTextureFromBuffer(
-  buffer: ArrayBuffer,
-  mimeType?: string,
-): Promise<THREE.Texture> {
-  const localUri = writeTextureToCache(new Uint8Array(buffer), mimeType);
-  return createNativeTextureFromUri(localUri, mimeType);
-}
-
-function cloneNativeTexture(texture: THREE.Texture): THREE.Texture {
-  const clone = texture.clone();
-  clone.image = texture.image;
-  prepareTextureForExpo(clone);
-  return clone;
-}
-
-function registerNativeTextureSource(loader: GLTFLoader): void {
-  loader.register((parser: any) => {
-    parser.loadImageSource = (sourceIndex: number) => {
-      if (parser.sourceCache[sourceIndex] !== undefined) {
-        return parser.sourceCache[sourceIndex].then(cloneNativeTexture);
-      }
-
-      const sourceDef = parser.json.images?.[sourceIndex];
-      if (!sourceDef) {
-        return Promise.reject(
-          new Error(`GLTF image ${sourceIndex} does not exist`),
-        );
-      }
-
-      const promise =
-        sourceDef.bufferView !== undefined
-          ? parser
-              .getDependency("bufferView", sourceDef.bufferView)
-              .then((bufferView: ArrayBuffer) =>
-                createNativeTextureFromBuffer(bufferView, sourceDef.mimeType),
-              )
-          : typeof sourceDef.uri === "string"
-            ? createNativeTextureFromUri(
-                resolveTextureUri(sourceDef.uri, parser.options?.path || ""),
-                sourceDef.mimeType,
-              )
-            : Promise.reject(
-                new Error(
-                  `GLTF image ${sourceIndex} is missing URI and bufferView`,
-                ),
-              );
-
-      parser.sourceCache[sourceIndex] = promise;
-      return promise;
-    };
-
-    return { name: "NEKO_native_texture_source" };
-  });
-}
-
-function disposeObject3D(object: THREE.Object3D): void {
-  object.traverse((child) => {
-    const mesh = child as THREE.Mesh;
-    mesh.geometry?.dispose?.();
-    const material = mesh.material;
-    if (Array.isArray(material)) {
-      material.forEach((item) => item.dispose?.());
-    } else {
-      material?.dispose?.();
-    }
-  });
-}
-
-function disposeVRM(vrm: VRM): void {
-  try {
-    VRMUtils.deepDispose(vrm.scene);
-  } catch {
-    disposeObject3D(vrm.scene);
-  }
-}
-
-function disposeAvatar(avatar: LoadedAvatar): void {
-  if (avatar.kind === "vrm") {
-    disposeVRM(avatar.vrm);
-    return;
-  }
-  disposeObject3D(avatar.scene);
-}
-
-function fitVRMScene(scene: THREE.Object3D): void {
-  const box = new THREE.Box3().setFromObject(scene);
-  const size = box.getSize(new THREE.Vector3());
-  const center = box.getCenter(new THREE.Vector3());
-  const height = size.y || 1.7;
-  const scale = 1.75 / height;
-
-  if (Number.isFinite(scale) && scale > 0) {
-    scene.scale.setScalar(scale);
-  }
-
-  scene.position.set(
-    -center.x * scale,
-    -box.min.y * scale - 0.95,
-    -center.z * scale,
-  );
-}
-
-async function parseVRMAvatar(
-  arrayBuffer: ArrayBuffer,
-  modelUrl: string,
-  mode: RenderMode,
-): Promise<LoadedAvatar> {
-  const loader = new GLTFLoader();
-  registerNativeTextureSource(loader);
-  loader.register((parser) => new VRMLoaderPlugin(parser));
-
-  const gltf: any = await new Promise((resolve, reject) => {
-    loader.parse(arrayBuffer, getLoaderResourcePath(modelUrl), resolve, reject);
-  });
-
-  const nextVRM = gltf?.userData?.vrm as VRM | undefined;
-  if (!nextVRM) {
-    throw new Error("GLTF 已解析，但没有找到 VRM 数据");
-  }
-
-  try {
-    VRMUtils.removeUnnecessaryVertices(nextVRM.scene);
-  } catch {}
-  try {
-    VRMUtils.combineSkeletons(nextVRM.scene);
-  } catch {}
-  try {
-    VRMUtils.rotateVRM0(nextVRM);
-  } catch {}
-
-  fitVRMScene(nextVRM.scene);
-  if (mode !== "mtoon") {
-    replaceMaterialsForCompat(nextVRM.scene, mode);
-    (nextVRM as any).materials = undefined;
-  }
-  return {
-    kind: "vrm",
-    scene: nextVRM.scene,
-    vrm: nextVRM,
-  };
-}
-
-function createCompatMaterial(
-  material: THREE.Material | undefined,
-  index = 0,
-  mode: RenderMode,
-): THREE.MeshBasicMaterial {
-  const map = mode === "texture" ? getMaterialMap(material) : null;
-  const nextMaterial = new THREE.MeshBasicMaterial({
-    color: map ? "#ffffff" : getCompatMaterialColor(material, index),
-    map,
-    transparent: false,
-    opacity: 1,
-    side: THREE.DoubleSide,
-    depthTest: true,
-    depthWrite: true,
-  });
-  nextMaterial.toneMapped = false;
-  nextMaterial.name = material?.name ? `${material.name} (RN Compat)` : "";
-  return nextMaterial;
-}
-
-function getMaterialMap(
-  material: THREE.Material | undefined,
-): THREE.Texture | null {
-  const map = (material as THREE.MeshBasicMaterial | undefined)?.map;
-  return map?.isTexture ? prepareTextureForExpo(map) : null;
-}
-
-function getCompatMaterialColor(
-  material: THREE.Material | undefined,
-  index: number,
-): THREE.Color {
-  const sourceColor = (material as THREE.MeshBasicMaterial | undefined)?.color;
-  if (sourceColor?.isColor && sourceColor.getHex() !== 0xffffff) {
-    return sourceColor.clone();
-  }
-
-  const name = material?.name?.toLowerCase() || "";
-  if (/skin|face|body|hand|leg|neck|arm/.test(name)) {
-    return new THREE.Color("#f2c7b6");
-  }
-  if (/hair|bang|tail/.test(name)) {
-    return new THREE.Color("#4b5563");
-  }
-  if (/eye|iris|pupil/.test(name)) {
-    return new THREE.Color("#1f2937");
-  }
-  if (/mouth|lip/.test(name)) {
-    return new THREE.Color("#b4535a");
-  }
-  if (/cloth|top|shirt|dress|skirt|sleeve|uniform|ribbon/.test(name)) {
-    return new THREE.Color("#64748b");
-  }
-  if (/shoe|boot|sock/.test(name)) {
-    return new THREE.Color("#334155");
-  }
-
-  const palette = ["#f8fafc", "#cbd5e1", "#94a3b8", "#a5b4fc", "#7dd3fc"];
-  return new THREE.Color(palette[index % palette.length]);
-}
-
-function replaceMaterialsForCompat(
-  scene: THREE.Object3D,
-  mode: RenderMode,
-): void {
-  scene.traverse((child) => {
-    const mesh = child as THREE.Mesh & { isMesh?: boolean };
-    if (!mesh.isMesh) return;
-
-    const oldMaterial = mesh.material;
-    mesh.material = Array.isArray(oldMaterial)
-      ? oldMaterial.map((material, index) =>
-          createCompatMaterial(material, index, mode),
-        )
-      : createCompatMaterial(oldMaterial, 0, mode);
-  });
-}
-
-async function parseGltfFallbackAvatar(
-  arrayBuffer: ArrayBuffer,
-  modelUrl: string,
-): Promise<LoadedAvatar> {
-  const loader = new GLTFLoader();
-  registerNativeTextureSource(loader);
-  const gltf: any = await new Promise((resolve, reject) => {
-    loader.parse(arrayBuffer, getLoaderResourcePath(modelUrl), resolve, reject);
-  });
-
-  if (!gltf?.scene) {
-    throw new Error("GLTF 已解析，但没有找到可渲染场景");
-  }
-
-  replaceMaterialsForCompat(gltf.scene, "compat");
-  fitVRMScene(gltf.scene);
-  return {
-    kind: "gltf-fallback",
-    scene: gltf.scene,
-  };
-}
-
-function SpinningProbe() {
-  const meshRef = useRef<THREE.Mesh>(null);
-
-  useFrame((_, delta) => {
-    if (!meshRef.current) return;
-    meshRef.current.rotation.x += delta * 0.8;
-    meshRef.current.rotation.y += delta * 0.6;
-  });
-
-  return (
-    <mesh ref={meshRef} position={[-1.1, 0.2, 0]}>
-      <boxGeometry args={[0.28, 0.28, 0.28]} />
-      <meshStandardMaterial color="#14b8a6" roughness={0.45} metalness={0.1} />
-    </mesh>
-  );
-}
-
-function VRMModel({
-  modelUrl,
-  mode,
-  onPhase,
-  onError,
-  onNotice,
-}: {
-  modelUrl: string;
-  mode: RenderMode;
-  onPhase: (phase: RenderPhase) => void;
-  onError: (message: string | null) => void;
-  onNotice: (message: string | null) => void;
-}) {
-  const [avatar, setAvatar] = useState<LoadedAvatar | null>(null);
-  const avatarRef = useRef<LoadedAvatar | null>(null);
-
-  useFrame((_, delta) => {
-    const current = avatarRef.current;
-    if (!current) return;
-    if (current.kind === "vrm") {
-      current.vrm.update(delta);
-    }
-    current.scene.rotation.y += delta * 0.12;
-  });
-
-  useEffect(() => {
-    let cancelled = false;
-    let loadedAvatar: LoadedAvatar | null = null;
-
-    setAvatar(null);
-    avatarRef.current = null;
-    onError(null);
-    onNotice(null);
-
-    const load = async () => {
-      try {
-        onPhase("fetching");
-        const response = await fetch(modelUrl);
-        if (!response.ok) {
-          throw new Error(`下载失败: HTTP ${response.status}`);
-        }
-
-        const arrayBuffer = await response.arrayBuffer();
-        if (cancelled) return;
-
-        validateVrmPayload(arrayBuffer, modelUrl);
-
-        onPhase("parsing");
-        try {
-          loadedAvatar = await parseVRMAvatar(arrayBuffer, modelUrl, mode);
-          if (mode === "compat") {
-            onNotice("VRM 已解析；当前使用色块稳定模式作为材质诊断基线。");
-          } else if (mode === "texture") {
-            onNotice("VRM 已解析；当前使用主贴图模式，MToon shader 已绕过。");
-          } else {
-            onNotice("VRM 已解析；当前使用完整 MToon 材质。");
-          }
-        } catch (parseError: any) {
-          const message = parseError?.message || "VRM 解析失败";
-          if (!/colorspace|colorSpace|texture|material/i.test(message)) {
-            throw parseError;
-          }
-
-          loadedAvatar = await parseGltfFallbackAvatar(arrayBuffer, modelUrl);
-          onNotice(`VRM 材质解析失败，已用普通 glTF 材质降级显示：${message}`);
-        }
-
-        if (cancelled) {
-          disposeAvatar(loadedAvatar);
-          return;
-        }
-
-        avatarRef.current = loadedAvatar;
-        setAvatar(loadedAvatar);
-        onPhase(loadedAvatar.kind === "vrm" ? "loaded" : "fallback-loaded");
-      } catch (err: any) {
-        if (cancelled) return;
-        onPhase("failed");
-        onError(err?.message || "VRM 加载失败");
-      }
-    };
-
-    load().catch(() => {});
-
-    return () => {
-      cancelled = true;
-      if (loadedAvatar) {
-        disposeAvatar(loadedAvatar);
-      }
-      avatarRef.current = null;
-    };
-  }, [mode, modelUrl, onError, onNotice, onPhase]);
-
-  if (!avatar) return null;
-  return <primitive object={avatar.scene} />;
-}
-
-function VRMPreviewCanvas({
-  modelUrl,
-  mode,
-  onPhase,
-  onError,
-  onNotice,
-}: {
-  modelUrl: string;
-  mode: RenderMode;
-  onPhase: (phase: RenderPhase) => void;
-  onError: (message: string | null) => void;
-  onNotice: (message: string | null) => void;
-}) {
-  return (
-    <View style={styles.canvasShell}>
-      <Canvas
-        style={styles.canvas}
-        camera={{ position: [0, 0.8, 3.2], fov: 28 }}
-        onCreated={() => onPhase("canvas-ready")}
-      >
-        <color attach="background" args={["#111827"]} />
-        <ambientLight intensity={1.15} />
-        <directionalLight position={[2, 3, 4]} intensity={2.4} />
-        <hemisphereLight args={["#ffffff", "#344054", 1.1]} />
-        <SpinningProbe />
-        <VRMModel
-          modelUrl={modelUrl}
-          mode={mode}
-          onPhase={onPhase}
-          onError={onError}
-          onNotice={onNotice}
-        />
-      </Canvas>
-    </View>
-  );
 }
 
 function getBadgeStyle(status: CheckStatus) {
@@ -759,15 +198,35 @@ export default function VRMPocScreen() {
   const [renderAttempt, setRenderAttempt] = useState<RenderAttempt | null>(
     null,
   );
-  const [renderPhase, setRenderPhase] = useState<RenderPhase>("idle");
+  const [renderPhase, setRenderPhase] = useState<VRMRenderPhase>("idle");
   const [renderError, setRenderError] = useState<string | null>(null);
   const [renderNotice, setRenderNotice] = useState<string | null>(null);
-  const [renderMode, setRenderMode] = useState<RenderMode>("mtoon");
+  const [renderMode, setRenderMode] = useState<VRMRenderMode>("mtoon");
+  const [debugEmotion, setDebugEmotion] = useState<VRMEmotion>("neutral");
+  const [debugGesture, setDebugGesture] = useState<VRMGesture>("none");
+  const [debugGestureRevision, setDebugGestureRevision] = useState(0);
+  const [debugCalibration, setDebugCalibration] = useState<Required<VRMMotionCalibration>>(
+    defaultDebugCalibration,
+  );
+  const debugCalibrationRef = useRef<Required<VRMMotionCalibration>>(defaultDebugCalibration);
+  const [debugTelemetry, setDebugTelemetry] = useState<VRMMotionDebugTelemetry | null>(null);
+  const {
+    calibration: savedDebugCalibration,
+    isLoaded: isMotionCalibrationLoaded,
+    saveCalibration,
+    resetCalibration: resetSavedCalibration,
+  } = useVrmMotionCalibration();
 
   useEffect(() => {
     if (!isLoaded) return;
     setCharacterName(config.characterName || "");
   }, [config.characterName, isLoaded]);
+
+  useEffect(() => {
+    if (!isMotionCalibrationLoaded) return;
+    debugCalibrationRef.current = savedDebugCalibration;
+    setDebugCalibration(savedDebugCalibration);
+  }, [isMotionCalibrationLoaded, savedDebugCalibration]);
 
   const loadPageConfig = async (targetName?: string) => {
     setLoading(true);
@@ -840,7 +299,7 @@ export default function VRMPocScreen() {
     setRenderNotice(null);
   }, []);
 
-  const handleRenderPhase = useCallback((phase: RenderPhase) => {
+  const handleRenderPhase = useCallback((phase: VRMRenderPhase) => {
     setRenderPhase(phase);
   }, []);
 
@@ -852,8 +311,37 @@ export default function VRMPocScreen() {
     setRenderNotice(message);
   }, []);
 
+  const triggerDebugGesture = useCallback((gesture: VRMGesture) => {
+    setDebugGesture(gesture);
+    setDebugGestureRevision((revision) => revision + 1);
+  }, []);
+
+  const persistDebugCalibration = useCallback(
+    (next: Required<VRMMotionCalibration>) => {
+      debugCalibrationRef.current = next;
+      setDebugCalibration(next);
+      saveCalibration(next).catch(() => {});
+    },
+    [saveCalibration],
+  );
+
+  const adjustCalibration = useCallback((key: keyof VRMMotionCalibration, delta: number) => {
+    const current = debugCalibrationRef.current;
+    const next = { ...current };
+    next[key] = Math.max(0, Math.min(2, Number(((current[key] ?? 1) + delta).toFixed(2))));
+    persistDebugCalibration(next);
+  }, [persistDebugCalibration]);
+
+  const resetCalibration = useCallback(() => {
+    persistDebugCalibration({ ...defaultDebugCalibration });
+    resetSavedCalibration().catch(() => {});
+    setDebugEmotion("neutral");
+    setDebugGesture("none");
+    setDebugGestureRevision((revision) => revision + 1);
+  }, [persistDebugCalibration, resetSavedCalibration]);
+
   const handleRenderModeChange = useCallback(
-    (nextMode: RenderMode) => {
+    (nextMode: VRMRenderMode) => {
       setRenderMode(nextMode);
       setRenderError(null);
       setRenderNotice(null);
@@ -1018,14 +506,113 @@ export default function VRMPocScreen() {
           {renderError ? (
             <Text style={styles.errorText}>{renderError}</Text>
           ) : null}
+          <View style={styles.debugBox}>
+            <View style={styles.debugHeaderRow}>
+              <Text style={styles.debugTitle}>Motion Debug</Text>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.debugResetButton,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={resetCalibration}
+              >
+                <Text style={styles.debugResetText}>重置</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.debugHint}>
+              {isMotionCalibrationLoaded ? "本地校准已启用，调整会自动保存。" : "正在加载本地校准..."}
+            </Text>
+            <View style={styles.chipRow}>
+              {debugEmotions.map((emotion) => {
+                const active = debugEmotion === emotion;
+                return (
+                  <Pressable
+                    key={emotion}
+                    style={({ pressed }) => [
+                      styles.debugChip,
+                      active && styles.debugChipActive,
+                      pressed && styles.buttonPressed,
+                    ]}
+                    onPress={() => setDebugEmotion(emotion)}
+                  >
+                    <Text
+                      style={[
+                        styles.debugChipText,
+                        active && styles.debugChipTextActive,
+                      ]}
+                    >
+                      {emotion}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <View style={styles.chipRow}>
+              {debugGestures.map((gesture) => (
+                <Pressable
+                  key={gesture}
+                  style={({ pressed }) => [
+                    styles.debugChip,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={() => triggerDebugGesture(gesture)}
+                >
+                  <Text style={styles.debugChipText}>{gesture}</Text>
+                </Pressable>
+              ))}
+            </View>
+            {calibrationRows.map((row) => (
+              <View key={row.key} style={styles.calibrationRow}>
+                <Text style={styles.calibrationLabel}>{row.label}</Text>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.calibrationButton,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={() => adjustCalibration(row.key, -0.1)}
+                >
+                  <Text style={styles.calibrationButtonText}>-</Text>
+                </Pressable>
+                <Text style={styles.calibrationValue}>
+                  {(debugCalibration[row.key] ?? 1).toFixed(1)}
+                </Text>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.calibrationButton,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={() => adjustCalibration(row.key, 0.1)}
+                >
+                  <Text style={styles.calibrationButtonText}>+</Text>
+                </Pressable>
+              </View>
+            ))}
+            <Text style={styles.debugTelemetry}>
+              mode {debugTelemetry?.mode || "-"} | mouth{" "}
+              {debugTelemetry ? debugTelemetry.mouthValue.toFixed(2) : "-"} | speech{" "}
+              {debugTelemetry ? debugTelemetry.speechEnergy.toFixed(2) : "-"} | gesture{" "}
+              {debugTelemetry?.activeGesture || "-"}
+            </Text>
+          </View>
           {renderAttempt ? (
-            <VRMPreviewCanvas
+            <VRMAvatarView
               key={renderAttempt.id}
               modelUrl={renderAttempt.url}
-              mode={renderAttempt.mode}
+              renderMode={renderAttempt.mode}
+              showProbe
+              autoRotate
+              idleAnimation
+              lipSync
+              relaxedPose
+              emotion={debugEmotion}
+              gesture={debugGesture}
+              gestureRevision={debugGestureRevision}
+              motionCalibration={debugCalibration}
+              debugTelemetry
               onPhase={handleRenderPhase}
               onError={handleRenderError}
               onNotice={handleRenderNotice}
+              onDebugTelemetry={setDebugTelemetry}
             />
           ) : (
             <View style={styles.canvasPlaceholder}>
@@ -1233,17 +820,101 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: "#0f766e",
   },
-  canvasShell: {
-    height: 420,
-    borderRadius: 14,
-    overflow: "hidden",
-    backgroundColor: "#111827",
+  debugBox: {
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#dbe4ee",
+    backgroundColor: "#f8fafc",
+    borderRadius: 14,
+    padding: 12,
+    gap: 10,
   },
-  canvas: {
-    flex: 1,
-    width: "100%",
+  debugHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  debugTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  debugResetButton: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: "#e5e7eb",
+  },
+  debugResetText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  debugHint: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#64748b",
+  },
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  debugChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  debugChipActive: {
+    backgroundColor: "#0f766e",
+    borderColor: "#0f766e",
+  },
+  debugChipText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  debugChipTextActive: {
+    color: "#ffffff",
+  },
+  calibrationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  calibrationLabel: {
+    width: 72,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#374151",
+  },
+  calibrationButton: {
+    width: 32,
+    height: 30,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#e5e7eb",
+  },
+  calibrationButtonText: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  calibrationValue: {
+    width: 36,
+    textAlign: "center",
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  debugTelemetry: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#475569",
   },
   canvasPlaceholder: {
     height: 220,

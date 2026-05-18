@@ -8,6 +8,7 @@
     "delete": "刪除",
     "edit": "編輯",
     "loading": "載入中...",
+    "alert": "提示",
     "error": "錯誤",
     "success": "成功",
     "close": "關閉",
@@ -94,6 +95,11 @@
       "paused": "Live2D 已暫停",
       "pageInactive": "頁面未啟用",
       "adjusting": "調整中"
+    },
+    "vrm": {
+      "loading": "正在載入 VRM",
+      "failed": "VRM 載入失敗",
+      "failedHint": "請檢查模型檔案或網路連線"
     }
   },
   "settings": {

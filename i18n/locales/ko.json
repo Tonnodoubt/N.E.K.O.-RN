@@ -8,6 +8,7 @@
     "delete": "삭제",
     "edit": "편집",
     "loading": "로드 중...",
+    "alert": "알림",
     "error": "오류",
     "success": "성공",
     "close": "닫기",
@@ -94,6 +95,11 @@
       "paused": "Live2D 일시정지",
       "pageInactive": "페이지 비활성",
       "adjusting": "조정 중"
+    },
+    "vrm": {
+      "loading": "VRM 로딩 중",
+      "failed": "VRM 로드 실패",
+      "failedHint": "모델 파일 또는 네트워크 연결을 확인하세요"
     }
   },
   "settings": {

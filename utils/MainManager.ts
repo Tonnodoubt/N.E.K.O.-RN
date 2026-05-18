@@ -79,6 +79,10 @@ class MainManager {
     this.live2dService = live2dService;
   }
 
+  clearLive2DService() {
+    this.live2dService = null;
+  }
+
   /**
    * 处理 Gemini 响应（AI 开始说话）
    */

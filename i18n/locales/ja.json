@@ -8,6 +8,7 @@
     "delete": "削除",
     "edit": "編集",
     "loading": "読み込み中...",
+    "alert": "通知",
     "error": "エラー",
     "success": "成功",
     "close": "閉じる",
@@ -94,6 +95,11 @@
       "paused": "Live2D 一時停止中",
       "pageInactive": "ページ非アクティブ",
       "adjusting": "調整中"
+    },
+    "vrm": {
+      "loading": "VRM を読み込み中",
+      "failed": "VRM の読み込みに失敗しました",
+      "failedHint": "モデルファイルまたはネットワーク接続を確認してください"
     }
   },
   "settings": {

@@ -10,6 +10,7 @@ export interface UseCameraStreamConfig {
   sendMessage: (message: object) => void;
   isConnected: boolean;
   isInBackgroundRef: React.RefObject<boolean>;
+  onFrameSent?: () => void;
 }
 
 export interface UseCameraStreamReturn {
@@ -49,18 +50,21 @@ export function useCameraStream(
   // 使用 ref 存储配置，避免闭包过期
   const sendMessageRef = useRef(config.sendMessage);
   const isConnectedRef = useRef(config.isConnected);
+  const onFrameSentRef = useRef(config.onFrameSent);
 
   // 同步 ref
   useEffect(() => {
     sendMessageRef.current = config.sendMessage;
     isConnectedRef.current = config.isConnected;
-  }, [config.sendMessage, config.isConnected]);
+    onFrameSentRef.current = config.onFrameSent;
+  }, [config.sendMessage, config.isConnected, config.onFrameSent]);
 
   // 初始化 Service
   useEffect(() => {
     const service = new CameraStreamService({
       sendFrame: (payload) => {
         sendMessageRef.current(payload);
+        onFrameSentRef.current?.();
       },
       isConnected: () => isConnectedRef.current,
       onStatusChange: (newStatus) => {
