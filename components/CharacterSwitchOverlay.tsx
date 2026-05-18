@@ -55,11 +55,6 @@ export function CharacterSwitchOverlay({ loading, switchedName, error }: Charact
           <Text style={s.text}>{t('main.character.switching')}</Text>
         </View>
       )}
-      {switchedName !== null && (
-        <View style={s.banner} pointerEvents="none">
-          <Text style={s.successText}>{t('main.character.switched', { name: switchedName })}</Text>
-        </View>
-      )}
       {error !== null && (
         <View style={s.banner} pointerEvents="none">
           <Text style={s.errorText}>{error}</Text>

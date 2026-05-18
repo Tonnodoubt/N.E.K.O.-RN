@@ -212,6 +212,10 @@ export function Live2DStage({
       width: '100%',
       height: '100%',
     },
+    gestureRoot: {
+      flex: 1,
+      width: '100%',
+    },
     vrmView: {
       flex: 1,
       width: '100%',
@@ -292,7 +296,9 @@ export function Live2DStage({
 
   return (
     <GestureDetector gesture={transformGesture}>
-      {stageContent}
+      <View collapsable={false} style={s.gestureRoot}>
+        {stageContent}
+      </View>
     </GestureDetector>
   );
 }

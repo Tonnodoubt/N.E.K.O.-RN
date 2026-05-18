@@ -39,7 +39,6 @@ import {
 import {
   Live2DRightToolbar,
   ChatContainer,
-  StatusToast,
   type Live2DRightToolbarPanel,
   type Live2DSettingsToggleId,
   type Live2DSettingsState,
@@ -1870,15 +1869,21 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     connectionChip: {
       maxWidth: '100%',
       minHeight: 34,
-      borderRadius: 16,
-      backgroundColor: cc.overlay,
+      borderRadius: theme.radius.lg,
+      backgroundColor: theme.isDark ? cc.overlay : 'rgba(255, 255, 255, 0.74)',
       borderWidth: 1,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+      paddingHorizontal: theme.spacing.xl,
+      paddingVertical: theme.spacing.sm,
+      ...theme.shadowBubble,
     },
     connectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    connectionTitle: { fontSize: 13, fontWeight: '600', flexShrink: 1 },
-  }), [cc, insets.top]);
+    connectionTitle: {
+      fontSize: theme.fontSize.footnote,
+      lineHeight: theme.lineHeight.footnote,
+      fontWeight: theme.fontWeight.medium,
+      flexShrink: 1,
+    },
+  }), [theme, cc, insets.top]);
 
   // Wrap send to auto-expand chat
   const handleSendAndExpand = useCallback(async (text: string, images?: string[]) => {
@@ -1905,8 +1910,6 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
 
   return (
     <View style={s.container}>
-      <StatusToast ref={statusToastRef} />
-
       {/* Live2D always full screen — never resizes */}
       <View style={s.live2dWrapper}>
         <Live2DStage
