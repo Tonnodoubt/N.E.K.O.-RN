@@ -1,7 +1,6 @@
 /* eslint-disable react/no-unknown-property */
 import { VRMLoaderPlugin, VRMUtils, type VRM } from "@pixiv/three-vrm";
 import { Canvas, useFrame, useThree } from "@react-three/fiber/native";
-import { Directory, File, Paths } from "expo-file-system";
 import { useEffect, useRef, useState } from "react";
 import {
   Image,
@@ -15,6 +14,18 @@ import PCMStream, {
 } from "react-native-pcm-stream";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import {
+  NEKO_CACHED_TEXTURE_URI,
+  cleanupVrmTextureCache,
+  deleteCachedTextureUri,
+  writeTextureToCache,
+} from "./vrmCache";
+import {
+  advanceVrmAnimation,
+  disposeVrmAnimation,
+  loadVrmAnimationRuntime,
+  type VRMAnimationRuntime,
+} from "./vrmAnimation";
 
 export type VRMRenderMode = "compat" | "texture" | "mtoon";
 export type VRMEmotion =
@@ -84,6 +95,7 @@ export type VRMRenderPhase =
 
 export type VRMAvatarViewProps = {
   modelUrl: string;
+  animationUrl?: string;
   renderMode?: VRMRenderMode;
   showProbe?: boolean;
   autoRotate?: boolean;
@@ -99,6 +111,7 @@ export type VRMAvatarViewProps = {
   modelScale?: number;
   modelPosition?: { x: number; y: number };
   backgroundColor?: string;
+  transparentBackground?: boolean;
   style?: StyleProp<ViewStyle>;
   onPhase?: (phase: VRMRenderPhase) => void;
   onError?: (message: string | null) => void;
@@ -193,8 +206,6 @@ type MotionMachineState = {
   focus: FocusMotionState;
 };
 
-const textureCacheDirectory = new Directory(Paths.cache, "neko-vrm-textures");
-let textureCacheCounter = 0;
 const expressionKeys: ExpressionKey[] = [
   "happy",
   "relaxed",
@@ -529,17 +540,6 @@ function getLoaderResourcePath(modelUrl: string): string {
   }
 }
 
-function getTextureExtension(mimeType?: string): string {
-  switch (mimeType) {
-    case "image/jpeg":
-      return "jpg";
-    case "image/webp":
-      return "webp";
-    default:
-      return "png";
-  }
-}
-
 function guessMimeType(uri: string, mimeType?: string): string | undefined {
   if (mimeType) return mimeType;
   if (/\.jpe?g(?:[?#].*)?$/i.test(uri)) return "image/jpeg";
@@ -555,19 +555,6 @@ function resolveTextureUri(uri: string, resourcePath: string): string {
   } catch {
     return `${resourcePath}${uri}`;
   }
-}
-
-function writeTextureToCache(bytes: Uint8Array, mimeType?: string): string {
-  textureCacheDirectory.create({ idempotent: true, intermediates: true });
-  const file = new File(
-    textureCacheDirectory,
-    `texture-${Date.now()}-${textureCacheCounter++}.${getTextureExtension(
-      mimeType,
-    )}`,
-  );
-  (file as any).create({ intermediates: true, overwrite: true });
-  (file as any).write(bytes);
-  return file.uri;
 }
 
 function getImageSize(uri: string): Promise<{ width: number; height: number }> {
@@ -594,12 +581,14 @@ async function createNativeTextureFromUri(
   mimeType?: string,
 ): Promise<THREE.Texture> {
   let localUri = uri;
+  let cachedUri: string | null = null;
   const resolvedMimeType = guessMimeType(uri, mimeType);
 
   if (/^(?:blob|data|https?):/i.test(uri)) {
     const response = await fetch(uri);
     const bytes = new Uint8Array(await response.arrayBuffer());
     localUri = writeTextureToCache(bytes, resolvedMimeType);
+    cachedUri = localUri;
   }
 
   const { width, height } = await getImageSize(localUri);
@@ -612,6 +601,7 @@ async function createNativeTextureFromUri(
   };
   prepareTextureForExpo(texture);
   texture.userData.mimeType = resolvedMimeType;
+  if (cachedUri) texture.userData[NEKO_CACHED_TEXTURE_URI] = cachedUri;
   return texture;
 }
 
@@ -620,7 +610,9 @@ async function createNativeTextureFromBuffer(
   mimeType?: string,
 ): Promise<THREE.Texture> {
   const localUri = writeTextureToCache(new Uint8Array(buffer), mimeType);
-  return createNativeTextureFromUri(localUri, mimeType);
+  const texture = await createNativeTextureFromUri(localUri, mimeType);
+  texture.userData[NEKO_CACHED_TEXTURE_URI] = localUri;
+  return texture;
 }
 
 function cloneNativeTexture(texture: THREE.Texture): THREE.Texture {
@@ -671,24 +663,56 @@ function registerNativeTextureSource(loader: GLTFLoader): void {
 }
 
 function disposeObject3D(object: THREE.Object3D): void {
+  const deletedTextureUris = new Set<string>();
   object.traverse((child) => {
     const mesh = child as THREE.Mesh;
     mesh.geometry?.dispose?.();
     const material = mesh.material;
     if (Array.isArray(material)) {
-      material.forEach((item) => item.dispose?.());
+      material.forEach((item) => disposeMaterial(item, deletedTextureUris));
     } else {
-      material?.dispose?.();
+      disposeMaterial(material, deletedTextureUris);
     }
   });
 }
 
+function disposeMaterial(
+  material: THREE.Material | undefined,
+  deletedTextureUris: Set<string>,
+): void {
+  if (!material) return;
+
+  for (const value of Object.values(material as any)) {
+    disposeTexture(value, deletedTextureUris);
+  }
+
+  const uniforms = (material as THREE.ShaderMaterial).uniforms;
+  if (uniforms) {
+    for (const uniform of Object.values(uniforms)) {
+      disposeTexture((uniform as { value?: unknown }).value, deletedTextureUris);
+    }
+  }
+
+  material.dispose?.();
+}
+
+function disposeTexture(value: unknown, deletedTextureUris: Set<string>): void {
+  const texture = value as THREE.Texture | undefined;
+  if (!texture?.isTexture) return;
+
+  const cachedUri = texture.userData?.[NEKO_CACHED_TEXTURE_URI];
+  texture.dispose?.();
+  if (typeof cachedUri === "string" && !deletedTextureUris.has(cachedUri)) {
+    deletedTextureUris.add(cachedUri);
+    deleteCachedTextureUri(cachedUri);
+  }
+}
+
 function disposeVRM(vrm: VRM): void {
+  disposeObject3D(vrm.scene);
   try {
     VRMUtils.deepDispose(vrm.scene);
-  } catch {
-    disposeObject3D(vrm.scene);
-  }
+  } catch {}
 }
 
 function disposeAvatar(avatar: LoadedAvatar): void {
@@ -1852,6 +1876,7 @@ function VRMLightingRig({ lighting }: { lighting?: VRMLightingConfig }) {
 
 function VRMModel({
   modelUrl,
+  animationUrl,
   mode,
   autoRotate,
   idleAnimation,
@@ -1871,6 +1896,7 @@ function VRMModel({
   onDebugTelemetry,
 }: {
   modelUrl: string;
+  animationUrl?: string;
   mode: VRMRenderMode;
   autoRotate: boolean;
   idleAnimation: boolean;
@@ -1895,6 +1921,7 @@ function VRMModel({
   const mouthSyncRef = useRef<MouthSyncState>(createMouthSyncState());
   const emotionStateRef = useRef<EmotionExpressionState>(createEmotionExpressionState());
   const motionMachineRef = useRef<MotionMachineState>(createMotionMachineState());
+  const animationRuntimeRef = useRef<VRMAnimationRuntime | null>(null);
   const lightingRef = useRef<VRMLightingConfig | undefined>(lighting);
   const debugTelemetryAtRef = useRef(0);
   lightingRef.current = lighting;
@@ -1906,6 +1933,10 @@ function VRMModel({
     const current = avatarRef.current;
     if (!current) return;
     if (current.kind === "vrm") {
+      const animationRuntime = animationRuntimeRef.current;
+      if (animationRuntime) {
+        advanceVrmAnimation(animationRuntime, delta);
+      }
       if (lipSync) {
         applyMouthSync(current.vrm, mouthSyncRef.current, delta);
       }
@@ -1917,7 +1948,10 @@ function VRMModel({
         lipSync ? mouthSyncRef.current.playbackPresence : 0,
         delta,
       );
-      if (idleAnimation) {
+      if (animationRuntime) {
+        idleStateRef.current.elapsed += Math.min(delta, 0.1);
+        applyBlink(current.vrm, idleStateRef.current);
+      } else if (idleAnimation) {
         const speechEnergy = lipSync ? getSpeechEnergy(mouthSyncRef.current) : 0;
         const machine = motionMachineRef.current;
         const motionFrame = advanceMotionMachine(
@@ -1983,9 +2017,14 @@ function VRMModel({
   useEffect(() => {
     let cancelled = false;
     let loadedAvatar: LoadedAvatar | null = null;
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
 
     setAvatar(null);
     avatarRef.current = null;
+    if (animationRuntimeRef.current) {
+      disposeVrmAnimation(animationRuntimeRef.current);
+      animationRuntimeRef.current = null;
+    }
     idleStateRef.current = createIdleAnimationState();
     mouthSyncRef.current = createMouthSyncState();
     emotionStateRef.current = createEmotionExpressionState();
@@ -1995,8 +2034,9 @@ function VRMModel({
 
     const load = async () => {
       try {
+        cleanupVrmTextureCache();
         onPhase("fetching");
-        const response = await fetch(modelUrl);
+        const response = await fetch(modelUrl, controller ? { signal: controller.signal } : undefined);
         if (!response.ok) {
           throw new Error(`下载失败: HTTP ${response.status}`);
         }
@@ -2045,6 +2085,7 @@ function VRMModel({
         onPhase(loadedAvatar.kind === "vrm" ? "loaded" : "fallback-loaded");
       } catch (err: any) {
         if (cancelled) return;
+        if (err?.name === "AbortError") return;
         onPhase("failed");
         onError(err?.message || "VRM 加载失败");
       }
@@ -2054,12 +2095,60 @@ function VRMModel({
 
     return () => {
       cancelled = true;
+      controller?.abort();
+      if (animationRuntimeRef.current) {
+        disposeVrmAnimation(animationRuntimeRef.current, avatarRef.current?.kind === "vrm" ? avatarRef.current.vrm : undefined);
+        animationRuntimeRef.current = null;
+      }
       if (loadedAvatar) {
         disposeAvatar(loadedAvatar);
       }
       avatarRef.current = null;
+      cleanupVrmTextureCache();
     };
   }, [autoRotate, idleAnimation, lipSync, mode, modelUrl, onError, onNotice, onPhase, relaxedPose]);
+
+  useEffect(() => {
+    const current = avatarRef.current;
+    if (animationRuntimeRef.current) {
+      disposeVrmAnimation(animationRuntimeRef.current, current?.kind === "vrm" ? current.vrm : undefined);
+      animationRuntimeRef.current = null;
+    }
+
+    if (!animationUrl || current?.kind !== "vrm") return;
+
+    let cancelled = false;
+    let runtime: VRMAnimationRuntime | null = null;
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+
+    const loadAnimation = async () => {
+      try {
+        runtime = await loadVrmAnimationRuntime(animationUrl, current.vrm, controller?.signal);
+        if (cancelled || avatarRef.current !== current) {
+          disposeVrmAnimation(runtime, current.vrm);
+          return;
+        }
+        animationRuntimeRef.current = runtime;
+        onNotice(`${runtime.format === "vrma" ? "VRMA" : "glTF"} 动画已启用：${runtime.trackCount} 条轨道`);
+      } catch (err: any) {
+        if (cancelled || err?.name === "AbortError") return;
+        onNotice(`VRM 动画暂不可用，已保持基础动作：${err?.message || "解析失败"}`);
+      }
+    };
+
+    loadAnimation().catch(() => {});
+
+    return () => {
+      cancelled = true;
+      controller?.abort();
+      if (runtime) {
+        disposeVrmAnimation(runtime, current.vrm);
+      }
+      if (animationRuntimeRef.current === runtime) {
+        animationRuntimeRef.current = null;
+      }
+    };
+  }, [animationUrl, avatar, onNotice]);
 
   useEffect(() => {
     const current = avatarRef.current;
@@ -2127,6 +2216,7 @@ function VRMModel({
 
 export function VRMAvatarView({
   modelUrl,
+  animationUrl,
   renderMode = "mtoon",
   showProbe = false,
   autoRotate = false,
@@ -2142,6 +2232,7 @@ export function VRMAvatarView({
   modelScale = 1,
   modelPosition = { x: 0, y: 0 },
   backgroundColor = "#111827",
+  transparentBackground = false,
   style,
   onPhase = () => {},
   onError = () => {},
@@ -2149,17 +2240,32 @@ export function VRMAvatarView({
   onDebugTelemetry,
 }: VRMAvatarViewProps) {
   return (
-    <View style={[styles.canvasShell, style]}>
+    <View
+      style={[
+        styles.canvasShell,
+        transparentBackground && styles.transparentCanvasShell,
+        style,
+      ]}
+    >
       <Canvas
         style={styles.canvas}
         camera={{ position: [0, 0.8, 3.2], fov: 28 }}
-        onCreated={() => onPhase("canvas-ready")}
+        gl={transparentBackground ? { alpha: true } : undefined}
+        onCreated={({ gl }) => {
+          if (transparentBackground) {
+            gl.setClearColor(0x000000, 0);
+          }
+          onPhase("canvas-ready");
+        }}
       >
-        <color attach="background" args={[backgroundColor]} />
+        {!transparentBackground ? (
+          <color attach="background" args={[backgroundColor]} />
+        ) : null}
         <VRMLightingRig lighting={lighting} />
         {showProbe ? <SpinningProbe /> : null}
         <VRMModel
           modelUrl={modelUrl}
+          animationUrl={animationUrl}
           mode={renderMode}
           autoRotate={autoRotate}
           idleAnimation={idleAnimation}
@@ -2192,8 +2298,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#1f2937",
   },
+  transparentCanvasShell: {
+    backgroundColor: "transparent",
+    borderWidth: 0,
+  },
   canvas: {
     flex: 1,
     width: "100%",
+    backgroundColor: "transparent",
   },
 });

@@ -29,7 +29,9 @@ export interface CatgirlProfile {
   live2d_item_id?: string;
   model_type?: 'live2d' | 'vrm';
   vrm?: string;
-  vrm_animation?: string;
+  vrm_animation?: string | null;
+  idleAnimation?: string | null;
+  idleAnimations?: string[] | null;
   voice_id?: string;
 }
 

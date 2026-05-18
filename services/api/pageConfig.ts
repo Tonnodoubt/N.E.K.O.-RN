@@ -18,6 +18,13 @@ export interface PageConfigResponse {
   model_path: string;
   model_type: string;
   live3d_sub_type?: string;
+  vrm_animation?: string | null;
+  animation_path?: string | null;
+  animation_url?: string | null;
+  vrma?: string | null;
+  idle_animation?: string | string[] | null;
+  idleAnimation?: string | null;
+  idleAnimations?: string[] | null;
   lighting?: PageConfigLighting | null;
   error?: string;
 }

@@ -642,7 +642,7 @@ export default function VRMPocScreen() {
             3. 色块稳定与主贴图模式保留为材质链路诊断开关。
           </Text>
           <Text style={styles.listItem}>
-            4. 本页暂不接表情、口型与 VRMA，后续在正式角色渲染层继续接入。
+            4. 本页可调表情、动作与口型；正式主界面会读取角色配置中的动画文件。
           </Text>
         </View>
       </ScrollView>

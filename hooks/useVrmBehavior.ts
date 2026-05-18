@@ -36,6 +36,7 @@ export type VRMBehaviorEvent =
   | { type: 'vision_capture_requested' }
   | { type: 'vision_image_captured' }
   | { type: 'vision_image_sent' }
+  | { type: 'vision_result'; mood: 'positive' | 'curious' | 'uncertain' | 'alert' }
   | { type: 'vision_failed' }
   | { type: 'tap' };
 
@@ -207,6 +208,33 @@ export function resolveVRMBehaviorEvent(
         baseEmotion: 'thinking',
         gesture: 'nod',
         gestureCooldownMs: 1600,
+        priority: 2,
+      };
+    case 'vision_result':
+      if (event.mood === 'positive') {
+        return {
+          flashEmotion: 'happy',
+          fallbackEmotion: defaultFallbackEmotion,
+          durationMs: 900,
+          gesture: 'bounce',
+          gestureCooldownMs: 1600,
+          priority: 3,
+        };
+      }
+      if (event.mood === 'alert') {
+        return {
+          flashEmotion: 'surprised',
+          fallbackEmotion: defaultFallbackEmotion,
+          durationMs: 900,
+          gesture: 'recoil',
+          gestureCooldownMs: 1600,
+          priority: 3,
+        };
+      }
+      return {
+        baseEmotion: event.mood === 'uncertain' ? 'thinking' : 'attentive',
+        gesture: 'tilt',
+        gestureCooldownMs: 1800,
         priority: 2,
       };
     case 'voice_stop':

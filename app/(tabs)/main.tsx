@@ -11,7 +11,7 @@ import { useLipSync } from '@/hooks/useLipSync';
 import { useLive2D } from '@/hooks/useLive2D';
 import { useLive2DAgentBackend } from '@/hooks/useLive2DAgentBackend';
 import { useLive2DPreferences } from '@/hooks/useLive2DPreferences';
-import { useVrmBehavior } from '@/hooks/useVrmBehavior';
+import { useVrmBehavior, type VRMBehaviorEvent } from '@/hooks/useVrmBehavior';
 import { useVrmMotionCalibration } from '@/hooks/useVrmMotionCalibration';
 import { useImagePicker } from '@/hooks/useImagePicker';
 import { useCamera } from '@/hooks/useCamera';
@@ -127,6 +127,76 @@ function normalizeVrmLighting(lighting: PageConfigResponse['lighting']): VRMLigh
   return Object.keys(next).length > 0 ? next : undefined;
 }
 
+function pickAnimationPath(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    const next = value.trim();
+    return next.length > 0 ? next : undefined;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const next = pickAnimationPath(item);
+      if (next) return next;
+    }
+  }
+  return undefined;
+}
+
+function pickVrmAnimationPath(pageConfig: PageConfigResponse): string | undefined {
+  const candidates: unknown[] = [
+    pageConfig.vrm_animation,
+    pageConfig.animation_path,
+    pageConfig.animation_url,
+    pageConfig.vrma,
+    pageConfig.idle_animation,
+    pageConfig.idleAnimation,
+    pageConfig.idleAnimations,
+  ];
+  return pickAnimationPath(candidates);
+}
+
+async function resolveVrmAnimationUrl(
+  catgirlName: string,
+  pageConfig: PageConfigResponse,
+  apiBase: string,
+  p2pToken?: string,
+): Promise<string | undefined> {
+  const pageConfigPath = pickVrmAnimationPath(pageConfig);
+  if (pageConfigPath) return resolveBackendModelUrl(pageConfigPath, apiBase, p2pToken);
+
+  try {
+    const client = createCharactersApiClient(apiBase, p2pToken);
+    const data = await client.getCharacters();
+    const profile = data.猫娘?.[catgirlName];
+    const path = pickAnimationPath([
+      profile?.vrm_animation,
+      profile?.idleAnimation,
+      profile?.idleAnimations,
+    ]);
+    return path ? resolveBackendModelUrl(path, apiBase, p2pToken) : undefined;
+  } catch (error) {
+    console.warn('[VRM] 获取角色动画配置失败:', error);
+    return undefined;
+  }
+}
+
+function inferVisionBehavior(text: string): VRMBehaviorEvent | null {
+  const content = text.toLowerCase();
+  if (!content.trim()) return null;
+  if (/(危险|摔|哭|难过|生气|害怕|疼|血|火|sad|angry|cry|danger|hurt|fire)/i.test(content)) {
+    return { type: 'vision_result', mood: 'alert' };
+  }
+  if (/(看不清|不确定|无法识别|模糊|不知道|unclear|unknown|not sure|cannot|can't)/i.test(content)) {
+    return { type: 'vision_result', mood: 'uncertain' };
+  }
+  if (/(笑|微笑|开心|可爱|漂亮|好看|smile|happy|cute|nice)/i.test(content)) {
+    return { type: 'vision_result', mood: 'positive' };
+  }
+  if (/(衣服|穿|颜色|表情|脸|人|看起来|似乎|clothes|wearing|color|face|expression|looks)/i.test(content)) {
+    return { type: 'vision_result', mood: 'curious' };
+  }
+  return null;
+}
+
 const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   const { t, i18n: i18nInstance } = useTranslation();
   const router = useRouter();
@@ -153,6 +223,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   useEffect(() => { if (isChatForceCollapsed) setChatExpanded(false); }, [isChatForceCollapsed]);
   const [voicePrepareStatus, setVoicePrepareStatus] = useState<'preparing' | 'ready' | null>(null);
   const isSwitchingCharacterRef = useRef(false);
+  const localSwitchReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 🔥 新增：应用是否在后台的标志 ref，用于在拍照等场景忽略 WebSocket 错误
   const isInBackgroundRef = useRef(false);
   // 🔥 新增：记录是否是从后台恢复，用于显示"已恢复连接"提示
@@ -168,6 +239,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   });
   const [avatarModelType, setAvatarModelType] = useState<AvatarModelType>('live2d');
   const [vrmModelUrl, setVrmModelUrl] = useState<string | undefined>(undefined);
+  const [vrmAnimationUrl, setVrmAnimationUrl] = useState<string | undefined>(undefined);
   const [vrmLighting, setVrmLighting] = useState<VRMLightingConfig | undefined>(undefined);
   // ref 持有最新 currentCatgirl，供 onConnectionChange 闭包安全读取（避免 stale closure）
   const currentCatgirlRef = useRef<string | null>(null);
@@ -304,9 +376,16 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
 
         if (isVrm) {
           const modelUrl = resolveBackendModelUrl(pageConfig.model_path, apiBase, config.p2p?.token);
+          const animationUrl = await resolveVrmAnimationUrl(
+            catgirlName,
+            pageConfig,
+            apiBase,
+            config.p2p?.token,
+          );
           if (__DEV__) console.log('🎨 [syncCharacterModel] 设置 VRM URL:', modelUrl);
           setAvatarModelType('vrm');
           setVrmModelUrl(modelUrl);
+          setVrmAnimationUrl(animationUrl);
           setVrmLighting(normalizeVrmLighting(pageConfig.lighting));
           setLive2dModel((prev) => ({ ...prev, url: undefined, itemId: undefined }));
           return;
@@ -323,6 +402,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         if (__DEV__) console.log('🎨 [syncCharacterModel] 设置 Live2D URL:', modelUrl);
         setAvatarModelType('live2d');
         setVrmModelUrl(undefined);
+        setVrmAnimationUrl(undefined);
         setVrmLighting(undefined);
         setLive2dModel({
           name: modelRes.model_info.name,
@@ -346,6 +426,24 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
 
     const syncCurrentCatgirl = async () => {
       try {
+        if (config.characterName) {
+          setCurrentCatgirl(config.characterName);
+          console.log('🎭 [syncCurrentCatgirl] 使用手机本地角色:', config.characterName);
+          await syncCharacterModel(config.characterName);
+          setTimeout(() => {
+            if (audio.isReadyRef.current) {
+              console.log('📤 发送 start_session 以同步手机本地角色音色');
+              audio.sendMessage({
+                action: 'start_session',
+                input_type: 'text',
+                audio_format: 'PCM_48000HZ_MONO_16BIT',
+                new_session: false,
+              });
+            }
+          }, 500);
+          return;
+        }
+
         const apiBase = buildHttpBaseURL(config);
         if (__DEV__) console.log('🌐 [syncCurrentCatgirl] apiBase =', apiBase);
         const client = createCharactersApiClient(apiBase, config.p2p?.token);
@@ -412,6 +510,11 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     dispatchVrmBehavior({ type: 'model_changed' });
   }, [avatarModelType, dispatchVrmBehavior, vrmModelUrl]);
 
+  const lastVisionActivityAtRef = useRef(0);
+  const markVrmVisionActivity = useCallback(() => {
+    lastVisionActivityAtRef.current = Date.now();
+  }, []);
+
   // 消息去重：跟踪已发送消息的 clientMessageId（使用 Map 存储时间戳，支持 TTL 清理）
   // 配置：TTL 5分钟，最大条目数 1000，清理间隔 1分钟
   const DEDUPE_TTL_MS = 5 * 60 * 1000;
@@ -465,7 +568,11 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
 
   // Live2D Preferences 持久化
   const { repository: preferencesRepository } = useLive2DPreferences();
-  const { calibration: vrmMotionCalibration } = useVrmMotionCalibration();
+  const {
+    calibration: vrmMotionCalibration,
+    saveCalibration: saveVrmMotionCalibration,
+    resetCalibration: resetVrmMotionCalibration,
+  } = useVrmMotionCalibration();
 
   const chat = useChatMessages({
     maxMessages: 100,
@@ -486,6 +593,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   // 处理相机拍照结果
   useEffect(() => {
     if (camera.photo) {
+      markVrmVisionActivity();
       dispatchVrmBehavior({ type: 'vision_image_captured' });
       // 将拍照结果添加到待发送列表
       const newImage = {
@@ -495,7 +603,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       setCameraPendingImages(prev => [...prev, newImage].slice(0, 5));
       camera.clearPhoto();
     }
-  }, [camera.photo, camera.clearPhoto, dispatchVrmBehavior]);
+  }, [camera.photo, camera.clearPhoto, dispatchVrmBehavior, markVrmVisionActivity]);
 
   // 稳定 P2P 配置引用，避免不必要的重连（依赖整个 p2p 对象，而非只追踪 token）
   const p2pConfig = useMemo(() => config.p2p, [config.p2p]);
@@ -596,6 +704,10 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       if (result?.type === 'gemini_response') {
         mainManager.onGeminiResponse(!!result.isNewMessage);
         dispatchVrmBehavior({ type: 'assistant_response', isNewMessage: !!result.isNewMessage });
+        if (result.isNewMessage && Date.now() - lastVisionActivityAtRef.current < 45_000) {
+          const visionBehavior = inferVisionBehavior(result.text || '');
+          if (visionBehavior) dispatchVrmBehavior(visionBehavior);
+        }
       } else if (result?.type === 'user_activity') {
         mainManager.onUserSpeechDetected();
         dispatchVrmBehavior({ type: 'user_activity' });
@@ -709,6 +821,10 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
 
           // 立即重置角色切换标志，避免后续消息重复触发超时
           isSwitchingCharacterRef.current = false;
+          if (localSwitchReleaseTimerRef.current) {
+            clearTimeout(localSwitchReleaseTimerRef.current);
+            localSwitchReleaseTimerRef.current = null;
+          }
           console.log('🔄 角色切换标志已重置');
           setCharacterLoading(false);
           setIsChatForceCollapsed(false);
@@ -748,6 +864,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     isConnected: audio.isConnected,
     isInBackgroundRef,
     onFrameSent: () => {
+      markVrmVisionActivity();
       dispatchVrmBehavior({ type: 'vision_stream_frame' });
     },
   });
@@ -1052,7 +1169,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   useEffect(() => {
     setVrmRenderPhase('idle');
     setVrmRenderError(null);
-  }, [avatarModelType, vrmModelUrl]);
+  }, [avatarModelType, vrmAnimationUrl, vrmModelUrl]);
 
   // Live2D 模型位置/缩放 ref（传给 Live2DStage）
   const currentModelPositionRef = useRef({ x: 0, y: 0 });
@@ -1105,6 +1222,50 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       console.warn('[VRM] 保存模型位置偏好失败:', e);
     });
   }, [preferencesRepository, vrmModelUrl]);
+
+  const resetVrmTransform = useCallback(() => {
+    if (avatarModelTypeRef.current !== 'vrm' || !vrmModelUrl) return;
+    currentModelPositionRef.current = { x: 0, y: 0 };
+    currentScaleRef.current = 0.8;
+    setAvatarTransformRevision((revision) => revision + 1);
+    void preferencesRepository.save({
+      modelUri: vrmModelUrl,
+      position: { x: 0, y: 0 },
+      scale: { x: 0.8, y: 0.8 },
+    }).catch((e) => {
+      console.warn('[VRM] 重置模型位置偏好失败:', e);
+    });
+  }, [preferencesRepository, vrmModelUrl]);
+
+  const scaleVrmMotion = useCallback((factor: number) => {
+    const next = {
+      gaze: Math.max(0, Math.min(2, vrmMotionCalibration.gaze * factor)),
+      body: Math.max(0, Math.min(2, vrmMotionCalibration.body * factor)),
+      arms: Math.max(0, Math.min(2, vrmMotionCalibration.arms * factor)),
+      speech: Math.max(0, Math.min(2, vrmMotionCalibration.speech * factor)),
+      gesture: Math.max(0, Math.min(2, vrmMotionCalibration.gesture * factor)),
+      idle: Math.max(0, Math.min(2, vrmMotionCalibration.idle * factor)),
+    };
+    void saveVrmMotionCalibration(next);
+  }, [saveVrmMotionCalibration, vrmMotionCalibration]);
+
+  const finishMobileCharacterSwitch = useCallback((name: string | null) => {
+    if (characterLoadingTimerRef.current) {
+      clearTimeout(characterLoadingTimerRef.current);
+      characterLoadingTimerRef.current = null;
+    }
+    setCharacterLoading(false);
+    setIsChatForceCollapsed(false);
+    setSwitchError(null);
+    if (switchErrorTimerRef.current) {
+      clearTimeout(switchErrorTimerRef.current);
+      switchErrorTimerRef.current = null;
+    }
+    setSwitchedCharacterName(name);
+    if (switchedNameTimerRef.current) clearTimeout(switchedNameTimerRef.current);
+    switchedNameTimerRef.current = setTimeout(() => setSwitchedCharacterName(null), 2500);
+    dispatchVrmBehavior({ type: 'character_switch_done' });
+  }, [dispatchVrmBehavior]);
 
   // 工具栏事件处理（与 Web 版本一致）
   const handleToolbarSettingsChange = useCallback((id: Live2DSettingsToggleId, next: boolean) => {
@@ -1266,6 +1427,51 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   }, []);
 
   const handleSettingsMenuClick = useCallback((id: string) => {
+    if (id === 'live2dSettings') {
+      if (avatarModelTypeRef.current === 'vrm') {
+        setToolbarOpenPanel(null);
+        Alert.alert(
+          'VRM 设置',
+          vrmAnimationUrl ? '当前角色已配置动画文件。' : '当前角色使用基础动作系统。',
+          [
+            {
+              text: '重置位置',
+              onPress: () => {
+                resetVrmTransform();
+                statusToastRef.current?.show('VRM 位置已重置', 1800);
+              },
+            },
+            {
+              text: '动作轻一点',
+              onPress: () => {
+                scaleVrmMotion(0.85);
+                statusToastRef.current?.show('VRM 动作已调轻', 1800);
+              },
+            },
+            {
+              text: '动作明显点',
+              onPress: () => {
+                scaleVrmMotion(1.15);
+                statusToastRef.current?.show('VRM 动作已增强', 1800);
+              },
+            },
+            {
+              text: '恢复默认动作',
+              onPress: () => {
+                void resetVrmMotionCalibration();
+                statusToastRef.current?.show('VRM 动作已恢复默认', 1800);
+              },
+            },
+            { text: t('common.cancel') as string, style: 'cancel' },
+          ],
+        );
+        return;
+      }
+
+      Alert.alert('模型设置', 'Live2D 设置稍后会接到这里。');
+      return;
+    }
+
     if (id === 'characterManage') {
       const loadCharacters = async () => {
         try {
@@ -1281,7 +1487,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
           }
 
           setCharacterList(names);
-          setCurrentCatgirl(data.当前猫娘 || null);
+          setCurrentCatgirl(currentCatgirlRef.current || config.characterName || data.当前猫娘 || null);
           setToolbarOpenPanel(null);
           setCharacterModalVisible(true);
         } catch (err: any) {
@@ -1311,16 +1517,11 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
           // 3. 重连 WebSocket
           audio.reconnect();
 
-          // 4. 重新加载角色 + Live2D 模型
-          const apiBase = buildHttpBaseURL(config);
-          const client = createCharactersApiClient(apiBase, config.p2p?.token);
-          const res = await client.getCurrentCatgirl();
-          if (res.current_catgirl) {
-            setCurrentCatgirl(res.current_catgirl);
-            if (config.characterName !== res.current_catgirl) {
-              await setConfig({ ...config, characterName: res.current_catgirl });
-            }
-            await syncCharacterModel(res.current_catgirl);
+          // 4. 重新加载手机当前角色模型，不读取后端全局当前角色
+          const name = currentCatgirlRef.current || config.characterName;
+          if (name) {
+            setCurrentCatgirl(name);
+            await syncCharacterModel(name);
           }
 
           statusToastRef.current?.show('重新加载完成', 2000);
@@ -1357,7 +1558,21 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     }
 
     Alert.alert(t('common.alert'), `即将打开: ${id}`);
-  }, [config, toolbarMicEnabled, mainManager, chat, audio, syncCharacterModel, chatFontId, setChatFontId, t]);
+  }, [
+    audio,
+    chat,
+    chatFontId,
+    config,
+    mainManager,
+    resetVrmMotionCalibration,
+    resetVrmTransform,
+    scaleVrmMotion,
+    setChatFontId,
+    syncCharacterModel,
+    t,
+    toolbarMicEnabled,
+    vrmAnimationUrl,
+  ]);
 
   const handleSwitchCharacter = useCallback(async (name: string) => {
     // 检查是否在语音模式
@@ -1367,36 +1582,69 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     }
 
     try {
+      setCharacterModalVisible(false);
       setCharacterLoading(true);
-      const apiBase = buildHttpBaseURL(config);
-      const client = createCharactersApiClient(apiBase, config.p2p?.token);
-      const res = await client.setCurrentCatgirl(name);
-
-      if (res.success) {
-        setCharacterModalVisible(false);
-        // 立即置为切换中，屏蔽切换期间的 WebSocket 错误（不等服务端广播）
-        isSwitchingCharacterRef.current = true;
-        // UI 更新由服务端广播的 catgirl_switched 消息统一驱动
-        // 超时保护：15 秒内若未收到 onConnectionChange(true)，自动解除所有切换状态
-        if (characterLoadingTimerRef.current) clearTimeout(characterLoadingTimerRef.current);
-        characterLoadingTimerRef.current = setTimeout(() => {
-          setCharacterLoading(false);
-          setIsChatForceCollapsed(false);
-          isSwitchingCharacterRef.current = false;
-          characterLoadingTimerRef.current = null;
-          setSwitchError('连接超时，角色切换失败');
-          if (switchErrorTimerRef.current) clearTimeout(switchErrorTimerRef.current);
-          switchErrorTimerRef.current = setTimeout(() => setSwitchError(null), 3000);
-        }, 15000);
-      } else {
-        setCharacterLoading(false);
-        Alert.alert(t('main.character.switchError'), res.error || t('common.error'));
+      setIsChatForceCollapsed(true);
+      setSwitchError(null);
+      if (characterLoadingTimerRef.current) {
+        clearTimeout(characterLoadingTimerRef.current);
+        characterLoadingTimerRef.current = null;
       }
+      if (switchErrorTimerRef.current) {
+        clearTimeout(switchErrorTimerRef.current);
+        switchErrorTimerRef.current = null;
+      }
+      if (localSwitchReleaseTimerRef.current) {
+        clearTimeout(localSwitchReleaseTimerRef.current);
+        localSwitchReleaseTimerRef.current = null;
+      }
+
+      audio.clearAudioQueue();
+      dispatchVrmBehavior({ type: 'character_switch_start' });
+      isSwitchingCharacterRef.current = true;
+      setCurrentCatgirl(name);
+      setIsTextSessionActive(false);
+      activeSessionModeRef.current = null;
+      chat.clearMessages();
+
+      if (config.characterName !== name) {
+        await setConfig({ ...config, characterName: name });
+      }
+      await syncCharacterModel(name);
+
+      if (config.characterName === name && audio.isConnected) {
+        audio.sendMessage({
+          action: 'start_session',
+          input_type: 'text',
+          audio_format: 'PCM_48000HZ_MONO_16BIT',
+          new_session: false,
+          language: i18nInstance?.language?.substring(0, 5) || 'zh-CN',
+        });
+      }
+
+      finishMobileCharacterSwitch(name);
+      localSwitchReleaseTimerRef.current = setTimeout(() => {
+        isSwitchingCharacterRef.current = false;
+        localSwitchReleaseTimerRef.current = null;
+      }, 20_000);
     } catch (err: any) {
+      isSwitchingCharacterRef.current = false;
       setCharacterLoading(false);
+      setIsChatForceCollapsed(false);
       Alert.alert(t('main.character.switchError'), err.message || t('connection.errors.networkError'));
     }
-  }, [config, toolbarMicEnabled]);
+  }, [
+    audio,
+    chat,
+    config,
+    dispatchVrmBehavior,
+    finishMobileCharacterSwitch,
+    i18nInstance?.language,
+    setConfig,
+    syncCharacterModel,
+    t,
+    toolbarMicEnabled,
+  ]);
 
   // 确保 text session 已启动（与 Web 端一致的 Legacy 协议）
   const ensureTextSession = useCallback(async (): Promise<boolean> => {
@@ -1527,6 +1775,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
 
     // 发送图片
     if (imagesToSend.length > 0) {
+      markVrmVisionActivity();
       dispatchVrmBehavior({ type: 'vision_image_sent' });
       for (const rawBase64 of imagesToSend) {
         messageCounterRef.current += 1;
@@ -1571,7 +1820,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     // 清除已选图片
     imagePicker.clearImages();
     setCameraPendingImages([]);
-  }, [audio.isConnected, audio.sendMessage, chat.addMessage, dispatchVrmBehavior, ensureTextSession, imagePicker, imageMessageService, setCameraPendingImages]);
+  }, [audio.isConnected, audio.sendMessage, chat.addMessage, dispatchVrmBehavior, ensureTextSession, imagePicker, imageMessageService, markVrmVisionActivity, setCameraPendingImages]);
 
   // 检测屏幕尺寸变化
   useEffect(() => {
@@ -1595,6 +1844,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       if (switchedNameTimerRef.current) clearTimeout(switchedNameTimerRef.current);
       if (switchErrorTimerRef.current) clearTimeout(switchErrorTimerRef.current);
       if (characterLoadingTimerRef.current) clearTimeout(characterLoadingTimerRef.current);
+      if (localSwitchReleaseTimerRef.current) clearTimeout(localSwitchReleaseTimerRef.current);
     };
   }, []);
 
@@ -1663,6 +1913,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
           isPageFocused={isPageFocused}
           avatarType={avatarModelType}
           vrmModelUrl={vrmModelUrl}
+          vrmAnimationUrl={vrmAnimationUrl}
           vrmLighting={vrmLighting}
           vrmMotionCalibration={vrmMotionCalibration}
           vrmEmotion={vrmEmotion}

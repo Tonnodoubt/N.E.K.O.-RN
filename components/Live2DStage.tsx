@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { ImageBackground, View, Text, StyleSheet } from 'react-native';
 import { ReactNativeLive2dView } from 'react-native-live2d';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { useTheme } from '@/constants/ThemeContext';
@@ -11,6 +11,7 @@ const SCALE_MIN = 0.3;
 const SCALE_MAX = 2.0;
 const VRM_BASE_SCALE = 0.8;
 const MOVE_SENSITIVITY = 0.003;
+const STAGE_BACKGROUND = require('../assets/images/live2d-stage-background.png');
 const clampPos = (v: number) => Math.max(-POSITION_LIMIT, Math.min(POSITION_LIMIT, v));
 const clampScale = (v: number) => Math.max(SCALE_MIN, Math.min(SCALE_MAX, v));
 
@@ -18,6 +19,7 @@ interface Live2DStageProps {
   isPageFocused: boolean;
   avatarType?: 'live2d' | 'vrm';
   vrmModelUrl?: string;
+  vrmAnimationUrl?: string;
   vrmLighting?: VRMLightingConfig;
   vrmMotionCalibration?: VRMMotionCalibration;
   vrmEmotion?: VRMEmotion;
@@ -41,6 +43,7 @@ export function Live2DStage({
   isPageFocused,
   avatarType = 'live2d',
   vrmModelUrl,
+  vrmAnimationUrl,
   vrmLighting,
   vrmMotionCalibration,
   vrmEmotion = 'neutral',
@@ -205,6 +208,10 @@ export function Live2DStage({
       width: '100%',
       alignSelf: 'stretch',
     },
+    backgroundImage: {
+      width: '100%',
+      height: '100%',
+    },
     vrmView: {
       flex: 1,
       width: '100%',
@@ -230,12 +237,18 @@ export function Live2DStage({
   }), [theme, cc]);
 
   const stageContent = (
-    <View style={s.container}>
+    <ImageBackground
+      source={STAGE_BACKGROUND}
+      resizeMode="cover"
+      style={s.container}
+      imageStyle={s.backgroundImage}
+    >
       {isPageFocused && shouldRenderVrm && (
         <VRMAvatarView
           modelUrl={vrmModelUrl}
+          animationUrl={vrmAnimationUrl}
           style={s.vrmView}
-          backgroundColor={cc.page}
+          transparentBackground
           lighting={vrmLighting}
           motionCalibration={vrmMotionCalibration}
           idleAnimation
@@ -270,7 +283,7 @@ export function Live2DStage({
           </Text>
         </View>
       )}
-    </View>
+    </ImageBackground>
   );
 
   if (shouldRenderVrm) {
