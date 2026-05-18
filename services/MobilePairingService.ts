@@ -32,6 +32,16 @@ function pickNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function isPrivateIpv4(host: string | undefined): boolean {
+  if (!host) return false;
+  const parts = host.split('.').map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    return false;
+  }
+  const [first, second] = parts;
+  return first === 10 || (first === 172 && second >= 16 && second <= 31) || (first === 192 && second === 168);
+}
+
 async function fetchWithTimeout(
   url: string,
   init: RequestInit,
@@ -56,6 +66,10 @@ function configFromInfo(
   if (!lanIp || !token) return null;
 
   const port = pickNumber(info.port) || 48920;
+  const currentLanIp = current.p2p?.lanIp || current.host;
+  const keepPublicHost = isPrivateIpv4(lanIp) && currentLanIp && !isPrivateIpv4(currentLanIp);
+  const host = keepPublicHost ? currentLanIp : lanIp;
+  const hostPort = keepPublicHost ? (current.p2p?.lanPort || current.port || port) : port;
   const characterName = pickString(info.character) || current.characterName || 'test';
   const deviceId = pickString(info.device_id) || current.p2p?.deviceId;
   const pairingRegisterPath =
@@ -65,15 +79,15 @@ function configFromInfo(
 
   return {
     ...current,
-    host: lanIp,
-    port,
+    host,
+    port: hostPort,
     characterName,
     p2p: {
       ...(current.p2p || {}),
       token,
       deviceId,
-      lanIp,
-      lanPort: port,
+      lanIp: host,
+      lanPort: hostPort,
       stunIp: pickString(info.stun_ip) || current.p2p?.stunIp,
       stunPort: pickNumber(info.stun_port) || current.p2p?.stunPort,
       pairingSupported: info.pairing_supported === true || current.p2p?.pairingSupported,
