@@ -34,7 +34,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert, AppState, Appearance, Dimensions, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View,
+  Alert, AppState, Appearance, Dimensions, KeyboardAvoidingView, Platform, StyleSheet, Text, View,
 } from 'react-native';
 import {
   Live2DRightToolbar,
@@ -159,7 +159,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   const wasInBackgroundRef = useRef(false);
   // AppState 后台延迟重置 timer ref（确保组件卸载时清理）
   const appStateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // StatusToast ref，用于显示连接状态提示
+  // StatusToast ref，用于显示临时提示
   const statusToastRef = useRef<StatusToastHandle>(null);
   // 合并为单一对象，确保 modelName 和 modelUrl 同步更新，避免两次 setState 触发两次 useLive2D effect
   const [live2dModel, setLive2dModel] = useState<{ name: string; url: string | undefined; itemId?: string }>({
@@ -180,7 +180,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   // ref 持有 audio.reconnect 和连接状态，供 AppState 前台恢复时调用
   const audioReconnectRef = useRef<() => void>(() => {});
   const audioConnectedRef = useRef(false);
-  const { config, isLoaded: isConfigLoaded, setConfig, applyQrRaw, refreshFromCloud, refreshPairing } = useDevConnectionConfig();
+  const { config, isLoaded: isConfigLoaded, setConfig, applyQrRaw, refreshFromCloud } = useDevConnectionConfig();
 
   // UDP P2P 连接（自动尝试三层回退）
   const udpConnection = useUdpP2PConnection(
@@ -695,14 +695,6 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       sessionStore.set(connected);
       if (connected) {
         dispatchVrmBehavior({ type: 'connection_ready' });
-        // 连接成功，显示 Toast 提示
-        if (wasInBackgroundRef.current) {
-          // 从后台恢复后的重连
-          statusToastRef.current?.show('已恢复连接', 2000);
-        } else if (!isSwitchingCharacterRef.current) {
-          // 普通连接成功（非角色切换）
-          statusToastRef.current?.show('已连接到服务器', 2000);
-        }
         if (isSwitchingCharacterRef.current) {
           // 发送 start_session 以重新加载角色音色
           console.log('📤 发送 start_session 以重新加载角色音色');
@@ -739,10 +731,6 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         }
       } else {
         dispatchVrmBehavior({ type: 'connection_lost' });
-        // 连接断开，显示 Toast 提示（仅在非后台状态下显示）
-        if (!isInBackgroundRef.current) {
-          statusToastRef.current?.show('连接已断开，正在尝试重连...', 3000);
-        }
         // 连接断开时重置 text session 状态
         setIsTextSessionActive(false);
         activeSessionModeRef.current = null;
@@ -907,27 +895,6 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     udpConnection.status,
   ]);
 
-  const handleRetryConnection = useCallback(async () => {
-    const pairingRefreshed = p2pConfig?.pairing ? await refreshPairing() : false;
-    if (pairingRefreshed) {
-      if (udpConnection.status === 'failed') {
-        udpConnection.retry();
-      }
-      statusToastRef.current?.show('已刷新配对，正在重新连接...', 2000);
-      return;
-    }
-    if (p2pConfig?.token && udpConnection.status === 'failed') {
-      udpConnection.retry();
-    } else {
-      audio.reconnect();
-    }
-    statusToastRef.current?.show('正在重新连接...', 2000);
-  }, [audio.reconnect, p2pConfig?.pairing, p2pConfig?.token, refreshPairing, udpConnection.retry, udpConnection.status]);
-
-  const handleRescanConnection = useCallback(() => {
-    router.push({ pathname: '/qr-scanner', params: { returnTo: '/(tabs)/main' } });
-  }, [router]);
-
   const connectionStatus: ConnectionStatus = isSwitchingCharacterRef.current
     ? 'open'
     : mobileRuntime.chatStatus;
@@ -1065,19 +1032,31 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     mainManager.onLive2DTap();
   }, [dispatchVrmBehavior]);
 
-  const handleVrmPhase = useCallback((_phase: VRMRenderPhase) => {}, []);
+  const [vrmRenderPhase, setVrmRenderPhase] = useState<VRMRenderPhase>('idle');
+  const [vrmRenderError, setVrmRenderError] = useState<string | null>(null);
+
+  const handleVrmPhase = useCallback((phase: VRMRenderPhase) => {
+    setVrmRenderPhase(phase);
+    if (phase === 'loaded' || phase === 'fallback-loaded') {
+      setVrmRenderError(null);
+    }
+  }, []);
 
   const handleVrmError = useCallback((message: string | null) => {
+    setVrmRenderError(message);
     if (!message) return;
     console.warn('🎨 [VRM] render error:', message);
     dispatchVrmBehavior({ type: 'status_error' });
-    statusToastRef.current?.show(t('main.vrm.failed'), 3000);
-  }, [dispatchVrmBehavior, t]);
+  }, [dispatchVrmBehavior]);
+
+  useEffect(() => {
+    setVrmRenderPhase('idle');
+    setVrmRenderError(null);
+  }, [avatarModelType, vrmModelUrl]);
 
   // Live2D 模型位置/缩放 ref（传给 Live2DStage）
   const currentModelPositionRef = useRef({ x: 0, y: 0 });
   const currentScaleRef = useRef<number>(0.8);
-  const [isAdjustingModel, setIsAdjustingModel] = useState(false);
   const [avatarTransformRevision, setAvatarTransformRevision] = useState(0);
 
   useEffect(() => {
@@ -1116,8 +1095,6 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   }, [avatarModelType, preferencesRepository, vrmModelUrl]);
 
   const handleModelAdjustEnd = useCallback(() => {
-    setIsAdjustingModel(false);
-
     if (avatarModelTypeRef.current !== 'vrm' || !vrmModelUrl) return;
 
     void preferencesRepository.save({
@@ -1504,7 +1481,6 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   const handleSendMessage = useCallback(async (text: string, images?: string[]) => {
     if (!audio.isConnected) {
       dispatchVrmBehavior({ type: 'connection_lost' });
-      statusToastRef.current?.show(t('connection.status.disconnected'), 3000);
       return;
     }
 
@@ -1514,7 +1490,6 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     const sessionOk = await ensureTextSession();
     if (!sessionOk) {
       dispatchVrmBehavior({ type: 'session_failed' });
-      statusToastRef.current?.show(t('connection.status.reconnecting'), 3000);
       return;
     }
 
@@ -1596,7 +1571,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     // 清除已选图片
     imagePicker.clearImages();
     setCameraPendingImages([]);
-  }, [audio.isConnected, audio.sendMessage, chat.addMessage, dispatchVrmBehavior, ensureTextSession, imagePicker, imageMessageService, setCameraPendingImages, t]);
+  }, [audio.isConnected, audio.sendMessage, chat.addMessage, dispatchVrmBehavior, ensureTextSession, imagePicker, imageMessageService, setCameraPendingImages]);
 
   // 检测屏幕尺寸变化
   useEffect(() => {
@@ -1646,25 +1621,13 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       maxWidth: '100%',
       minHeight: 34,
       borderRadius: 16,
-      backgroundColor: 'rgba(15, 23, 42, 0.72)',
+      backgroundColor: cc.overlay,
       borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.12)',
       paddingHorizontal: 12,
       paddingVertical: 8,
     },
     connectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    connectionTitle: { fontSize: 13, fontWeight: '600', color: cc.textOnAccent, flexShrink: 1 },
-    connectionDetail: { marginTop: 4, fontSize: 12, color: 'rgba(255,255,255,0.78)', lineHeight: 16 },
-    connectionActions: { flexDirection: 'row', gap: 8, marginTop: 8 },
-    connectionActionButton: {
-      minHeight: 28,
-      paddingHorizontal: 10,
-      borderRadius: 14,
-      backgroundColor: 'rgba(255,255,255,0.14)',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    connectionActionText: { color: cc.textOnAccent, fontSize: 12, fontWeight: '600' },
+    connectionTitle: { fontSize: 13, fontWeight: '600', flexShrink: 1 },
   }), [cc, insets.top]);
 
   // Wrap send to auto-expand chat
@@ -1672,6 +1635,23 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     setChatExpanded(true);
     await handleSendMessage(text, images);
   }, [handleSendMessage]);
+
+  const connectionAccentColor = cc.accent;
+  const isVrmLoadingStatus = avatarModelType === 'vrm' && !!vrmModelUrl && !vrmRenderError && (
+    vrmRenderPhase === 'idle' ||
+    vrmRenderPhase === 'canvas-ready' ||
+    vrmRenderPhase === 'fetching' ||
+    vrmRenderPhase === 'parsing'
+  );
+  const vrmStatusText = vrmRenderError
+    ? t('main.vrm.failed')
+    : isVrmLoadingStatus
+      ? t('main.vrm.loading')
+      : '';
+  const connectedChipText = `${config.characterName || 'N.E.K.O.'} · ${mobileRuntime.label}`;
+  const connectionChipText = vrmStatusText || (
+    mobileRuntime.phase === 'connected' ? connectedChipText : mobileRuntime.label
+  );
 
   return (
     <View style={s.container}>
@@ -1681,7 +1661,6 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       <View style={s.live2dWrapper}>
         <Live2DStage
           isPageFocused={isPageFocused}
-          isAdjustingModel={isAdjustingModel}
           avatarType={avatarModelType}
           vrmModelUrl={vrmModelUrl}
           vrmLighting={vrmLighting}
@@ -1697,48 +1676,25 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
           onVrmError={handleVrmError}
           setModelScale={live2d.setModelScale}
           setModelPosition={live2d.setModelPosition}
-          onAdjustStart={() => setIsAdjustingModel(true)}
           onAdjustEnd={handleModelAdjustEnd}
           modelPositionRef={currentModelPositionRef}
           scaleRef={currentScaleRef}
         />
       </View>
 
-      {/* Top bar (overlays Live2D) */}
       <View style={s.topBar} pointerEvents="box-none">
-        <View pointerEvents="auto" style={s.connectionChip}>
+        <View pointerEvents="auto" style={[s.connectionChip, { borderColor: connectionAccentColor + '99' }]}>
           <View style={s.connectionHeader}>
             <View style={{
               width: 8,
               height: 8,
               borderRadius: 4,
-              backgroundColor: mobileRuntime.chatStatus === 'open'
-                ? cc.success
-                : mobileRuntime.chatStatus === 'connecting' || mobileRuntime.chatStatus === 'reconnecting'
-                  ? cc.warning
-                  : cc.error,
+              backgroundColor: connectionAccentColor,
             }} />
-            <Text numberOfLines={1} style={s.connectionTitle}>
-              {config.characterName || 'N.E.K.O.'} · {mobileRuntime.label}
+            <Text numberOfLines={1} style={[s.connectionTitle, { color: connectionAccentColor }]}>
+              {connectionChipText}
             </Text>
           </View>
-          {!!mobileRuntime.detail && mobileRuntime.phase !== 'connected' && (
-            <Text numberOfLines={2} style={s.connectionDetail}>{mobileRuntime.detail}</Text>
-          )}
-          {(mobileRuntime.canRetry || mobileRuntime.canRescan) && (
-            <View style={s.connectionActions}>
-              {mobileRuntime.canRetry && (
-                <Pressable style={s.connectionActionButton} onPress={handleRetryConnection}>
-                  <Text style={s.connectionActionText}>重试</Text>
-                </Pressable>
-              )}
-              {mobileRuntime.canRescan && (
-                <Pressable style={s.connectionActionButton} onPress={handleRescanConnection}>
-                  <Text style={s.connectionActionText}>重新扫码</Text>
-                </Pressable>
-              )}
-            </View>
-          )}
         </View>
       </View>
 

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { ReactNativeLive2dView } from 'react-native-live2d';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { useTheme } from '@/constants/ThemeContext';
 import { useTranslation } from 'react-i18next';
-import { VRMAvatarView, type VRMEmotion, type VRMGesture, type VRMLightingConfig, type VRMMotionCalibration, type VRMMotionDebugTelemetry, type VRMRenderPhase } from '@/components/vrm/VRMAvatarView';
+import { VRMAvatarView, type VRMEmotion, type VRMGesture, type VRMLightingConfig, type VRMMotionCalibration, type VRMRenderPhase } from '@/components/vrm/VRMAvatarView';
 
 const POSITION_LIMIT = 0.9;
 const SCALE_MIN = 0.3;
@@ -16,7 +16,6 @@ const clampScale = (v: number) => Math.max(SCALE_MIN, Math.min(SCALE_MAX, v));
 
 interface Live2DStageProps {
   isPageFocused: boolean;
-  isAdjustingModel: boolean;
   avatarType?: 'live2d' | 'vrm';
   vrmModelUrl?: string;
   vrmLighting?: VRMLightingConfig;
@@ -33,7 +32,6 @@ interface Live2DStageProps {
   onVrmNotice?: (message: string | null) => void;
   setModelScale: (scale: number) => void;
   setModelPosition: (x: number, y: number) => void;
-  onAdjustStart: () => void;
   onAdjustEnd: () => void;
   modelPositionRef: React.MutableRefObject<{ x: number; y: number }>;
   scaleRef: React.MutableRefObject<number>;
@@ -41,7 +39,6 @@ interface Live2DStageProps {
 
 export function Live2DStage({
   isPageFocused,
-  isAdjustingModel,
   avatarType = 'live2d',
   vrmModelUrl,
   vrmLighting,
@@ -58,7 +55,6 @@ export function Live2DStage({
   onVrmNotice,
   setModelScale,
   setModelPosition,
-  onAdjustStart,
   onAdjustEnd,
   modelPositionRef,
   scaleRef,
@@ -71,10 +67,6 @@ export function Live2DStage({
     scale: scaleRef.current,
     position: modelPositionRef.current,
   }));
-  const [vrmPhase, setVrmPhase] = useState<VRMRenderPhase>('idle');
-  const [vrmError, setVrmError] = useState<string | null>(null);
-  const [vrmDebugExpanded, setVrmDebugExpanded] = useState(false);
-  const [vrmDebugTelemetry, setVrmDebugTelemetry] = useState<VRMMotionDebugTelemetry | null>(null);
 
   const panStartPositionRef = useRef({ x: modelPositionRef.current.x, y: modelPositionRef.current.y });
   const pinchStartScaleRef = useRef(scaleRef.current);
@@ -88,28 +80,17 @@ export function Live2DStage({
     });
   }, [avatarType, modelPositionRef, scaleRef, transformRevision, vrmModelUrl]);
 
-  useEffect(() => {
-    setVrmPhase('idle');
-    setVrmError(null);
-  }, [vrmModelUrl]);
-
   const handleVrmPhase = useCallback((phase: VRMRenderPhase) => {
-    setVrmPhase(phase);
     onVrmPhase?.(phase);
   }, [onVrmPhase]);
 
   const handleVrmError = useCallback((message: string | null) => {
-    setVrmError(message);
     onVrmError?.(message);
   }, [onVrmError]);
 
   const handleVrmNotice = useCallback((message: string | null) => {
     onVrmNotice?.(message);
   }, [onVrmNotice]);
-
-  const toggleVrmDebug = useCallback(() => {
-    setVrmDebugExpanded((expanded) => !expanded);
-  }, []);
 
   const applyStageTransform = useCallback((scale: number, position: { x: number; y: number }) => {
     const nextScale = clampScale(scale);
@@ -133,12 +114,8 @@ export function Live2DStage({
   const beginGesture = useCallback((type: 'pan' | 'pinch') => {
     const active = activeGestureRef.current;
     if (active[type]) return;
-    const wasIdle = !active.pan && !active.pinch;
     active[type] = true;
-    if (wasIdle) {
-      onAdjustStart();
-    }
-  }, [onAdjustStart]);
+  }, []);
 
   const endGesture = useCallback((type: 'pan' | 'pinch') => {
     const active = activeGestureRef.current;
@@ -224,75 +201,6 @@ export function Live2DStage({
       zIndex: 5,
       backgroundColor: 'transparent',
     },
-    vrmStatusOverlay: {
-      position: 'absolute',
-      left: theme.spacing.xl,
-      right: theme.spacing.xl,
-      bottom: theme.spacing.xxl + theme.spacing.lg,
-      alignItems: 'center',
-      zIndex: 6,
-    },
-    vrmStatusPanel: {
-      maxWidth: 320,
-      borderRadius: theme.radius.lg,
-      paddingVertical: theme.spacing.sm,
-      paddingHorizontal: theme.spacing.lg,
-      backgroundColor: 'rgba(15, 23, 42, 0.72)',
-      borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.14)',
-    },
-    vrmStatusText: {
-      color: cc.textOnAccent,
-      fontSize: theme.fontSize.footnote,
-      fontWeight: '600',
-      textAlign: 'center',
-    },
-    vrmStatusHint: {
-      color: 'rgba(255,255,255,0.72)',
-      fontSize: theme.fontSize.caption,
-      marginTop: 4,
-      textAlign: 'center',
-    },
-    vrmDebugOverlay: {
-      position: 'absolute',
-      top: 86,
-      left: theme.spacing.xl,
-      zIndex: 12,
-      alignItems: 'flex-start',
-      gap: 6,
-    },
-    vrmDebugToggle: {
-      borderRadius: 999,
-      minWidth: 72,
-      minHeight: 44,
-      paddingVertical: 10,
-      paddingHorizontal: 16,
-      backgroundColor: 'rgba(15, 23, 42, 0.82)',
-      borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.18)',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    vrmDebugToggleText: {
-      color: '#f8fafc',
-      fontSize: 13,
-      fontWeight: '700',
-    },
-    vrmDebugPanel: {
-      width: 240,
-      borderRadius: theme.radius.lg,
-      padding: theme.spacing.sm,
-      backgroundColor: 'rgba(15, 23, 42, 0.86)',
-      borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.16)',
-      gap: 4,
-    },
-    vrmDebugText: {
-      color: '#e5e7eb',
-      fontSize: 11,
-      lineHeight: 16,
-      fontVariant: ['tabular-nums'],
-    },
     paused: {
       flex: 1,
       justifyContent: 'center',
@@ -302,30 +210,7 @@ export function Live2DStage({
       color: cc.textSecondary,
       fontSize: theme.fontSize.callout,
     },
-    dragIndicator: {
-      position: 'absolute',
-      top: theme.spacing.xl,
-      alignSelf: 'center',
-      backgroundColor: cc.accentSoft,
-      paddingVertical: theme.spacing.sm,
-      paddingHorizontal: theme.spacing.xl,
-      borderRadius: theme.radius.xl,
-      borderWidth: 1,
-      borderColor: cc.accent,
-      zIndex: 10,
-    },
-    dragText: {
-      color: cc.accent,
-      fontSize: theme.fontSize.footnote,
-    },
   }), [theme, cc]);
-
-  const isVrmLoading = shouldRenderVrm && !vrmError && (
-    vrmPhase === 'idle' ||
-    vrmPhase === 'canvas-ready' ||
-    vrmPhase === 'fetching' ||
-    vrmPhase === 'parsing'
-  );
 
   const stageContent = (
     <View style={s.container}>
@@ -347,45 +232,12 @@ export function Live2DStage({
           onPhase={handleVrmPhase}
           onError={handleVrmError}
           onNotice={handleVrmNotice}
-          debugTelemetry={__DEV__}
-          onDebugTelemetry={setVrmDebugTelemetry}
         />
       )}
       {isPageFocused && shouldRenderVrm && (
         <GestureDetector gesture={vrmStageGesture}>
           <View collapsable={false} style={s.vrmGestureLayer} />
         </GestureDetector>
-      )}
-      {isPageFocused && shouldRenderVrm && (isVrmLoading || vrmError) && (
-        <View pointerEvents="none" style={s.vrmStatusOverlay}>
-          <View style={s.vrmStatusPanel}>
-            <Text style={s.vrmStatusText}>
-              {vrmError ? t('main.vrm.failed') : t('main.vrm.loading')}
-            </Text>
-            {vrmError && (
-              <Text style={s.vrmStatusHint}>
-                {t('main.vrm.failedHint')}
-              </Text>
-            )}
-          </View>
-        </View>
-      )}
-      {__DEV__ && isPageFocused && shouldRenderVrm && (
-        <View pointerEvents="box-none" style={s.vrmDebugOverlay}>
-          <Pressable style={s.vrmDebugToggle} onPress={toggleVrmDebug}>
-            <Text style={s.vrmDebugToggleText}>VRM</Text>
-          </Pressable>
-          {vrmDebugExpanded && vrmDebugTelemetry && (
-            <View style={s.vrmDebugPanel}>
-              <Text style={s.vrmDebugText}>mode: {vrmDebugTelemetry.mode}</Text>
-              <Text style={s.vrmDebugText}>emotion: {vrmDebugTelemetry.emotion}</Text>
-              <Text style={s.vrmDebugText}>mouth: {vrmDebugTelemetry.mouthValue.toFixed(2)} / speech {vrmDebugTelemetry.speechEnergy.toFixed(2)}</Text>
-              <Text style={s.vrmDebugText}>presence: {vrmDebugTelemetry.playbackPresence.toFixed(2)} playing {vrmDebugTelemetry.isPlaying ? 'Y' : 'N'}</Text>
-              <Text style={s.vrmDebugText}>gesture: {vrmDebugTelemetry.activeGesture} [{vrmDebugTelemetry.gestureQueue.join(',') || '-'}]</Text>
-              <Text style={s.vrmDebugText}>focus: {vrmDebugTelemetry.focusYaw.toFixed(3)}, {vrmDebugTelemetry.focusPitch.toFixed(3)}</Text>
-            </View>
-          )}
-        </View>
       )}
       {isPageFocused && !shouldRenderVrm && (
         <ReactNativeLive2dView
@@ -399,11 +251,6 @@ export function Live2DStage({
           <Text style={s.pausedText}>
             {live2dProps.modelPath || vrmModelUrl ? t('main.live2d.paused') : t('main.live2d.pageInactive')}
           </Text>
-        </View>
-      )}
-      {isAdjustingModel && (
-        <View style={s.dragIndicator} pointerEvents="none">
-          <Text style={s.dragText}>{t('main.live2d.adjusting')}</Text>
         </View>
       )}
     </View>
