@@ -42,6 +42,16 @@ function isPrivateIpv4(host: string | undefined): boolean {
   return first === 10 || (first === 172 && second >= 16 && second <= 31) || (first === 192 && second === 168);
 }
 
+function isLocalCleartextHost(host: string | undefined): boolean {
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1' || isPrivateIpv4(host);
+}
+
+function assertPairingTransportAllowed(config: DevConnectionConfig): PairingResult | null {
+  const host = config.p2p?.lanIp || config.host;
+  if (isLocalCleartextHost(host)) return null;
+  return { ok: false, error: 'Pairing over public HTTP is not allowed. Use HTTPS or scan a local-network QR code.' };
+}
+
 async function fetchWithTimeout(
   url: string,
   init: RequestInit,
@@ -102,13 +112,15 @@ export async function registerMobilePairing(config: DevConnectionConfig): Promis
   if (!config.p2p?.token || !config.p2p.pairingSupported) {
     return { ok: false, error: 'Pairing is not supported by this QR payload' };
   }
+  const transportError = assertPairingTransportAllowed(config);
+  if (transportError) return transportError;
 
   const registerPath = normalizePath(config.p2p.pairingRegisterPath, DEFAULT_REGISTER_PATH);
   const url = `${buildBaseUrl(config)}${registerPath}`;
 
   try {
     const response = await fetchWithTimeout(
-      `${url}?token=${encodeURIComponent(config.p2p.token)}`,
+      url,
       {
         method: 'POST',
         headers: {
@@ -161,6 +173,8 @@ export async function resolveMobilePairing(config: DevConnectionConfig): Promise
   if (!pairing?.pairingId || !pairing.pairingSecret) {
     return { ok: false, error: 'No stored pairing credentials' };
   }
+  const transportError = assertPairingTransportAllowed(config);
+  if (transportError) return transportError;
 
   const resolvePath = normalizePath(config.p2p?.pairingResolvePath, DEFAULT_RESOLVE_PATH);
   const url = `${buildBaseUrl(config)}${resolvePath}`;

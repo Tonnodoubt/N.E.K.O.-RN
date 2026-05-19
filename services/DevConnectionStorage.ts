@@ -15,13 +15,15 @@ type DevConnectionConfigInput = Partial<DevConnectionConfig> & {
   p2p?: DevConnectionConfig['p2p'] | null;
 };
 
-function sanitizeP2P(input: unknown): DevConnectionConfig['p2p'] | undefined {
+function sanitizeP2P(
+  input: unknown,
+  options: { includeToken?: boolean; includePairing?: boolean } = {}
+): DevConnectionConfig['p2p'] | undefined {
   if (!input || typeof input !== 'object') return undefined;
   const p2p = input as Record<string, unknown>;
-  if (!isNonEmptyString(p2p.token)) return undefined;
 
-  return {
-    token: p2p.token.trim(),
+  const sanitized: DevConnectionConfig['p2p'] = {
+    token: options.includeToken && isNonEmptyString(p2p.token) ? p2p.token.trim() : undefined,
     deviceId: isNonEmptyString(p2p.deviceId) ? p2p.deviceId : undefined,
     // 第1层：LAN 直连
     lanIp: isNonEmptyString(p2p.lanIp) ? p2p.lanIp : undefined,
@@ -32,8 +34,11 @@ function sanitizeP2P(input: unknown): DevConnectionConfig['p2p'] | undefined {
     pairingSupported: typeof p2p.pairingSupported === 'boolean' ? p2p.pairingSupported : undefined,
     pairingRegisterPath: isNonEmptyString(p2p.pairingRegisterPath) ? p2p.pairingRegisterPath : undefined,
     pairingResolvePath: isNonEmptyString(p2p.pairingResolvePath) ? p2p.pairingResolvePath : undefined,
-    pairing: sanitizePairing(p2p.pairing),
+    pairing: options.includePairing ? sanitizePairing(p2p.pairing) : undefined,
   };
+
+  const hasAnyValue = Object.values(sanitized).some((value) => value !== undefined);
+  return hasAnyValue ? sanitized : undefined;
 }
 
 function sanitizePairing(input: unknown): NonNullable<DevConnectionConfig['p2p']>['pairing'] | undefined {
@@ -53,7 +58,7 @@ function sanitizePairing(input: unknown): NonNullable<DevConnectionConfig['p2p']
   };
 }
 
-function sanitizePartial(input: unknown): Partial<DevConnectionConfig> {
+function sanitizePartial(input: unknown, includeSensitive = false): Partial<DevConnectionConfig> {
   const obj = input as Record<string, unknown> | null | undefined;
   const out: Partial<DevConnectionConfig> = {};
   if (isNonEmptyString(obj?.host)) out.host = (obj.host as string).trim();
@@ -62,7 +67,7 @@ function sanitizePartial(input: unknown): Partial<DevConnectionConfig> {
 
   // 支持 P2P 配置 (v3: 完整的两层连接信息)
   if (Object.prototype.hasOwnProperty.call(obj ?? {}, 'p2p')) {
-    const p2p = sanitizeP2P(obj?.p2p);
+    const p2p = sanitizeP2P(obj?.p2p, { includeToken: includeSensitive, includePairing: includeSensitive });
     if (p2p) {
       out.p2p = p2p;
     } else {
@@ -72,6 +77,17 @@ function sanitizePartial(input: unknown): Partial<DevConnectionConfig> {
   }
 
   return out;
+}
+
+function stripSensitiveConfig(config: DevConnectionConfig): DevConnectionConfig {
+  const p2p = sanitizeP2P(config.p2p, { includeToken: true, includePairing: true });
+  const next: DevConnectionConfig = {
+    host: config.host,
+    port: config.port,
+    characterName: config.characterName,
+  };
+  if (p2p) next.p2p = p2p;
+  return next;
 }
 
 export async function getStoredDevConnectionConfig(): Promise<DevConnectionConfig> {
@@ -90,7 +106,7 @@ export async function getStoredDevConnectionConfig(): Promise<DevConnectionConfi
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_DEV_CONNECTION_CONFIG;
     const parsed = JSON.parse(raw);
-    const partial = sanitizePartial(parsed);
+    const partial = sanitizePartial(parsed, true);
     return { ...DEFAULT_DEV_CONNECTION_CONFIG, ...partial };
   } catch {
     return DEFAULT_DEV_CONNECTION_CONFIG;
@@ -103,8 +119,8 @@ export async function setStoredDevConnectionConfig(
   let current: DevConnectionConfig = DEFAULT_DEV_CONNECTION_CONFIG;
   try {
     current = await getStoredDevConnectionConfig();
-    const merged: DevConnectionConfig = { ...current, ...sanitizePartial(next) };
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+    const merged: DevConnectionConfig = { ...current, ...sanitizePartial(next, true) };
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(stripSensitiveConfig(merged)));
     return merged;
   } catch (error) {
     console.error('[DevConnectionStorage] Failed to persist dev connection config', error);

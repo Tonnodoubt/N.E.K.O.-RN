@@ -96,9 +96,14 @@ export const useAudio = (config: UseAudioConfig): UseAudioReturn => {
   // Service 引用（内部使用 ref，外部暴露 state 以避免 stale snapshot）
   const audioServiceRef = useRef<AudioService | null>(null);
   const [audioService, setAudioService] = useState<AudioService | null>(null);
+  const latestConfigRef = useRef(config);
 
   // 🔥 AudioService 是否完全就绪的 ref（避免闭包引用问题）
   const isReadyRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    latestConfigRef.current = config;
+  }, [config]);
 
   // 切换录音状态
   const toggleRecording = async () => {
@@ -170,11 +175,13 @@ export const useAudio = (config: UseAudioConfig): UseAudioReturn => {
       characterName: config.characterName,
       p2p: config.p2p,
       onConnectionChange: (connected) => {
+        if (audioServiceRef.current !== service) return;
         isConnectedRef.current = connected;
         setIsConnected(connected);
         setConnectionStatus(connected ? '已连接' : '未连接');
         if (connected) {
           hasConnectedRef.current = true;
+          isReadyRef.current = service.isReady();
           setConnectionPhase('connected');
           setConnectionError(null);
           // 连接恢复，清除自动重连定时器
@@ -183,6 +190,7 @@ export const useAudio = (config: UseAudioConfig): UseAudioReturn => {
             autoReconnectTimerRef.current = null;
           }
         } else {
+          isReadyRef.current = false;
           setConnectionPhase(hasConnectedRef.current ? 'reconnecting' : 'disconnected');
           // 连接断开，延迟后触发重建（兜底 realtime client 内部重连耗尽的情况）
           if (autoReconnectTimerRef.current) clearTimeout(autoReconnectTimerRef.current);
@@ -192,32 +200,37 @@ export const useAudio = (config: UseAudioConfig): UseAudioReturn => {
             setReconnectKey(k => k + 1);
           }, 20_000); // realtime client 内部重连最多 5*3s=15s，给 20s 余量
         }
-        config.onConnectionChange?.(connected);
+        latestConfigRef.current.onConnectionChange?.(connected);
       },
       onMessage: (event) => {
-        config.onMessage?.(event);
+        if (audioServiceRef.current !== service) return;
+        latestConfigRef.current.onMessage?.(event);
       },
       onError: (error) => {
+        if (audioServiceRef.current !== service) return;
+        const latestConfig = latestConfigRef.current;
         // 🔥 修复：在角色切换期间忽略错误，避免显示"连接错误"
-        if (config.isSwitchingRef?.current) {
+        if (latestConfig.isSwitchingRef?.current) {
           console.log('🔄 角色切换中，忽略 WebSocket 错误:', error);
           return;
         }
         // 🔥 修复：在应用进入后台期间忽略错误（如拍照时）
-        if (config.isInBackgroundRef?.current) {
+        if (latestConfig.isInBackgroundRef?.current) {
           console.log('📷 应用处于后台，忽略 WebSocket 错误:', error);
           return;
         }
         console.warn('⚠️ 音频服务错误:', error);
-        const message = getConnectionErrorMessage(error, config);
+        const message = getConnectionErrorMessage(error, latestConfig);
         setConnectionStatus('连接错误');
         setConnectionPhase(hasConnectedRef.current ? 'reconnecting' : 'failed');
         setConnectionError(message);
       },
       onRecordingStateChange: (recording) => {
+        if (audioServiceRef.current !== service) return;
         setIsRecording(recording);
       },
       onAudioStatsUpdate: (stats) => {
+        if (audioServiceRef.current !== service) return;
         setAudioStats(stats);
       },
     });

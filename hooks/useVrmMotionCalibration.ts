@@ -17,6 +17,11 @@ function defaultCalibration(): VrmMotionCalibrationSnapshot {
   return { ...NEKO_DEFAULT_VRM_MOTION_CALIBRATION };
 }
 
+function storageKeyForModel(modelUri?: string | null): string {
+  const key = modelUri?.trim();
+  return key ? `${STORAGE_KEY}:${encodeURIComponent(key)}` : STORAGE_KEY;
+}
+
 function clampCalibrationValue(value: number): number {
   return Math.max(0, Math.min(2, value));
 }
@@ -37,9 +42,9 @@ export function normalizeVrmMotionCalibration(
   return next;
 }
 
-export async function getStoredVrmMotionCalibration(): Promise<VrmMotionCalibrationSnapshot> {
+export async function getStoredVrmMotionCalibration(modelUri?: string | null): Promise<VrmMotionCalibrationSnapshot> {
   try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    const raw = await AsyncStorage.getItem(storageKeyForModel(modelUri));
     if (!raw) return defaultCalibration();
     return normalizeVrmMotionCalibration(JSON.parse(raw));
   } catch (error) {
@@ -50,41 +55,42 @@ export async function getStoredVrmMotionCalibration(): Promise<VrmMotionCalibrat
 
 export async function setStoredVrmMotionCalibration(
   calibration: VRMMotionCalibration,
+  modelUri?: string | null,
 ): Promise<VrmMotionCalibrationSnapshot> {
   const next = normalizeVrmMotionCalibration(calibration);
   try {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    await AsyncStorage.setItem(storageKeyForModel(modelUri), JSON.stringify(next));
   } catch (error) {
     console.error('[VrmMotionCalibration] Failed to save calibration', error);
   }
   return next;
 }
 
-export async function clearStoredVrmMotionCalibration(): Promise<VrmMotionCalibrationSnapshot> {
+export async function clearStoredVrmMotionCalibration(modelUri?: string | null): Promise<VrmMotionCalibrationSnapshot> {
   try {
-    await AsyncStorage.removeItem(STORAGE_KEY);
+    await AsyncStorage.removeItem(storageKeyForModel(modelUri));
   } catch (error) {
     console.error('[VrmMotionCalibration] Failed to clear calibration', error);
   }
   return defaultCalibration();
 }
 
-export function useVrmMotionCalibration() {
+export function useVrmMotionCalibration(modelUri?: string | null) {
   const [calibration, setCalibration] = useState<VrmMotionCalibrationSnapshot>(
     defaultCalibration,
   );
   const [isLoaded, setIsLoaded] = useState(false);
 
   const loadCalibration = useCallback(async () => {
-    const next = await getStoredVrmMotionCalibration();
+    const next = await getStoredVrmMotionCalibration(modelUri);
     setCalibration(next);
     setIsLoaded(true);
     return next;
-  }, []);
+  }, [modelUri]);
 
   useEffect(() => {
     let cancelled = false;
-    getStoredVrmMotionCalibration()
+    getStoredVrmMotionCalibration(modelUri)
       .then((next) => {
         if (cancelled) return;
         setCalibration(next);
@@ -97,19 +103,19 @@ export function useVrmMotionCalibration() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [modelUri]);
 
   const saveCalibration = useCallback(async (nextCalibration: VRMMotionCalibration) => {
-    const next = await setStoredVrmMotionCalibration(nextCalibration);
+    const next = await setStoredVrmMotionCalibration(nextCalibration, modelUri);
     setCalibration(next);
     return next;
-  }, []);
+  }, [modelUri]);
 
   const resetCalibration = useCallback(async () => {
-    const next = await clearStoredVrmMotionCalibration();
+    const next = await clearStoredVrmMotionCalibration(modelUri);
     setCalibration(next);
     return next;
-  }, []);
+  }, [modelUri]);
 
   return {
     calibration,

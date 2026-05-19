@@ -77,7 +77,7 @@ export default function HomeScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: cc.page }}>
       {/* Atmospheric background */}
       <LinearGradient
-        colors={theme.isDark ? ['#1E1B2E', '#2A1848', '#1E1B2E'] : ['#FFF5F7', '#F5E6FF', '#FFF5F7']}
+        colors={[cc.page, cc.elevated, cc.page]}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
 
@@ -288,17 +288,19 @@ export default function HomeScreen() {
               <Text style={{ fontSize: 15, color: cc.textPrimary, flex: 1 }}>{t('home.actions.qrConfig')}</Text>
               <Ionicons name="chevron-forward" size={16} color={cc.textMuted} />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderRadius: 16 }}
-              onPress={() => {
-                setMenuOpen(false);
-                router.push('/vrm-poc');
-              }}
-            >
-              <Ionicons name="cube-outline" size={18} color={cc.accent} />
-              <Text style={{ fontSize: 15, color: cc.textPrimary, flex: 1 }}>VRM PoC</Text>
-              <Ionicons name="chevron-forward" size={16} color={cc.textMuted} />
-            </TouchableOpacity>
+            {__DEV__ && (
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderRadius: 16 }}
+                onPress={() => {
+                  setMenuOpen(false);
+                  router.push('/vrm-poc');
+                }}
+              >
+                <Ionicons name="cube-outline" size={18} color={cc.accent} />
+                <Text style={{ fontSize: 15, color: cc.textPrimary, flex: 1 }}>VRM PoC</Text>
+                <Ionicons name="chevron-forward" size={16} color={cc.textMuted} />
+              </TouchableOpacity>
+            )}
           </Pressable>
         </Pressable>
       </Modal>

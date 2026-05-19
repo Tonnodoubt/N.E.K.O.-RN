@@ -159,5 +159,5 @@ const ocean: ThemePreset = {
 };
 
 export const presets: Record<PresetId, ThemePreset> = { sakura, ocean };
-export const presetList: ThemePreset[] = [sakura, ocean];
-export const defaultPresetId: PresetId = 'sakura';
+export const presetList: ThemePreset[] = [ocean, sakura];
+export const defaultPresetId: PresetId = 'ocean';

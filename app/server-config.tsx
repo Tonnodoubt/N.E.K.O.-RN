@@ -188,7 +188,7 @@ export default function ServerConfigScreen() {
                 <>
                   <Text style={s.infoLabel}>{t('serverConfig.p2pMode')}</Text>
                   <Text style={s.wsUrl}>{config.host}:{config.port}</Text>
-                  <Text style={[s.hint, { marginTop: theme.spacing.sm }]}>Token: {config.p2p.token.slice(0, 8)}...{config.p2p.token.slice(-8)}</Text>
+                  <Text style={[s.hint, { marginTop: theme.spacing.sm }]}>Token: {config.p2p.token ? `${config.p2p.token.slice(0, 8)}...${config.p2p.token.slice(-8)}` : t('serverConfig.p2pTokenNotStored')}</Text>
                 </>
               ) : (
                 <>

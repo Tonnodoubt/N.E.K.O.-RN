@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { UdpP2PClient, type TcpEndpoint } from '@/services/UdpP2PClient';
+import { appendP2PToken } from '@/utils/devConnectionConfig';
 import type { DevConnectionConfig } from '@/utils/devConnectionConfig';
 
 export type UdpConnectionStatus = 'idle' | 'connecting' | 'connected' | 'failed';
@@ -14,7 +15,7 @@ export function useUdpP2PConnection(
   config: DevConnectionConfig,
   isConfigLoaded: boolean,
   setConfig: (next: Partial<DevConnectionConfig> | ((prev: DevConnectionConfig) => DevConnectionConfig)) => Promise<DevConnectionConfig>,
-  refreshFromCloud: () => Promise<boolean>
+  refreshFromCloud: () => Promise<DevConnectionConfig | null>
 ): {
   status: UdpConnectionStatus;
   endpoint: TcpEndpoint | null;
@@ -37,7 +38,12 @@ export function useUdpP2PConnection(
   // 使用 ref 防止重复连接
   const hasAttemptedRef = useRef(false);
   const lastTokenRef = useRef<string | undefined>(undefined);
+  const latestConfigRef = useRef(config);
   const [retryKey, setRetryKey] = useState(0);
+
+  useEffect(() => {
+    latestConfigRef.current = config;
+  }, [config]);
 
   const retry = useCallback(() => {
     hasAttemptedRef.current = false;
@@ -54,8 +60,8 @@ export function useUdpP2PConnection(
     hasAttemptedRef.current = false;
     setEndpoint(null);
     setLayer(null);
-    setStatus(token ? 'idle' : 'connected');
-  }, [config.p2p?.token]);
+    setStatus(config.p2p ? (token ? 'idle' : 'failed') : 'connected');
+  }, [config.p2p, config.p2p?.token]);
 
   useEffect(() => {
     // 如果配置未加载，跳过
@@ -64,11 +70,17 @@ export function useUdpP2PConnection(
     }
 
     // 如果没有 P2P 配置，标记为已连接（普通 HTTP 模式）
-    if (!config.p2p || !config.p2p.token) {
+    if (!config.p2p) {
       console.log('[useUdpP2PConnection] 没有 P2P 配置，使用普通连接');
       if (status === 'idle') {
         setStatus('connected');
       }
+      return;
+    }
+
+    if (!config.p2p.token) {
+      console.log('[useUdpP2PConnection] P2P 配置缺少 token，等待重新扫码或 pairing 刷新');
+      setStatus('failed');
       return;
     }
 
@@ -78,29 +90,41 @@ export function useUdpP2PConnection(
     }
 
     // 开始连接
+    let cancelled = false;
+    let client: UdpP2PClient | null = null;
+
     const connect = async () => {
       hasAttemptedRef.current = true;
       setStatus('connecting');
-      addLog(`开始连接，P2P token: ${config.p2p?.token?.slice(0, 8)}...`);
+      let activeConfig = latestConfigRef.current;
+      addLog(`开始连接，P2P token: ${activeConfig.p2p?.token?.slice(0, 8)}...`);
 
       // 1. 先尝试 LAN 直连测试（如果在同一 WiFi 环境）
-      if (config.p2p?.lanIp && config.p2p?.lanPort) {
-        addLog(`第1层：LAN 直连 ${config.p2p.lanIp}:${config.p2p.lanPort}`);
+      if (activeConfig.p2p?.lanIp && activeConfig.p2p?.lanPort) {
+        addLog(`第1层：LAN 直连 ${activeConfig.p2p.lanIp}:${activeConfig.p2p.lanPort}`);
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 5000);
           const testResponse = await fetch(
-            `http://${config.p2p.lanIp}:${config.p2p.lanPort}/health`,
-            { method: 'GET', signal: controller.signal }
+            appendP2PToken(`http://${activeConfig.p2p.lanIp}:${activeConfig.p2p.lanPort}/health`, activeConfig.p2p.token),
+            {
+              method: 'GET',
+              headers: activeConfig.p2p.token ? { 'X-Proxy-Token': activeConfig.p2p.token } : undefined,
+              signal: controller.signal,
+            }
           );
           clearTimeout(timeoutId);
-          if (testResponse.ok) {
-            addLog(`✅ 第1层成功：LAN 直连`);
-            setStatus('connected');
-            setEndpoint({ ip: config.p2p.lanIp, port: config.p2p.lanPort });
-            setLayer(1);
-            return;
-          }
+          if (cancelled) return;
+          addLog(`✅ 第1层可达：LAN HTTP ${testResponse.status}`);
+          await setConfig((prev) => ({
+            ...prev,
+            host: activeConfig.p2p!.lanIp!,
+            port: activeConfig.p2p!.lanPort!,
+          }));
+          setStatus('connected');
+          setEndpoint({ ip: activeConfig.p2p.lanIp, port: activeConfig.p2p.lanPort });
+          setLayer(1);
+          return;
         } catch (e) {
           addLog(`⏱️ 第1层失败：${e instanceof Error ? e.message : String(e)}`);
         }
@@ -109,20 +133,27 @@ export function useUdpP2PConnection(
       addLog('开始 UDP P2P 连接...');
       try {
         // 2. 先从云端刷新最新配置（如果有 deviceId）
-        if (config.p2p?.deviceId) {
-          addLog(`从云端刷新配置: ${config.p2p.deviceId}`);
+        if (activeConfig.p2p?.deviceId) {
+          addLog(`从云端刷新配置: ${activeConfig.p2p.deviceId}`);
           const refreshed = await refreshFromCloud();
+          if (cancelled) return;
+          if (refreshed) activeConfig = refreshed;
           addLog(refreshed ? '云端刷新成功' : '云端刷新失败，使用本地配置');
         }
 
         // 3. 创建 UDP 客户端
-        const client = new UdpP2PClient({
-          token: config.p2p!.token,
-          deviceId: config.p2p!.deviceId,
-          lanIp: config.p2p!.lanIp,
-          lanPort: config.p2p!.lanPort,
-          stunIp: config.p2p!.stunIp,
-          stunPort: config.p2p!.stunPort,
+        if (!activeConfig.p2p?.token) {
+          addLog('❌ P2P token 不存在');
+          setStatus('failed');
+          return;
+        }
+        client = new UdpP2PClient({
+          token: activeConfig.p2p.token,
+          deviceId: activeConfig.p2p.deviceId,
+          lanIp: activeConfig.p2p.lanIp,
+          lanPort: activeConfig.p2p.lanPort,
+          stunIp: activeConfig.p2p.stunIp,
+          stunPort: activeConfig.p2p.stunPort,
           cloudRegistryUrl: process.env.EXPO_PUBLIC_CLOUD_REGISTRY_URL,
         });
 
@@ -133,9 +164,10 @@ export function useUdpP2PConnection(
           setLayer(connectedLayer);
         });
 
-        addLog(`stunIp=${config.p2p!.stunIp} stunPort=${config.p2p!.stunPort}`);
+        addLog(`stunIp=${activeConfig.p2p.stunIp} stunPort=${activeConfig.p2p.stunPort}`);
 
         const tcpEndpoint = await client.connect();
+        if (cancelled) return;
 
         if (tcpEndpoint) {
           addLog(`连接成功，TCP endpoint: ${tcpEndpoint.ip}:${tcpEndpoint.port}`);
@@ -161,9 +193,21 @@ export function useUdpP2PConnection(
     const timer = setTimeout(connect, 1000);
 
     return () => {
+      cancelled = true;
       clearTimeout(timer);
+      client?.disconnect();
     };
-  }, [isConfigLoaded, config.p2p?.token, retryKey]);  // token 变化或手动 retry 时重新连接
+  }, [
+    isConfigLoaded,
+    config.p2p?.token,
+    config.p2p?.lanIp,
+    config.p2p?.lanPort,
+    config.p2p?.stunIp,
+    config.p2p?.stunPort,
+    retryKey,
+    refreshFromCloud,
+    setConfig,
+  ]);
 
   return {
     status,

@@ -15,6 +15,10 @@ export interface WSServiceConfig {
   onClose?: (event: CloseEvent) => void;
 }
 
+function redactTokenFromUrl(url: string): string {
+  return url.replace(/([?&]token=)[^&]+/i, '$1***');
+}
+
 export class WSService {
   private client: ReturnType<typeof createNativeRealtimeClient> | null = null;
   private config: WSServiceConfig;
@@ -27,7 +31,7 @@ export class WSService {
       protocol: 'ws',
       ...config
     };
-    this.isP2P = !!config.p2p;
+    this.isP2P = !!config.p2p?.token;
   }
 
   /**
@@ -70,13 +74,13 @@ export class WSService {
       // 使用 config.protocol 保持与标准模式一致（支持 wss://）
       wsUrl = `${this.config.protocol}://${this.config.host}:${this.config.port}`
             + `/ws/${this.config.characterName}`
-            + `?token=${this.config.p2p.token}`;
+            + `?token=${encodeURIComponent(this.config.p2p.token || '')}`;
 
       console.log('[WSService] 使用 P2P 模式连接:', {
         host: this.config.host,
         port: this.config.port,
         characterName: this.config.characterName,
-        wsUrl: wsUrl.replace(this.config.p2p.token, '***'), // 隐藏 token
+        wsUrl: redactTokenFromUrl(wsUrl),
       });
     } else {
       wsUrl = `${this.config.protocol}://${this.config.host}:${this.config.port}/ws/${this.config.characterName}`;
@@ -118,7 +122,7 @@ export class WSService {
     if (!this.client) return;
 
     this.client.on('open', () => {
-      console.log('WebSocket连接已建立:', this.client?.getUrl());
+      console.log('WebSocket连接已建立:', this.client ? redactTokenFromUrl(this.client.getUrl()) : undefined);
       this.config.onOpen?.();
     });
 

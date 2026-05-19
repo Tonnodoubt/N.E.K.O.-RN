@@ -225,6 +225,7 @@
     "characterHint": "Nekotongで設定されたキャラクター名",
     "currentConfig": "現在の設定",
     "p2pMode": "P2P接続モード",
+    "p2pTokenNotStored": "保存されていません。QRを再スキャンしてください",
     "websocketUrl": "WebSocket URL",
     "tips": "ヒント",
     "tip1": "スマホとPCが同じWiFiネットワークに接続されていることを確認してください",

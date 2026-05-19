@@ -71,6 +71,10 @@ class MainManager {
     this.audioService = audioService;
   }
 
+  clearAudioService() {
+    this.audioService = null;
+  }
+
   /**
    * 注册 Live2D 服务
    */

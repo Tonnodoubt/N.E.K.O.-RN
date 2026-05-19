@@ -229,6 +229,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   const wasInBackgroundRef = useRef(false);
   // AppState 后台延迟重置 timer ref（确保组件卸载时清理）
   const appStateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const appStateReconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // StatusToast ref，用于显示临时提示
   const statusToastRef = useRef<StatusToastHandle>(null);
   // 合并为单一对象，确保 modelName 和 modelUrl 同步更新，避免两次 setState 触发两次 useLive2D effect
@@ -280,11 +281,19 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       if (nextAppState === 'background' || nextAppState === 'inactive') {
         console.log('📱 应用进入后台，标记后台状态');
         if (appStateTimerRef.current) clearTimeout(appStateTimerRef.current);
+        if (appStateReconnectTimerRef.current) {
+          clearTimeout(appStateReconnectTimerRef.current);
+          appStateReconnectTimerRef.current = null;
+        }
         isInBackgroundRef.current = true;
       } else if (nextAppState === 'active') {
         console.log('📱 应用回到前台，延迟重置后台状态');
         wasInBackgroundRef.current = true;
         if (appStateTimerRef.current) clearTimeout(appStateTimerRef.current);
+        if (appStateReconnectTimerRef.current) {
+          clearTimeout(appStateReconnectTimerRef.current);
+          appStateReconnectTimerRef.current = null;
+        }
         // 延迟 1.5s 后检查连接状态，如果仍断连则触发重连
         appStateTimerRef.current = setTimeout(() => {
           appStateTimerRef.current = null;
@@ -293,7 +302,8 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
           console.log('📱 后台状态标志已重置');
         }, 2000);
         // 独立定时器：1.5s 后检查连接，给 realtime client 内部重连一点时间
-        setTimeout(() => {
+        appStateReconnectTimerRef.current = setTimeout(() => {
+          appStateReconnectTimerRef.current = null;
           if (udpStatusRef.current === 'failed') {
             console.log('📱 前台恢复后 P2P 仍失败，重试局域网/P2P 探测');
             udpRetryRef.current();
@@ -312,6 +322,10 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       if (appStateTimerRef.current) {
         clearTimeout(appStateTimerRef.current);
         appStateTimerRef.current = null;
+      }
+      if (appStateReconnectTimerRef.current) {
+        clearTimeout(appStateReconnectTimerRef.current);
+        appStateReconnectTimerRef.current = null;
       }
     };
   }, []);
@@ -478,7 +492,13 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       }
     };
     syncCurrentCatgirl();
-  }, [isConfigLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [
+    config.characterName,
+    config.host,
+    config.p2p?.token,
+    config.port,
+    isConfigLoaded,
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 工具栏状态管理（与 Web 版本一致）
   const [isMobile, setIsMobile] = useState(true); // RN 默认为移动端
@@ -571,7 +591,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     calibration: vrmMotionCalibration,
     saveCalibration: saveVrmMotionCalibration,
     resetCalibration: resetVrmMotionCalibration,
-  } = useVrmMotionCalibration();
+  } = useVrmMotionCalibration(vrmModelUrl);
 
   const chat = useChatMessages({
     maxMessages: 100,
@@ -927,15 +947,15 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       };
     }
 
-    if (p2pConfig?.token) {
+    if (p2pConfig) {
       if (udpConnection.status === 'idle' || udpConnection.status === 'connecting') {
         return {
           phase: 'connecting',
           chatStatus: 'connecting',
-          label: '正在连接电脑端',
-          detail: '正在确认二维码里的局域网地址。',
+          label: p2pConfig.token ? '正在连接电脑端' : '正在恢复配对',
+          detail: p2pConfig.token ? '正在确认二维码里的局域网地址。' : '请重新扫码以刷新连接凭证。',
           canRetry: false,
-          canRescan: false,
+          canRescan: !p2pConfig.token,
         };
       }
 
@@ -944,7 +964,9 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
           phase: 'failed',
           chatStatus: 'closed',
           label: '无法连接电脑端',
-          detail: '请确认电脑端在线、手机和电脑在同一网络，或重新扫码。',
+          detail: p2pConfig.token
+            ? '请确认电脑端在线、手机和电脑在同一网络，或重新扫码。'
+            : '连接凭证已失效，请重新扫码。',
           canRetry: true,
           canRescan: true,
         };
@@ -1007,6 +1029,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     audio.connectionError,
     audio.connectionPhase,
     isConfigLoaded,
+    p2pConfig,
     p2pConfig?.token,
     udpConnection.status,
   ]);
@@ -1079,6 +1102,8 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
 
     if (audio.audioService) {
       mainManager.registerAudioService(audio.audioService);
+    } else {
+      mainManager.clearAudioService();
     }
 
     if (avatarModelType === 'live2d' && live2d.live2dService) {
@@ -1089,6 +1114,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
 
     return () => {
       console.log('🧹 主界面清理');
+      mainManager.clearAudioService();
     };
   }, [audio.audioService, avatarModelType, live2d.live2dService]);
 

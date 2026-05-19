@@ -227,6 +227,7 @@
     "characterHint": "Character name configured in Nekotong",
     "currentConfig": "Current Configuration",
     "p2pMode": "P2P Connection Mode",
+    "p2pTokenNotStored": "Not stored; scan QR again to refresh",
     "websocketUrl": "WebSocket URL",
     "tips": "Tips",
     "tip1": "Make sure your phone and computer are on the same WiFi network",

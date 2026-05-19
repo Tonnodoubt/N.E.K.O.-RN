@@ -66,6 +66,8 @@ export function Live2DStage({
   const cc = theme.colors;
   const { t } = useTranslation();
   const shouldRenderVrm = avatarType === 'vrm' && !!vrmModelUrl;
+  const live2dModelPath = live2dPropsForLipSync?.modelPath || live2dProps.modelPath;
+  const shouldRenderLive2D = avatarType === 'live2d';
   const [vrmTransform, setVrmTransform] = useState(() => ({
     scale: scaleRef.current,
     position: modelPositionRef.current,
@@ -273,7 +275,7 @@ export function Live2DStage({
           <View collapsable={false} style={s.vrmGestureLayer} />
         </GestureDetector>
       )}
-      {isPageFocused && !shouldRenderVrm && (
+      {isPageFocused && shouldRenderLive2D && (
         <ReactNativeLive2dView
           style={s.view}
           {...live2dPropsForLipSync}
@@ -283,7 +285,7 @@ export function Live2DStage({
       {!isPageFocused && (
         <View style={s.paused}>
           <Text style={s.pausedText}>
-            {live2dProps.modelPath || vrmModelUrl ? t('main.live2d.paused') : t('main.live2d.pageInactive')}
+            {live2dModelPath || vrmModelUrl ? t('main.live2d.paused') : t('main.live2d.pageInactive')}
           </Text>
         </View>
       )}

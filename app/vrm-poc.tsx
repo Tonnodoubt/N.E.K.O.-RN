@@ -215,7 +215,7 @@ export default function VRMPocScreen() {
     isLoaded: isMotionCalibrationLoaded,
     saveCalibration,
     resetCalibration: resetSavedCalibration,
-  } = useVrmMotionCalibration();
+  } = useVrmMotionCalibration(result?.model_path || modelPathInput);
 
   useEffect(() => {
     if (!isLoaded) return;

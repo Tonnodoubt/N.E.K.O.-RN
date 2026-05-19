@@ -225,6 +225,7 @@
     "characterHint": "Nekotong 中配置的角色名",
     "currentConfig": "當前配置",
     "p2pMode": "P2P 連線模式",
+    "p2pTokenNotStored": "未持久保存，需重新掃碼刷新",
     "websocketUrl": "WebSocket URL",
     "tips": "提示",
     "tip1": "確保手機和電腦在同一 WiFi 網路下",

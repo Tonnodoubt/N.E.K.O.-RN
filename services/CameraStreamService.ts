@@ -33,6 +33,7 @@ export class CameraStreamService {
   private status: CameraStreamStatus = 'idle';
   private timeoutId: ReturnType<typeof setTimeout> | null = null;
   private hasCompletedCapture = false;
+  private captureGeneration = 0;
 
   private readonly config: CameraStreamConfig;
   private readonly frameInterval: number;
@@ -70,6 +71,7 @@ export class CameraStreamService {
     }
 
     console.log('📹 启动摄像头流');
+    this.captureGeneration += 1;
     this.setStatus('streaming');
     this.hasCompletedCapture = false;
     this.scheduleNextCapture(INITIAL_CAPTURE_DELAY_MS);
@@ -93,6 +95,7 @@ export class CameraStreamService {
       this.timeoutId = null;
     }
     this.isCapturing = false;
+    this.captureGeneration += 1;
     this.setStatus('idle');
     console.log('📹 停止摄像头流');
   }
@@ -105,11 +108,13 @@ export class CameraStreamService {
       this.timeoutId = null;
     }
     this.setStatus('paused');
+    this.captureGeneration += 1;
   }
 
   resume() {
     if (this.status !== 'paused') return;
     console.log('📹 恢复摄像头流');
+    this.captureGeneration += 1;
     this.setStatus('streaming');
     this.scheduleNextCapture(INITIAL_CAPTURE_DELAY_MS);
   }
@@ -138,6 +143,7 @@ export class CameraStreamService {
     }
 
     this.isCapturing = true;
+    const generation = this.captureGeneration;
 
     try {
       // Step 1: 让出主线程，确保音频有机会播放
@@ -157,7 +163,7 @@ export class CameraStreamService {
       } catch (primaryError) {
         console.warn('⚠️ 首次捕获失败，准备回退重试:', primaryError);
         await yieldToMain(CAPTURE_RETRY_DELAY_MS);
-        if (!this.cameraRef) return;
+        if (!this.cameraRef || this.status !== 'streaming' || generation !== this.captureGeneration) return;
         photo = await this.cameraRef.takePictureAsync({
           base64: false,
           quality: 1,
@@ -197,6 +203,16 @@ export class CameraStreamService {
 
       // Step 5: 再次让出主线程
       await yieldToMain(50);
+
+      if (
+        this.status !== 'streaming' ||
+        generation !== this.captureGeneration ||
+        !this.config.isConnected() ||
+        !this.cameraRef
+      ) {
+        console.log('📹 捕获完成前状态已变化，丢弃本帧');
+        return;
+      }
 
       // Step 6: 发送
       this.config.sendFrame({

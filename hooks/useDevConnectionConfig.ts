@@ -17,7 +17,7 @@ export function useDevConnectionConfig(): {
   isLoaded: boolean;
   setConfig: (next: Partial<DevConnectionConfig> | ((prev: DevConnectionConfig) => DevConnectionConfig)) => Promise<DevConnectionConfig>;
   applyQrRaw: (raw: string) => Promise<ApplyQrResult>;
-  refreshFromCloud: () => Promise<boolean>;  // 从云端刷新
+  refreshFromCloud: () => Promise<DevConnectionConfig | null>;  // 从云端刷新
   refreshPairing: () => Promise<boolean>;  // 用持久 pairing 换新 token
   clear: () => Promise<void>;
   reload: () => Promise<void>;  // 重新加载配置
@@ -103,13 +103,13 @@ export function useDevConnectionConfig(): {
   /**
    * 从云端刷新设备信息（如果配置中有 deviceId）
    */
-  const refreshFromCloud = useCallback(async (): Promise<boolean> => {
+  const refreshFromCloud = useCallback(async (): Promise<DevConnectionConfig | null> => {
     const currentConfig = configRef.current;
 
     // 如果没有 P2P 配置或 deviceId，跳过
     if (!currentConfig.p2p?.deviceId) {
       console.log('[useDevConnectionConfig] 没有 deviceId，跳过云端刷新');
-      return false;
+      return null;
     }
 
     try {
@@ -119,14 +119,14 @@ export function useDevConnectionConfig(): {
       if (latest) {
         await setConfig(latest);
         console.log('[useDevConnectionConfig] 云端刷新成功');
-        return true;
+        return latest;
       } else {
         console.log('[useDevConnectionConfig] 云端查询失败');
-        return false;
+        return null;
       }
     } catch (e) {
       console.error('[useDevConnectionConfig] 云端刷新异常:', e);
-      return false;
+      return null;
     }
   }, [setConfig]);
 

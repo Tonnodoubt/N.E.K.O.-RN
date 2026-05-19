@@ -4,7 +4,7 @@ export type DevConnectionConfig = {
   characterName: string;
   // P2P 连接配置（v3: 两层回退）
   p2p?: {
-    token: string;
+    token?: string;
     deviceId?: string;              // 设备 ID（用于云端查询）
 
     // 第1层：LAN 直连
@@ -34,6 +34,15 @@ export const DEFAULT_DEV_CONNECTION_CONFIG: DevConnectionConfig = {
   characterName: process.env.EXPO_PUBLIC_DEV_CHARACTER || 'test',
 };
 
+function isPrivateIpv4(host: string): boolean {
+  const parts = host.split('.').map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    return false;
+  }
+  const [first, second] = parts;
+  return first === 10 || (first === 172 && second >= 16 && second <= 31) || (first === 192 && second === 168);
+}
+
 export function parseDevConnectionConfig(raw: string): Partial<DevConnectionConfig> | null {
   const text = raw.trim();
   if (!text) return null;
@@ -48,7 +57,9 @@ export function parseDevConnectionConfig(raw: string): Partial<DevConnectionConf
       // 检测 P2P 格式（包含 lan_ip 和 token）- v3 架构：两层回退
       if (typeof obj.lan_ip === 'string' && obj.lan_ip.trim() && typeof obj.token === 'string'
           && obj.token.length > 0 && obj.token.length <= 256 && !/[\x00-\x1f]/.test(obj.token)) {
-        out.host = obj.lan_ip.trim();
+        const lanIp = obj.lan_ip.trim();
+        if (!isPrivateIpv4(lanIp)) return null;
+        out.host = lanIp;
         out.port = typeof obj.port === 'number' ? obj.port : 48920;
         out.characterName = obj.character || obj.name || 'test';
 
@@ -58,7 +69,7 @@ export function parseDevConnectionConfig(raw: string): Partial<DevConnectionConf
           deviceId: obj.device_id,
 
           // 第1层：LAN 直连
-          lanIp: obj.lan_ip.trim(),
+          lanIp,
           lanPort: obj.port || 48920,
 
           // 第2层：STUN 打洞

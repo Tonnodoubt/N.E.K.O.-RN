@@ -225,6 +225,7 @@
     "characterHint": "Имя персонажа, настроенное в Nekotong",
     "currentConfig": "Текущая конфигурация",
     "p2pMode": "Режим P2P подключения",
+    "p2pTokenNotStored": "Не сохранен. Отсканируйте QR заново",
     "websocketUrl": "WebSocket URL",
     "tips": "Советы",
     "tip1": "Убедитесь, что телефон и компьютер находятся в одной WiFi сети",
