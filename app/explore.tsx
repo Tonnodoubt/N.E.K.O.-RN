@@ -76,6 +76,8 @@ export default function ExploreScreen() {
   const lastQueueClearAtMsRef = useRef<number>(0);
   const lastAppliedQrRef = useRef<string | null>(null);
   const isRecordingRef = useRef(false);
+  const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const restartInFlightRef = useRef(false);
 
   const { config: connectionConfig, setConfig: setConnectionConfig } = useDevConnectionConfig();
 
@@ -153,6 +155,11 @@ export default function ExploreScreen() {
     });
 
     return () => {
+      if (restartTimerRef.current) {
+        clearTimeout(restartTimerRef.current);
+        restartTimerRef.current = null;
+      }
+      restartInFlightRef.current = false;
       audioServiceRef.current?.destroy();
     };
   }, [connectionConfig.characterName, connectionConfig.host, connectionConfig.port]);
@@ -223,6 +230,11 @@ export default function ExploreScreen() {
         if (typeof msg === 'string' && msg.includes('失联了，即将重启')) {
           const shouldRestart = audioServiceRef.current?.getIsSessionActive() || isRecordingRef.current;
           if (shouldRestart) {
+            if (restartInFlightRef.current || restartTimerRef.current) {
+              console.log('自动重启已排队，跳过重复失联状态');
+              return;
+            }
+            restartInFlightRef.current = true;
             console.log('检测到失联状态，执行自动重启会话');
             (async () => {
               try {
@@ -230,11 +242,14 @@ export default function ExploreScreen() {
               } catch (e) {
                 console.warn('自动重启：结束会话失败（可忽略）', e);
               }
-              setTimeout(async () => {
+              restartTimerRef.current = setTimeout(async () => {
                 try {
                   await audioServiceRef.current?.startAICall();
                 } catch (e) {
                   console.warn('自动重启：重启会话失败', e);
+                } finally {
+                  restartTimerRef.current = null;
+                  restartInFlightRef.current = false;
                 }
               }, 7500);
             })();
