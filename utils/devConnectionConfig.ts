@@ -4,7 +4,7 @@ export type DevConnectionConfig = {
   characterName: string;
   // P2P 连接配置（v3: 两层回退）
   p2p?: {
-    token: string;
+    token?: string;
     deviceId?: string;              // 设备 ID（用于云端查询）
 
     // 第1层：LAN 直连
@@ -14,6 +14,20 @@ export type DevConnectionConfig = {
     // 第2层：STUN 打洞
     stunIp?: string;                // STUN 公网 IP
     stunPort?: number;              // STUN 公网端口
+
+    // 持久配对：首次扫码后保存，后续启动用它换新 token / LAN 地址
+    pairingSupported?: boolean;
+    pairingRegisterPath?: string;
+    pairingResolvePath?: string;
+    qrOneTime?: boolean;
+    qrTokenTtlSeconds?: number;
+    qrExpiresAt?: number;
+    pairing?: {
+      pairingId: string;
+      pairingSecret: string;
+      deviceId?: string;
+      createdAt?: number;
+    };
   };
 };
 
@@ -22,6 +36,15 @@ export const DEFAULT_DEV_CONNECTION_CONFIG: DevConnectionConfig = {
   port: Number(process.env.EXPO_PUBLIC_DEV_PORT) || 48911,
   characterName: process.env.EXPO_PUBLIC_DEV_CHARACTER || 'test',
 };
+
+function isPrivateIpv4(host: string): boolean {
+  const parts = host.split('.').map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    return false;
+  }
+  const [first, second] = parts;
+  return first === 10 || (first === 172 && second >= 16 && second <= 31) || (first === 192 && second === 168);
+}
 
 export function parseDevConnectionConfig(raw: string): Partial<DevConnectionConfig> | null {
   const text = raw.trim();
@@ -35,8 +58,11 @@ export function parseDevConnectionConfig(raw: string): Partial<DevConnectionConf
       const out: Partial<DevConnectionConfig> = {};
 
       // 检测 P2P 格式（包含 lan_ip 和 token）- v3 架构：两层回退
-      if (typeof obj.lan_ip === 'string' && obj.lan_ip.trim() && typeof obj.token === 'string') {
-        out.host = obj.lan_ip.trim();
+      if (typeof obj.lan_ip === 'string' && obj.lan_ip.trim() && typeof obj.token === 'string'
+          && obj.token.length > 0 && obj.token.length <= 256 && !/[\x00-\x1f]/.test(obj.token)) {
+        const lanIp = obj.lan_ip.trim();
+        if (!isPrivateIpv4(lanIp)) return null;
+        out.host = lanIp;
         out.port = typeof obj.port === 'number' ? obj.port : 48920;
         out.characterName = obj.character || obj.name || 'test';
 
@@ -46,12 +72,19 @@ export function parseDevConnectionConfig(raw: string): Partial<DevConnectionConf
           deviceId: obj.device_id,
 
           // 第1层：LAN 直连
-          lanIp: obj.lan_ip.trim(),
+          lanIp,
           lanPort: obj.port || 48920,
 
           // 第2层：STUN 打洞
           stunIp: obj.stun_ip,
           stunPort: obj.stun_port,
+
+          pairingSupported: obj.pairing_supported === true,
+          pairingRegisterPath: typeof obj.pairing_register_path === 'string' ? obj.pairing_register_path : undefined,
+          pairingResolvePath: typeof obj.pairing_resolve_path === 'string' ? obj.pairing_resolve_path : undefined,
+          qrOneTime: obj.qr_one_time === true,
+          qrTokenTtlSeconds: typeof obj.qr_token_ttl_seconds === 'number' ? obj.qr_token_ttl_seconds : undefined,
+          qrExpiresAt: typeof obj.qr_expires_at === 'number' ? obj.qr_expires_at : undefined,
         };
         return out;
       }
@@ -126,5 +159,5 @@ export function buildHttpBaseURL(config: Pick<DevConnectionConfig, 'host' | 'por
 export function appendP2PToken(url: string, token?: string): string {
   if (!token) return url;
   const sep = url.includes('?') ? '&' : '?';
-  return `${url}${sep}token=${token}`;
+  return `${url}${sep}token=${encodeURIComponent(token)}`;
 }

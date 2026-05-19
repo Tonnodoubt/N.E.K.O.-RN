@@ -28,6 +28,13 @@ export type TcpEndpoint = {
   port: number;
 };
 
+function isValidEndpoint(ip: unknown, port: unknown): ip is string {
+  if (typeof ip !== 'string' || typeof port !== 'number') return false;
+  if (!Number.isFinite(port) || port < 1 || port > 65535) return false;
+  if (ip === '0.0.0.0' || ip === '127.0.0.1' || ip === '::1') return false;
+  return true;
+}
+
 export class UdpP2PClient extends EventEmitter {
   private config: P2PConfig;
   private socket: any = null;
@@ -104,7 +111,11 @@ export class UdpP2PClient extends EventEmitter {
 
             // 检查 ACK 响应
             if (msg.type === 'ACK' && msg.tcp_endpoint) {
-              console.log(`[UDP P2P] 收到 ACK，TCP endpoint: ${msg.tcp_endpoint.ip}:${msg.tcp_endpoint.port}`);
+              if (!isValidEndpoint(msg.tcp_endpoint.ip, msg.tcp_endpoint.port)) {
+                this.emit('log', `ACK 中 endpoint 无效: ${msg.tcp_endpoint.ip}:${msg.tcp_endpoint.port}`);
+                resolve(null);
+                return;
+              }
 
               const endpoint: TcpEndpoint = {
                 ip: msg.tcp_endpoint.ip,
@@ -208,6 +219,12 @@ export class UdpP2PClient extends EventEmitter {
             }
 
             if (msg.type === 'ACK' && msg.tcp_endpoint) {
+              if (!isValidEndpoint(msg.tcp_endpoint.ip, msg.tcp_endpoint.port)) {
+                this.emit('log', `ACK 中 endpoint 无效: ${msg.tcp_endpoint.ip}:${msg.tcp_endpoint.port}`);
+                clearTimeout(timer);
+                resolve(null);
+                return;
+              }
               clearTimeout(timer);
               const endpoint: TcpEndpoint = {
                 ip: msg.tcp_endpoint.ip,

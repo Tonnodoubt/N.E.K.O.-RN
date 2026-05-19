@@ -69,6 +69,10 @@ function createSimpleVAD(opts: {
   return { processFrame, reset, updateThreshold, getState: () => ({ ...state }) };
 }
 
+function cloneInt16Frame(frame: Int16Array): Int16Array {
+  return new Int16Array(frame);
+}
+
 function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
   if (!ms || ms <= 0) return p;
   let timer: any = null;
@@ -100,9 +104,59 @@ export function createNativeAudioService(args: {
   let isPlaying = false;
   // 动态回声校准
   const CALIBRATION_FRAMES = 10;       // 校准帧数（约 320ms）
-  const ECHO_GATE_MULTIPLIER = 1.8;    // 阈值 = 回声均值 × 此倍数
+  const ECHO_GATE_MULTIPLIER = 2.4;    // 阈值 = 回声均值 × 此倍数
+  const MIN_PLAYBACK_SPEECH_THRESHOLD = 0.065;
+  const PRE_ROLL_FRAMES = 8;           // 约 256ms，补齐打断开头
+  const STALE_BINARY_DROP_MS = 900;
   let calibrationFrames: number[] = [];
   let calibratedThreshold = 0.08;      // 初始默认值
+  let preRollFrames: Int16Array[] = [];
+  let manualInterruptTimer: any = null;
+
+  const sendAudioFrame = (frame: Int16Array) => {
+    args.client.sendJson({
+      action: "stream_data",
+      data: Array.from(frame as any),
+      input_type: "audio",
+    });
+  };
+
+  const rememberPreRollFrame = (frame: Int16Array) => {
+    preRollFrames.push(cloneInt16Frame(frame));
+    if (preRollFrames.length > PRE_ROLL_FRAMES) preRollFrames.shift();
+  };
+
+  const flushPreRollFrames = () => {
+    const frames = preRollFrames;
+    preRollFrames = [];
+    for (const frame of frames) sendAudioFrame(frame);
+  };
+
+  const clearManualInterruptTimer = () => {
+    if (manualInterruptTimer) {
+      clearTimeout(manualInterruptTimer);
+      manualInterruptTimer = null;
+    }
+  };
+
+  const beginManualInterruptGuard = () => {
+    manualInterruptActive = true;
+    clearManualInterruptTimer();
+    manualInterruptTimer = setTimeout(() => {
+      manualInterruptActive = false;
+      manualInterruptTimer = null;
+    }, STALE_BINARY_DROP_MS);
+  };
+
+  const interruptPlaybackForUserSpeech = () => {
+    try { PCMStream.stopPlayback(); } catch (_e) {}
+    try { args.client.sendJson({ action: "interrupt_audio" }); } catch (_e) {}
+    isPlaying = false;
+    calibrationFrames = [];
+    beginManualInterruptGuard();
+    outputAmpMutedUntil = Date.now() + OUTPUT_AMP_MUTE_AFTER_INTERRUPT_MS;
+    emitter.emit("outputAmplitude", { amplitude: 0 });
+  };
 
   // 客户端 VAD：过滤回声，只有真正的人声才发给服务器
   const vad = createSimpleVAD({
@@ -113,10 +167,7 @@ export function createNativeAudioService(args: {
     onSpeechStart: () => {
       // 检测到人声立即停止播放，不等服务器 user_activity，消除网络往返延迟
       if (isPlaying) {
-        try { PCMStream.stopPlayback(); } catch (_e) {}
-        isPlaying = false;
-        outputAmpMutedUntil = Date.now() + OUTPUT_AMP_MUTE_AFTER_INTERRUPT_MS;
-        emitter.emit("outputAmplitude", { amplitude: 0 });
+        interruptPlaybackForUserSpeech();
       }
     },
   });
@@ -135,10 +186,8 @@ export function createNativeAudioService(args: {
   let errorSub: { remove: () => void } | null = null;
 
   let sessionResolver: (() => void) | null = null;
+  let sessionRejecter: ((error: Error) => void) | null = null;
   let recordingReject: ((error: Error) => void) | null = null;
-  // 打断后短暂静音：避免扬声器末尾声音被麦克风回收为用户输入
-  let micMutedUntil = 0;
-  const MIC_MUTE_AFTER_INTERRUPT_MS = 600;
   // 打断后屏蔽 onAmplitudeUpdate：避免缓冲区排空时的余音让按钮消不掉
   let outputAmpMutedUntil = 0;
   const OUTPUT_AMP_MUTE_AFTER_INTERRUPT_MS = 200;
@@ -156,6 +205,7 @@ export function createNativeAudioService(args: {
         // 播放刚开始，重置校准
         isPlaying = true;
         calibrationFrames = [];
+        preRollFrames = [];
       }
       isPlaying = amp > 0.01;
       emitter.emit("outputAmplitude", { amplitude: Math.max(0, Math.min(1, amp)) });
@@ -164,6 +214,7 @@ export function createNativeAudioService(args: {
     playbackStopSub = PCMStream.addListener("onPlaybackStop", () => {
       isPlaying = false;
       calibrationFrames = [];
+      preRollFrames = [];
       vad.reset();
       emitter.emit("outputAmplitude", { amplitude: 0 });
     });
@@ -188,17 +239,17 @@ export function createNativeAudioService(args: {
       const pcm: Uint8Array | undefined = event?.pcm;
       if (!pcm) return;
 
-      // 打断后静音期内丢弃麦克风数据
-      if (Date.now() < micMutedUntil) return;
-
       const int16 = new Int16Array(pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength));
+      const rms = calcRMS(int16);
+      const wasPlaybackActive = isPlaying;
+      rememberPreRollFrame(int16);
 
-      // 播放时前 N 帧用于校准回声阈值，不发送
-      if (isPlaying && calibrationFrames.length < CALIBRATION_FRAMES) {
-        calibrationFrames.push(calcRMS(int16));
+      // 播放时前 N 帧用于校准回声阈值；明显高于当前阈值时立刻进入 VAD，避免打断开头被吞。
+      if (wasPlaybackActive && calibrationFrames.length < CALIBRATION_FRAMES && rms < calibratedThreshold) {
+        calibrationFrames.push(rms);
         if (calibrationFrames.length === CALIBRATION_FRAMES) {
           const avg = calibrationFrames.reduce((a, b) => a + b, 0) / CALIBRATION_FRAMES;
-          calibratedThreshold = Math.max(0.04, avg * ECHO_GATE_MULTIPLIER);
+          calibratedThreshold = Math.max(MIN_PLAYBACK_SPEECH_THRESHOLD, avg * ECHO_GATE_MULTIPLIER);
           vad.updateThreshold(calibratedThreshold);
           console.log(`🎚️ 回声校准完成: 均值=${avg.toFixed(4)} 阈值=${calibratedThreshold.toFixed(4)}`);
         }
@@ -206,15 +257,16 @@ export function createNativeAudioService(args: {
       }
 
       // 客户端 VAD 门控：播放时只有检测到真实人声才发送，过滤回声
+      const wasSpeaking = vad.getState().isSpeaking;
       const isSpeaking = vad.processFrame(int16);
-      if (isPlaying && !isSpeaking) return;
+      if (wasPlaybackActive && !isSpeaking) return;
+      if (wasPlaybackActive && isSpeaking && !wasSpeaking) {
+        flushPreRollFrames();
+        return;
+      }
 
       try {
-        args.client.sendJson({
-          action: "stream_data",
-          data: Array.from(int16 as any),
-          input_type: "audio",
-        });
+        sendAudioFrame(int16);
       } catch (_e) {
         // ignore
       }
@@ -249,19 +301,30 @@ export function createNativeAudioService(args: {
       if (sessionResolver) {
         const r = sessionResolver;
         sessionResolver = null;
+        sessionRejecter = null;
         r();
+      }
+      return;
+    }
+    if ((json as any).type === "session_failed") {
+      if (sessionRejecter) {
+        const reject = sessionRejecter;
+        sessionResolver = null;
+        sessionRejecter = null;
+        reject(new Error(`Session failed: ${JSON.stringify(json)}`));
       }
       return;
     }
     if ((json as any).type === "user_activity") {
       interrupt.onUserActivity((json as any).interrupted_speech_id);
-      stopPlayback();
+      stopPlayback({ suppressStaleBinary: false });
       return;
     }
     if ((json as any).type === "audio_chunk") {
       interrupt.onAudioChunk((json as any).speech_id);
       // 新一轮语音到来，解除手动打断的屏蔽
       manualInterruptActive = false;
+      clearManualInterruptTimer();
       return;
     }
   };
@@ -312,7 +375,10 @@ export function createNativeAudioService(args: {
     }
     offs = [];
     sessionResolver = null;
+    sessionRejecter = null;
     manualInterruptActive = false;
+    clearManualInterruptTimer();
+    preRollFrames = [];
     interrupt.reset();
     detachRecordingListeners();
     detachPlaybackListeners();
@@ -327,12 +393,16 @@ export function createNativeAudioService(args: {
 
   const waitSessionStarted = (timeoutMs: number) => {
     return withTimeout(
-      new Promise<void>((resolve) => {
+      new Promise<void>((resolve, reject) => {
         sessionResolver = resolve;
+        sessionRejecter = reject;
       }),
       timeoutMs,
       `Session start timeout after ${timeoutMs}ms`
-    );
+    ).finally(() => {
+      sessionResolver = null;
+      sessionRejecter = null;
+    });
   };
 
   const startVoiceSession: AudioService["startVoiceSession"] = async (opts) => {
@@ -348,6 +418,7 @@ export function createNativeAudioService(args: {
 
       const cleanup = () => {
         recordingReject = null;
+        sessionRejecter = null;
       };
 
       // 超时处理
@@ -411,15 +482,17 @@ export function createNativeAudioService(args: {
     setState("ready");
   };
 
-  const stopPlayback: AudioService["stopPlayback"] = () => {
+  const stopPlayback = (opts?: { suppressStaleBinary?: boolean }) => {
     try {
       PCMStream.stopPlayback();
     } catch (_e) {}
     isPlaying = false;
     calibrationFrames = [];
+    preRollFrames = [];
     vad.reset();
-    manualInterruptActive = true;
-    micMutedUntil = Date.now() + MIC_MUTE_AFTER_INTERRUPT_MS;
+    if (opts?.suppressStaleBinary !== false) {
+      beginManualInterruptGuard();
+    }
     outputAmpMutedUntil = Date.now() + OUTPUT_AMP_MUTE_AFTER_INTERRUPT_MS;
     emitter.emit("outputAmplitude", { amplitude: 0 });
   };
@@ -434,4 +507,3 @@ export function createNativeAudioService(args: {
     getState: () => state,
   };
 }
-

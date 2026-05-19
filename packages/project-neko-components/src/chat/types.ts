@@ -1,13 +1,79 @@
 import type React from 'react';
 
+// ─── Message Block Types (rich content) ───
+
+export interface TextBlock {
+  type: 'text';
+  text: string;
+}
+
+export interface ImageBlock {
+  type: 'image';
+  url: string;
+  alt?: string;
+}
+
+export interface LinkBlock {
+  type: 'link';
+  url: string;
+  title: string;
+}
+
+export interface StatusBlock {
+  type: 'status';
+  text: string;
+  level: 'info' | 'warn' | 'error';
+}
+
+export interface ButtonBlock {
+  type: 'button';
+  label: string;
+  action: string;
+}
+
+export type MessageBlock = TextBlock | ImageBlock | LinkBlock | StatusBlock | ButtonBlock;
+
+// ─── Chat Message ───
+
 export type ChatMessage = {
   id: string;
   role: "system" | "user" | "assistant";
   createdAt: number;
+  /** Rich content blocks. When present, prefer for rendering. */
+  blocks?: MessageBlock[];
 } & (
     | { content: string; image?: string }
     | { content?: string; image: string }
   );
+
+/** Extract text from a ChatMessage (legacy compat). */
+export function getMessageText(msg: ChatMessage): string {
+  if (msg.blocks) {
+    return msg.blocks
+      .filter((b): b is TextBlock => b.type === 'text')
+      .map(b => b.text)
+      .join('');
+  }
+  return msg.content ?? '';
+}
+
+/** Extract image URL from a ChatMessage (legacy compat). */
+export function getMessageImage(msg: ChatMessage): string | undefined {
+  if (msg.blocks) {
+    const img = msg.blocks.find((b): b is ImageBlock => b.type === 'image');
+    return img?.url;
+  }
+  return msg.image;
+}
+
+/** Get blocks from a message, converting legacy content/image if blocks absent. */
+export function getMessageBlocks(msg: ChatMessage): MessageBlock[] {
+  if (msg.blocks && msg.blocks.length > 0) return msg.blocks;
+  const blocks: MessageBlock[] = [];
+  if (msg.content) blocks.push({ type: 'text', text: msg.content });
+  if (msg.image) blocks.push({ type: 'image', url: msg.image });
+  return blocks;
+}
 
 export interface PendingScreenshot {
   id: string;
@@ -24,11 +90,11 @@ export interface ExternalChatMessage {
   sender: 'user' | 'gemini' | 'system';
   timestamp: string;
   isComplete?: boolean;
+  image?: string;
+  isStreaming?: boolean;
 }
 
-/**
- * WebSocket 连接状态
- */
+/** WebSocket connection status */
 export type ConnectionStatus = "idle" | "connecting" | "open" | "closing" | "closed" | "reconnecting";
 
 /**
@@ -116,4 +182,24 @@ export interface ChatContainerProps {
    * 当外部图片被添加到 pendingScreenshots 后调用
    */
   onClearExternalPendingImages?: () => void;
+
+  /**
+   * Avatar tool 触发回调（RN 专用）
+   * 用户点击 avatar 工具按钮时触发
+   */
+  onAvatarTool?: (action: string) => void;
+
+  // ─── Doubao-style inline mode props ───
+
+  /** Parent-controlled chat expansion state. When defined, enables inline mode (no Modal/FAB). */
+  chatExpanded?: boolean;
+
+  /** Toggle chat sheet visibility */
+  onToggleChat?: () => void;
+
+  /** Mic toggle callback for inline input bar */
+  onToggleMic?: () => void;
+
+  /** Whether mic is currently enabled */
+  micEnabled?: boolean;
 }

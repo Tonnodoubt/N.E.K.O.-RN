@@ -71,12 +71,20 @@ class MainManager {
     this.audioService = audioService;
   }
 
+  clearAudioService() {
+    this.audioService = null;
+  }
+
   /**
    * 注册 Live2D 服务
    */
   registerLive2DService(live2dService: Live2DService) {
     console.log('🎨 注册 Live2DService');
     this.live2dService = live2dService;
+  }
+
+  clearLive2DService() {
+    this.live2dService = null;
   }
 
   /**

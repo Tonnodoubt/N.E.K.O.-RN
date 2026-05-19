@@ -1,15 +1,3 @@
-/**
- * StatusToast - React Native 版本
- *
- * 使用 React Native Animated API 实现的 Toast 通知：
- * - 自动淡入淡出动画
- * - 自动隐藏
- * - 与 Web 版本相同的 ref API
- *
- * @platform Android/iOS - 原生实现
- * @see StatusToast.tsx - Web 版本（Portal + CSS 实现）
- */
-
 import React, {
   useState,
   useCallback,
@@ -17,6 +5,7 @@ import React, {
   forwardRef,
   useImperativeHandle,
   useEffect,
+  useMemo,
 } from 'react';
 import {
   View,
@@ -25,11 +14,9 @@ import {
   StyleSheet,
   Dimensions,
 } from 'react-native';
+import { useTheme } from '@/constants/ThemeContext';
 
 export interface StatusToastProps {
-  /**
-   * 可选：静态资源根路径（RN 中暂不使用背景图）
-   */
   staticBaseUrl?: string;
 }
 
@@ -47,21 +34,19 @@ const { width: screenWidth } = Dimensions.get('window');
 
 const StatusToast = forwardRef<StatusToastHandle | null, StatusToastProps>(
   function StatusToastComponent(_props, ref) {
+    const t = useTheme();
     const [toastState, setToastState] = useState<StatusToastState>({
       message: '',
       duration: 3000,
       isVisible: false,
     });
 
-    // 动画值
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const translateY = useRef(new Animated.Value(-20)).current;
 
-    // 定时器
     const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // 清理定时器
     const clearTimers = useCallback(() => {
       if (hideTimer.current) {
         clearTimeout(hideTimer.current);
@@ -73,22 +58,20 @@ const StatusToast = forwardRef<StatusToastHandle | null, StatusToastProps>(
       }
     }, []);
 
-    // 显示 Toast
     const showToast = useCallback(
       (message: string, duration: number = 3000) => {
         clearTimers();
 
         if (!message || message.trim() === '') {
-          // 隐藏 Toast
           Animated.parallel([
             Animated.timing(fadeAnim, {
               toValue: 0,
-              duration: 200,
+              duration: t.duration.fast,
               useNativeDriver: true,
             }),
             Animated.timing(translateY, {
               toValue: -20,
-              duration: 200,
+              duration: t.duration.fast,
               useNativeDriver: true,
             }),
           ]).start(() => {
@@ -97,38 +80,35 @@ const StatusToast = forwardRef<StatusToastHandle | null, StatusToastProps>(
           return;
         }
 
-        // 更新状态并显示
         setToastState({
           message,
           duration,
           isVisible: true,
         });
 
-        // 淡入动画
         Animated.parallel([
           Animated.timing(fadeAnim, {
             toValue: 1,
-            duration: 200,
+            duration: t.duration.fast,
             useNativeDriver: true,
           }),
           Animated.timing(translateY, {
             toValue: 0,
-            duration: 200,
+            duration: t.duration.fast,
             useNativeDriver: true,
           }),
         ]).start();
 
-        // 计时自动隐藏
         hideTimer.current = setTimeout(() => {
           Animated.parallel([
             Animated.timing(fadeAnim, {
               toValue: 0,
-              duration: 200,
+              duration: t.duration.fast,
               useNativeDriver: true,
             }),
             Animated.timing(translateY, {
               toValue: -20,
-              duration: 200,
+              duration: t.duration.fast,
               useNativeDriver: true,
             }),
           ]).start(() => {
@@ -138,7 +118,7 @@ const StatusToast = forwardRef<StatusToastHandle | null, StatusToastProps>(
           });
         }, duration);
       },
-      [fadeAnim, translateY, clearTimers]
+      [fadeAnim, translateY, clearTimers, t.duration.fast]
     );
 
     useImperativeHandle(
@@ -149,14 +129,35 @@ const StatusToast = forwardRef<StatusToastHandle | null, StatusToastProps>(
       [showToast]
     );
 
-    // 卸载时清理定时器
     useEffect(() => {
       return () => {
         clearTimers();
       };
     }, [clearTimers]);
 
-    // 不显示时返回 null
+    const s = useMemo(() => StyleSheet.create({
+      container: {
+        position: 'absolute',
+        top: 50,
+        left: 0,
+        right: 0,
+        alignItems: 'center',
+        zIndex: 99999,
+      },
+      toast: {
+        maxWidth: screenWidth - 48,
+        paddingHorizontal: t.spacing.xl,
+        paddingVertical: t.spacing.sm,
+        borderRadius: t.radius.lg,
+        borderWidth: 1,
+      },
+      text: {
+        fontSize: t.fontSize.footnote,
+        textAlign: 'center',
+        lineHeight: t.lineHeight.footnote,
+      },
+    }), [t]);
+
     if (!toastState.isVisible || !toastState.message) {
       return null;
     }
@@ -164,7 +165,7 @@ const StatusToast = forwardRef<StatusToastHandle | null, StatusToastProps>(
     return (
       <Animated.View
         style={[
-          styles.container,
+          s.container,
           {
             opacity: fadeAnim,
             transform: [{ translateY }],
@@ -172,8 +173,8 @@ const StatusToast = forwardRef<StatusToastHandle | null, StatusToastProps>(
         ]}
         pointerEvents="none"
       >
-        <View style={styles.toast}>
-          <Text style={styles.text} numberOfLines={2}>
+        <View style={[s.toast, { backgroundColor: t.colors.overlay, borderColor: t.colors.accent + '99' }]}>
+          <Text style={[s.text, { color: t.colors.accent }]} numberOfLines={2}>
             {toastState.message}
           </Text>
         </View>
@@ -181,32 +182,6 @@ const StatusToast = forwardRef<StatusToastHandle | null, StatusToastProps>(
     );
   }
 );
-
-const styles = StyleSheet.create({
-  container: {
-    position: 'absolute',
-    top: 50,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 99999,
-  },
-  toast: {
-    maxWidth: screenWidth - 48,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(64, 197, 241, 0.6)',
-  },
-  text: {
-    color: '#40c5f1',
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-});
 
 export { StatusToast };
 export default StatusToast;

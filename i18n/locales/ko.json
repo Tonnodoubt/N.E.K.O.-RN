@@ -8,6 +8,7 @@
     "delete": "삭제",
     "edit": "편집",
     "loading": "로드 중...",
+    "alert": "알림",
     "error": "오류",
     "success": "성공",
     "close": "닫기",
@@ -33,7 +34,9 @@
     "actions": {
       "manualConfig": "수동 설정",
       "qrConfig": "QR 스캔",
-      "currentRole": "캐릭터"
+      "currentRole": "캐릭터",
+      "startChat": "채팅 시작",
+      "scanToConnect": "QR 스캔으로 연결"
     }
   },
   "main": {
@@ -58,7 +61,11 @@
       "switched": "{{name}}로 전환됨",
       "switchError": "캐릭터 전환 실패",
       "select": "캐릭터 선택",
-      "noCharacters": "사용 가능한 캐릭터 없음"
+      "noCharacters": "사용 가능한 캐릭터 없음",
+      "manage": "캐릭터 관리",
+      "currentLabel": "현재: ",
+      "noCharacter": "캐릭터 없음",
+      "current": "현재"
     },
     "voice": {
       "start": "음성 시작",
@@ -66,13 +73,33 @@
       "rest": "휴식",
       "preparing": "준비 중...",
       "ready": "준비 완료",
-      "blocked": "음성 입력 차단됨"
+      "blocked": "음성 입력 차단됨",
+      "voiceBlockTitle": "캐릭터 전환 불가",
+      "voiceBlockBody": "음성 통화 중에는 캐릭터를 전환할 수 없습니다. 먼저 통화를 종료해 주세요.",
+      "voiceBlockOk": "확인",
+      "systemPreparing": "음성 시스템 준비 중...",
+      "systemReady": "음성 준비 완료"
     },
     "debug": {
       "title": "디버그 정보",
       "toggle": "표시/숨기기",
       "connection": "연결 정보",
-      "p2pLayer": "P2P 연결 레이어"
+      "p2pLayer": "P2P 연결 레이어",
+      "clearCache": "모델 캐시 지우기",
+      "notConnected": "연결 안됨",
+      "unavailable": "사용 불가",
+      "noLogs": "로그 없음",
+      "connectionLogs": "연결 로그:"
+    },
+    "live2d": {
+      "paused": "Live2D 일시정지",
+      "pageInactive": "페이지 비활성",
+      "adjusting": "조정 중"
+    },
+    "vrm": {
+      "loading": "VRM 로딩 중",
+      "failed": "VRM 로드 실패",
+      "failedHint": "모델 파일 또는 네트워크 연결을 확인하세요"
     }
   },
   "settings": {
@@ -198,6 +225,7 @@
     "characterHint": "Nekotong에 설정된 캐릭터 이름",
     "currentConfig": "현재 설정",
     "p2pMode": "P2P 연결 모드",
+    "p2pTokenNotStored": "저장되지 않음. QR을 다시 스캔하세요",
     "websocketUrl": "WebSocket URL",
     "tips": "팁",
     "tip1": "휴대폰과 컴퓨터가 같은 WiFi 네트워크에 연결되어 있는지 확인하세요",

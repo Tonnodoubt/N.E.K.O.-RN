@@ -1,11 +1,31 @@
 import { createRequestClient, type TokenStorage } from '@project_neko/request';
 
+export interface PageConfigLighting {
+  ambient?: number;
+  main?: number;
+  fill?: number;
+  rim?: number;
+  top?: number;
+  bottom?: number;
+  exposure?: number;
+  toneMapping?: number;
+  outlineWidthScale?: number;
+}
+
 export interface PageConfigResponse {
   success: boolean;
   lanlan_name: string;
   model_path: string;
   model_type: string;
   live3d_sub_type?: string;
+  vrm_animation?: string | null;
+  animation_path?: string | null;
+  animation_url?: string | null;
+  vrma?: string | null;
+  idle_animation?: string | string[] | null;
+  idleAnimation?: string | null;
+  idleAnimations?: string[] | null;
+  lighting?: PageConfigLighting | null;
   error?: string;
 }
 

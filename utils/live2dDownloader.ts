@@ -72,6 +72,7 @@ async function downloadFileTo(dstPath: string, srcUrl: string): Promise<void> {
     }
   } catch (error) {
     console.error(`❌ downloadFileTo failed: ${dstPath}`, error)
+    throw error;
   }
 }
 
@@ -141,14 +142,17 @@ export async function downloadDependenciesFromLocalModel(
   const uniqueFiles = Array.from(new Set(files.filter(Boolean)));
   console.log('📦 需要下载的依赖文件:', uniqueFiles);
 
-  // 串行下载，避免并发时同名文件冲突
-  for (const relPath of uniqueFiles) {
+  const downloadOne = async (relPath: string) => {
     const src = resolveUrl(remoteBaseUrl, relPath);
     const dst = `${targetRoot}${relPath}`;
     await downloadFileTo(dst, src);
+  };
+
+  const concurrency = 4;
+  for (let i = 0; i < uniqueFiles.length; i += concurrency) {
+    await Promise.all(uniqueFiles.slice(i, i + concurrency).map(downloadOne));
   }
 
   return localModelJsonUri;
 }
-
 

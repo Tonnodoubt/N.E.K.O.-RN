@@ -6,9 +6,10 @@ import {
 } from '@/utils/devConnectionConfig';
 import { clearStoredDevConnectionConfig, getStoredDevConnectionConfig, setStoredDevConnectionConfig } from '@/services/DevConnectionStorage';
 import { queryDeviceInfo } from '@/services/CloudRegistryService';
+import { registerMobilePairing, resolveMobilePairing } from '@/services/MobilePairingService';
 
 export type ApplyQrResult =
-  | { ok: true; config: DevConnectionConfig; isP2p?: boolean }
+  | { ok: true; config: DevConnectionConfig; isP2p?: boolean; pairingRegistered?: boolean; pairingError?: string }
   | { ok: false; error: string };
 
 export function useDevConnectionConfig(): {
@@ -16,7 +17,8 @@ export function useDevConnectionConfig(): {
   isLoaded: boolean;
   setConfig: (next: Partial<DevConnectionConfig> | ((prev: DevConnectionConfig) => DevConnectionConfig)) => Promise<DevConnectionConfig>;
   applyQrRaw: (raw: string) => Promise<ApplyQrResult>;
-  refreshFromCloud: () => Promise<boolean>;  // 从云端刷新
+  refreshFromCloud: () => Promise<DevConnectionConfig | null>;  // 从云端刷新
+  refreshPairing: () => Promise<boolean>;  // 用持久 pairing 换新 token
   clear: () => Promise<void>;
   reload: () => Promise<void>;  // 重新加载配置
 } {
@@ -31,7 +33,11 @@ export function useDevConnectionConfig(): {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const stored = await getStoredDevConnectionConfig();
+      let stored = await getStoredDevConnectionConfig();
+      const resolved = await resolveMobilePairing(stored);
+      if (resolved.ok) {
+        stored = await setStoredDevConnectionConfig(resolved.config);
+      }
       if (cancelled) return;
       _setConfig(stored);
       setIsLoaded(true);
@@ -62,8 +68,25 @@ export function useDevConnectionConfig(): {
       const parsed = parseDevConnectionConfig(raw);
       if (!parsed) return { ok: false, error: '二维码内容不可解析（请扫 JSON / URL / host:port 格式）' };
       const isP2p = !!parsed.p2p;
-      const next = await setConfig((prev) => ({ ...prev, ...parsed }));
-      return { ok: true, config: next, isP2p };
+      const next = await setConfig((prev) => ({
+        ...prev,
+        ...parsed,
+        p2p: isP2p ? parsed.p2p : undefined,
+      }));
+      if (!isP2p) return { ok: true, config: next, isP2p };
+      if (!next.p2p?.pairingSupported) return { ok: true, config: next, isP2p };
+
+      const registered = await registerMobilePairing(next);
+      if (registered.ok) {
+        const finalConfig = await setConfig(registered.config);
+        return { ok: true, config: finalConfig, isP2p, pairingRegistered: true };
+      }
+
+      if (['qr_missing', 'qr_invalid', 'qr_used', 'qr_expired'].includes(registered.code || '')) {
+        return { ok: false, error: registered.error };
+      }
+
+      return { ok: true, config: next, isP2p, pairingError: registered.error };
     },
     [setConfig]
   );
@@ -84,13 +107,13 @@ export function useDevConnectionConfig(): {
   /**
    * 从云端刷新设备信息（如果配置中有 deviceId）
    */
-  const refreshFromCloud = useCallback(async (): Promise<boolean> => {
+  const refreshFromCloud = useCallback(async (): Promise<DevConnectionConfig | null> => {
     const currentConfig = configRef.current;
 
     // 如果没有 P2P 配置或 deviceId，跳过
     if (!currentConfig.p2p?.deviceId) {
       console.log('[useDevConnectionConfig] 没有 deviceId，跳过云端刷新');
-      return false;
+      return null;
     }
 
     try {
@@ -100,17 +123,28 @@ export function useDevConnectionConfig(): {
       if (latest) {
         await setConfig(latest);
         console.log('[useDevConnectionConfig] 云端刷新成功');
-        return true;
+        return latest;
       } else {
         console.log('[useDevConnectionConfig] 云端查询失败');
-        return false;
+        return null;
       }
     } catch (e) {
       console.error('[useDevConnectionConfig] 云端刷新异常:', e);
-      return false;
+      return null;
     }
   }, [setConfig]);
 
-  return { config, isLoaded, setConfig, applyQrRaw, refreshFromCloud, clear, reload };
-}
+  const refreshPairing = useCallback(async (): Promise<boolean> => {
+    const currentConfig = configRef.current;
+    const resolved = await resolveMobilePairing(currentConfig);
+    if (!resolved.ok) {
+      console.log('[useDevConnectionConfig] pairing resolve failed:', resolved.error);
+      return false;
+    }
+    await setConfig(resolved.config);
+    console.log('[useDevConnectionConfig] pairing resolve succeeded');
+    return true;
+  }, [setConfig]);
 
+  return { config, isLoaded, setConfig, applyQrRaw, refreshFromCloud, refreshPairing, clear, reload };
+}

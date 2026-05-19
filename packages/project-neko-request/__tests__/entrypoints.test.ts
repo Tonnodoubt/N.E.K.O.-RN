@@ -164,7 +164,7 @@ describe("请求库入口与存储实现", () => {
 
     await import("../index.web");
     await expect(captured.refreshApi?.("r-x")).rejects.toThrow(
-      "Refresh token response is missing access_token or refresh_token"
+      "Invalid refresh token response: missing or invalid access_token/refresh_token"
     );
 
     delete (globalThis as any).fetch;

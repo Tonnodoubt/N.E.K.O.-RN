@@ -1,14 +1,18 @@
 import { createCharactersApiClient } from '@/services/api/characters';
 import type { CharactersData } from '@/services/api/characters';
+import { createPageConfigApiClient, type PageConfigResponse } from '@/services/api/pageConfig';
 import { buildHttpBaseURL, appendP2PToken } from '@/utils/devConnectionConfig';
 import { useAudio } from '@/hooks/useAudio';
 import { useChatMessages } from '@/hooks/useChatMessages';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { useDevConnectionConfig } from '@/hooks/useDevConnectionConfig';
-import { useUdpP2PConnection } from '@/hooks/useUdpP2PConnection';
+import { useUdpP2PConnection, type UdpConnectionStatus } from '@/hooks/useUdpP2PConnection';
 import { useLipSync } from '@/hooks/useLipSync';
 import { useLive2D } from '@/hooks/useLive2D';
 import { useLive2DAgentBackend } from '@/hooks/useLive2DAgentBackend';
 import { useLive2DPreferences } from '@/hooks/useLive2DPreferences';
+import { useVrmBehavior, type VRMBehaviorEvent } from '@/hooks/useVrmBehavior';
+import { useVrmMotionCalibration } from '@/hooks/useVrmMotionCalibration';
 import { useImagePicker } from '@/hooks/useImagePicker';
 import { useCamera } from '@/hooks/useCamera';
 import { useCameraStream } from '@/hooks/useCameraStream';
@@ -17,22 +21,24 @@ import { ImageMessageService } from '@/services/imageMessage';
 import { mainManager } from '@/utils/MainManager';
 import { sessionStore } from '@/utils/sessionStore';
 import { VoicePrepareOverlay } from '@/components/VoicePrepareOverlay';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '@/constants/ThemeContext';
+import { useChatFont, FONT_OPTIONS } from '@/constants/FontContext';
+import { Live2DStage } from '@/components/Live2DStage';
+import { CharacterSelectionModal } from '@/components/CharacterSelectionModal';
+import { VoiceBlockModal } from '@/components/VoiceBlockModal';
+import { CharacterSwitchOverlay } from '@/components/CharacterSwitchOverlay';
+import type { VRMLightingConfig, VRMRenderPhase } from '@/components/vrm/VRMAvatarView';
 import { useFocusEffect } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert, AppState, Appearance, Dimensions, Image, Modal, Platform, ScrollView,
-  StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View,
+  Alert, AppState, Appearance, Dimensions, KeyboardAvoidingView, Platform, StyleSheet, Text, View,
 } from 'react-native';
-import { ReactNativeLive2dView } from 'react-native-live2d';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import {
   Live2DRightToolbar,
   ChatContainer,
-  StatusToast,
   type Live2DRightToolbarPanel,
   type Live2DSettingsToggleId,
   type Live2DSettingsState,
@@ -43,22 +49,160 @@ import {
 
 type MainUIScreenProps = {}
 
-// 边界保护：逻辑视图范围为 ±1.0，设置为 0.9 确保模型始终大部分在屏幕内
-const POSITION_LIMIT = 0.9;
-const clampPos = (v: number) => Math.max(-POSITION_LIMIT, Math.min(POSITION_LIMIT, v));
+type MobileRuntimePhase = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'failed';
+type AvatarModelType = 'live2d' | 'vrm';
 
-// 缩放范围限制
-const SCALE_MIN = 0.3;
-const SCALE_MAX = 2.0;
-const clampScale = (v: number) => Math.max(SCALE_MIN, Math.min(SCALE_MAX, v));
+const MAX_IMAGE_BASE64_LENGTH = 1_500_000;
 
-// 生成消息 ID
-function generateMessageId(counter: number): string {
-  return `msg-${Date.now()}-${counter}`;
+async function compressImageIfNeeded(dataURI: string): Promise<string> {
+  if (dataURI.length <= MAX_IMAGE_BASE64_LENGTH) return dataURI;
+  try {
+    const result = await ImageManipulator.manipulateAsync(
+      dataURI,
+      [{ resize: { width: 1280 } }],
+      { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+    );
+    if (result.base64) return `data:image/jpeg;base64,${result.base64}`;
+  } catch (e) {
+    console.warn('[compressImage] failed, sending original:', e);
+  }
+  return dataURI;
+}
+
+function generateMessageId(): string {
+  return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function resolveBackendModelUrl(modelPath: string, apiBase: string, p2pToken?: string): string {
+  const raw = modelPath.trim();
+  if (!raw) return '';
+  if (raw.startsWith('file://') || raw.startsWith('content://')) return raw;
+  if (/^https?:\/\//i.test(raw)) return appendP2PToken(raw, p2pToken);
+
+  const base = apiBase.endsWith('/') ? apiBase : `${apiBase}/`;
+  return appendP2PToken(new URL(raw, base).toString(), p2pToken);
+}
+
+function isErrorStatusMessage(message: string): boolean {
+  const parts = [message];
+
+  try {
+    const parsed: unknown = JSON.parse(message);
+    if (parsed && typeof parsed === 'object') {
+      const payload = parsed as Record<string, unknown>;
+      if (typeof payload.code === 'string') parts.push(payload.code);
+      if (payload.details) parts.push(JSON.stringify(payload.details));
+    }
+  } catch {
+    // Plain text status.
+  }
+
+  return /(error|fail|failed|failure|arrears|quota|rejected|unauthorized|timeout|crashed|not_running|closed_abnormal|欠费|失败|错误|异常|超时|崩溃|未启动|断开)/i.test(parts.join(' '));
+}
+
+function normalizeVrmLighting(lighting: PageConfigResponse['lighting']): VRMLightingConfig | undefined {
+  if (!lighting || typeof lighting !== 'object') return undefined;
+
+  const next: VRMLightingConfig = {};
+  const keys: (keyof VRMLightingConfig)[] = [
+    'ambient',
+    'main',
+    'fill',
+    'rim',
+    'top',
+    'bottom',
+    'exposure',
+    'toneMapping',
+    'outlineWidthScale',
+  ];
+
+  for (const key of keys) {
+    const value = lighting[key];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      next[key] = value;
+    }
+  }
+
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
+function pickAnimationPath(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    const next = value.trim();
+    return next.length > 0 ? next : undefined;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const next = pickAnimationPath(item);
+      if (next) return next;
+    }
+  }
+  return undefined;
+}
+
+function pickVrmAnimationPath(pageConfig: PageConfigResponse): string | undefined {
+  const candidates: unknown[] = [
+    pageConfig.vrm_animation,
+    pageConfig.animation_path,
+    pageConfig.animation_url,
+    pageConfig.vrma,
+    pageConfig.idle_animation,
+    pageConfig.idleAnimation,
+    pageConfig.idleAnimations,
+  ];
+  return pickAnimationPath(candidates);
+}
+
+async function resolveVrmAnimationUrl(
+  catgirlName: string,
+  pageConfig: PageConfigResponse,
+  apiBase: string,
+  p2pToken?: string,
+): Promise<string | undefined> {
+  const pageConfigPath = pickVrmAnimationPath(pageConfig);
+  if (pageConfigPath) return resolveBackendModelUrl(pageConfigPath, apiBase, p2pToken);
+
+  try {
+    const client = createCharactersApiClient(apiBase, p2pToken);
+    const data = await client.getCharacters();
+    const profile = data.猫娘?.[catgirlName];
+    const path = pickAnimationPath([
+      profile?.vrm_animation,
+      profile?.idleAnimation,
+      profile?.idleAnimations,
+    ]);
+    return path ? resolveBackendModelUrl(path, apiBase, p2pToken) : undefined;
+  } catch (error) {
+    console.warn('[VRM] 获取角色动画配置失败:', error);
+    return undefined;
+  }
+}
+
+function inferVisionBehavior(text: string): VRMBehaviorEvent | null {
+  const content = text.toLowerCase();
+  if (!content.trim()) return null;
+  if (/(危险|摔|哭|难过|生气|害怕|疼|血|火|sad|angry|cry|danger|hurt|fire)/i.test(content)) {
+    return { type: 'vision_result', mood: 'alert' };
+  }
+  if (/(看不清|不确定|无法识别|模糊|不知道|unclear|unknown|not sure|cannot|can't)/i.test(content)) {
+    return { type: 'vision_result', mood: 'uncertain' };
+  }
+  if (/(笑|微笑|开心|可爱|漂亮|好看|smile|happy|cute|nice)/i.test(content)) {
+    return { type: 'vision_result', mood: 'positive' };
+  }
+  if (/(衣服|穿|颜色|表情|脸|人|看起来|似乎|clothes|wearing|color|face|expression|looks)/i.test(content)) {
+    return { type: 'vision_result', mood: 'curious' };
+  }
+  return null;
 }
 
 const MainUIScreen: React.FC<MainUIScreenProps> = () => {
-  const { t } = useTranslation();
+  const { t, i18n: i18nInstance } = useTranslation();
+  const router = useRouter();
+  const theme = useTheme();
+  const cc = theme.colors;
+  const insets = useSafeAreaInsets();
+  const { fontId: chatFontId, setFontId: setChatFontId } = useChatFont();
 
   const [isPageFocused, setIsPageFocused] = useState(true);
 
@@ -68,35 +212,44 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   const [characterList, setCharacterList] = useState<string[]>([]);
   const [currentCatgirl, setCurrentCatgirl] = useState<string | null>(null);
   const [characterLoading, setCharacterLoading] = useState(false);
-  const [switchedCharacterName, setSwitchedCharacterName] = useState<string | null>(null);
   const [switchError, setSwitchError] = useState<string | null>(null);
-  const switchedNameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const switchErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const characterLoadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isChatForceCollapsed, setIsChatForceCollapsed] = useState(false);
+  const [chatExpanded, setChatExpanded] = useState(false);
+  useEffect(() => { if (isChatForceCollapsed) setChatExpanded(false); }, [isChatForceCollapsed]);
   const [voicePrepareStatus, setVoicePrepareStatus] = useState<'preparing' | 'ready' | null>(null);
   const isSwitchingCharacterRef = useRef(false);
+  const localSwitchReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 🔥 新增：应用是否在后台的标志 ref，用于在拍照等场景忽略 WebSocket 错误
   const isInBackgroundRef = useRef(false);
   // 🔥 新增：记录是否是从后台恢复，用于显示"已恢复连接"提示
   const wasInBackgroundRef = useRef(false);
   // AppState 后台延迟重置 timer ref（确保组件卸载时清理）
   const appStateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // StatusToast ref，用于显示连接状态提示
+  const appStateReconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // StatusToast ref，用于显示临时提示
   const statusToastRef = useRef<StatusToastHandle>(null);
-  // 🔥 新增：调试信息面板
-  const [debugPanelVisible, setDebugPanelVisible] = useState(false);
   // 合并为单一对象，确保 modelName 和 modelUrl 同步更新，避免两次 setState 触发两次 useLive2D effect
   const [live2dModel, setLive2dModel] = useState<{ name: string; url: string | undefined; itemId?: string }>({
     name: 'mao_pro',
     url: undefined,
   });
+  const [avatarModelType, setAvatarModelType] = useState<AvatarModelType>('live2d');
+  const [vrmModelUrl, setVrmModelUrl] = useState<string | undefined>(undefined);
+  const [vrmAnimationUrl, setVrmAnimationUrl] = useState<string | undefined>(undefined);
+  const [vrmLighting, setVrmLighting] = useState<VRMLightingConfig | undefined>(undefined);
   // ref 持有最新 currentCatgirl，供 onConnectionChange 闭包安全读取（避免 stale closure）
   const currentCatgirlRef = useRef<string | null>(null);
   currentCatgirlRef.current = currentCatgirl;
+  const avatarModelTypeRef = useRef<AvatarModelType>(avatarModelType);
+  avatarModelTypeRef.current = avatarModelType;
   // ref 持有最新值，供 useFocusEffect 闭包读取（避免 stale closure）
   const live2dModelRef = useRef(live2dModel);
   live2dModelRef.current = live2dModel;
+  // ref 持有 audio.reconnect 和连接状态，供 AppState 前台恢复时调用
+  const audioReconnectRef = useRef<() => void>(() => {});
+  const audioConnectedRef = useRef(false);
   const { config, isLoaded: isConfigLoaded, setConfig, applyQrRaw, refreshFromCloud } = useDevConnectionConfig();
 
   // UDP P2P 连接（自动尝试三层回退）
@@ -106,6 +259,10 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     setConfig,
     refreshFromCloud
   );
+  const udpRetryRef = useRef<() => void>(() => {});
+  const udpStatusRef = useRef<UdpConnectionStatus>('idle');
+  udpRetryRef.current = udpConnection.retry;
+  udpStatusRef.current = udpConnection.status;
 
   const params = useLocalSearchParams<{
     qr?: string;
@@ -122,19 +279,39 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       if (nextAppState === 'background' || nextAppState === 'inactive') {
         console.log('📱 应用进入后台，标记后台状态');
         if (appStateTimerRef.current) clearTimeout(appStateTimerRef.current);
+        if (appStateReconnectTimerRef.current) {
+          clearTimeout(appStateReconnectTimerRef.current);
+          appStateReconnectTimerRef.current = null;
+        }
         isInBackgroundRef.current = true;
       } else if (nextAppState === 'active') {
         console.log('📱 应用回到前台，延迟重置后台状态');
-        // 标记是从后台恢复，用于显示"已恢复连接"提示
         wasInBackgroundRef.current = true;
-        // 延迟重置，给 WebSocket 重连时间，避免显示错误
         if (appStateTimerRef.current) clearTimeout(appStateTimerRef.current);
+        if (appStateReconnectTimerRef.current) {
+          clearTimeout(appStateReconnectTimerRef.current);
+          appStateReconnectTimerRef.current = null;
+        }
+        // 延迟 1.5s 后检查连接状态，如果仍断连则触发重连
         appStateTimerRef.current = setTimeout(() => {
           appStateTimerRef.current = null;
           isInBackgroundRef.current = false;
           wasInBackgroundRef.current = false;
           console.log('📱 后台状态标志已重置');
         }, 2000);
+        // 独立定时器：1.5s 后检查连接，给 realtime client 内部重连一点时间
+        appStateReconnectTimerRef.current = setTimeout(() => {
+          appStateReconnectTimerRef.current = null;
+          if (udpStatusRef.current === 'failed') {
+            console.log('📱 前台恢复后 P2P 仍失败，重试局域网/P2P 探测');
+            udpRetryRef.current();
+            return;
+          }
+          if (!audioConnectedRef.current) {
+            console.log('📱 前台恢复但连接断开，触发重连');
+            audioReconnectRef.current();
+          }
+        }, 1500);
       }
     });
 
@@ -143,6 +320,10 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       if (appStateTimerRef.current) {
         clearTimeout(appStateTimerRef.current);
         appStateTimerRef.current = null;
+      }
+      if (appStateReconnectTimerRef.current) {
+        clearTimeout(appStateReconnectTimerRef.current);
+        appStateReconnectTimerRef.current = null;
       }
     };
   }, []);
@@ -187,30 +368,63 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     });
   }, [applyQrRaw, params.characterName, params.host, params.name, params.port, params.qr]);
 
-  // 从后端获取角色对应的 Live2D 模型信息并更新状态
-  const syncLive2dModel = useCallback(async (catgirlName: string) => {
-    console.log('🎨 [syncLive2dModel] called, catgirlName =', catgirlName, 'isConfigLoaded =', isConfigLoaded);
+  // 从后端获取角色对应的模型信息并更新渲染状态
+  const syncCharacterModel = useCallback(async (catgirlName: string) => {
+    console.log('🎨 [syncCharacterModel] called, catgirlName =', catgirlName, 'isConfigLoaded =', isConfigLoaded);
     // 等待配置加载完成
     if (!isConfigLoaded) return;
 
     try {
       const apiBase = buildHttpBaseURL(config);
+      try {
+        const pageConfigClient = createPageConfigApiClient(apiBase, config.p2p?.token);
+        const pageConfig = await pageConfigClient.getPageConfig(catgirlName);
+        const isVrm =
+          pageConfig.success &&
+          !!pageConfig.model_path &&
+          (pageConfig.model_type === 'vrm' ||
+            (pageConfig.model_type === 'live3d' && pageConfig.live3d_sub_type === 'vrm'));
+
+        if (isVrm) {
+          const modelUrl = resolveBackendModelUrl(pageConfig.model_path, apiBase, config.p2p?.token);
+          const animationUrl = await resolveVrmAnimationUrl(
+            catgirlName,
+            pageConfig,
+            apiBase,
+            config.p2p?.token,
+          );
+          if (__DEV__) console.log('🎨 [syncCharacterModel] 设置 VRM URL:', modelUrl);
+          setAvatarModelType('vrm');
+          setVrmModelUrl(modelUrl);
+          setVrmAnimationUrl(animationUrl);
+          setVrmLighting(normalizeVrmLighting(pageConfig.lighting));
+          setLive2dModel((prev) => ({ ...prev, url: undefined, itemId: undefined }));
+          return;
+        }
+      } catch (pageConfigError) {
+        console.warn('[syncCharacterModel] page_config 获取失败，回退 Live2D 模型接口:', pageConfigError);
+      }
+
       const client = createCharactersApiClient(apiBase, config.p2p?.token);
       const modelRes = await client.getCurrentLive2dModel(catgirlName);
-      if (__DEV__) console.log('🎨 [syncLive2dModel] API 返回:', JSON.stringify(modelRes));
+      if (__DEV__) console.log('🎨 [syncCharacterModel] Live2D API 返回:', JSON.stringify(modelRes));
       if (modelRes.success && modelRes.model_info) {
         const modelUrl = appendP2PToken(`${apiBase}${modelRes.model_info.path}`, config.p2p?.token);
-        if (__DEV__) console.log('🎨 [syncLive2dModel] 设置模型 URL:', modelUrl);
+        if (__DEV__) console.log('🎨 [syncCharacterModel] 设置 Live2D URL:', modelUrl);
+        setAvatarModelType('live2d');
+        setVrmModelUrl(undefined);
+        setVrmAnimationUrl(undefined);
+        setVrmLighting(undefined);
         setLive2dModel({
           name: modelRes.model_info.name,
           url: modelUrl,
           itemId: modelRes.model_info.item_id,
         });
       } else {
-        console.warn('🎨 [syncLive2dModel] API 返回但无 model_info:', modelRes);
+        console.warn('🎨 [syncCharacterModel] Live2D API 返回但无 model_info:', modelRes);
       }
     } catch (e) {
-      console.warn('[syncLive2dModel] 获取模型信息失败:', e);
+      console.warn('[syncCharacterModel] 获取模型信息失败:', e);
     }
   }, [config, isConfigLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -223,6 +437,24 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
 
     const syncCurrentCatgirl = async () => {
       try {
+        if (config.characterName) {
+          setCurrentCatgirl(config.characterName);
+          console.log('🎭 [syncCurrentCatgirl] 使用手机本地角色:', config.characterName);
+          await syncCharacterModel(config.characterName);
+          setTimeout(() => {
+            if (audio.isReadyRef.current) {
+              console.log('📤 发送 start_session 以同步手机本地角色音色');
+              audio.sendMessage({
+                action: 'start_session',
+                input_type: 'text',
+                audio_format: 'PCM_48000HZ_MONO_16BIT',
+                new_session: false,
+              });
+            }
+          }, 500);
+          return;
+        }
+
         const apiBase = buildHttpBaseURL(config);
         if (__DEV__) console.log('🌐 [syncCurrentCatgirl] apiBase =', apiBase);
         const client = createCharactersApiClient(apiBase, config.p2p?.token);
@@ -233,9 +465,9 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
           if (config.characterName !== res.current_catgirl) {
             await setConfig({ ...config, characterName: res.current_catgirl });
           }
-          console.log('🎭 [syncCurrentCatgirl] 准备 syncLive2dModel:', res.current_catgirl);
-          await syncLive2dModel(res.current_catgirl);
-          console.log('✅ [syncCurrentCatgirl] syncLive2dModel 完成');
+          console.log('🎭 [syncCurrentCatgirl] 准备 syncCharacterModel:', res.current_catgirl);
+          await syncCharacterModel(res.current_catgirl);
+          console.log('✅ [syncCurrentCatgirl] syncCharacterModel 完成');
 
           // 发送 start_session 以同步角色音色
           // 使用 audio.isReadyRef（ref，始终最新）避免闭包捕获 isConnected 旧值
@@ -258,13 +490,20 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       }
     };
     syncCurrentCatgirl();
-  }, [isConfigLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [
+    config.characterName,
+    config.host,
+    config.p2p?.token,
+    config.port,
+    isConfigLoaded,
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 工具栏状态管理（与 Web 版本一致）
   const [isMobile, setIsMobile] = useState(true); // RN 默认为移动端
   const [screenHeight, setScreenHeight] = useState(() => Dimensions.get('window').height);
   const [toolbarGoodbyeMode, setToolbarGoodbyeMode] = useState(false);
   const [toolbarMicEnabled, setToolbarMicEnabled] = useState(false);
+  const [isVrmVisionMode, setIsVrmVisionMode] = useState(false);
   const [toolbarOpenPanel, setToolbarOpenPanel] = useState<Live2DRightToolbarPanel>(null);
   const [toolbarSettings, setToolbarSettings] = useState<Live2DSettingsState>({
     mergeMessages: true,
@@ -273,6 +512,25 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     proactiveVision: false,
     darkMode: false,
   });
+  const {
+    emotion: vrmEmotion,
+    gesture: vrmGesture,
+    gestureRevision: vrmGestureRevision,
+    dispatch: dispatchVrmBehavior,
+  } = useVrmBehavior({
+    enabled: avatarModelType === 'vrm',
+    isVoiceMode: toolbarMicEnabled,
+    isVisionMode: isVrmVisionMode,
+  });
+
+  useEffect(() => {
+    dispatchVrmBehavior({ type: 'model_changed' });
+  }, [avatarModelType, dispatchVrmBehavior, vrmModelUrl]);
+
+  const lastVisionActivityAtRef = useRef(0);
+  const markVrmVisionActivity = useCallback(() => {
+    lastVisionActivityAtRef.current = Date.now();
+  }, []);
 
   // 消息去重：跟踪已发送消息的 clientMessageId（使用 Map 存储时间戳，支持 TTL 清理）
   // 配置：TTL 5分钟，最大条目数 1000，清理间隔 1分钟
@@ -327,6 +585,11 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
 
   // Live2D Preferences 持久化
   const { repository: preferencesRepository } = useLive2DPreferences();
+  const {
+    calibration: vrmMotionCalibration,
+    saveCalibration: saveVrmMotionCalibration,
+    resetCalibration: resetVrmMotionCalibration,
+  } = useVrmMotionCalibration(vrmModelUrl);
 
   const chat = useChatMessages({
     maxMessages: 100,
@@ -347,6 +610,8 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   // 处理相机拍照结果
   useEffect(() => {
     if (camera.photo) {
+      markVrmVisionActivity();
+      dispatchVrmBehavior({ type: 'vision_image_captured' });
       // 将拍照结果添加到待发送列表
       const newImage = {
         id: `camera-${Date.now()}`,
@@ -355,17 +620,18 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       setCameraPendingImages(prev => [...prev, newImage].slice(0, 5));
       camera.clearPhoto();
     }
-  }, [camera.photo, camera.clearPhoto]);
+  }, [camera.photo, camera.clearPhoto, dispatchVrmBehavior, markVrmVisionActivity]);
 
   // 稳定 P2P 配置引用，避免不必要的重连（依赖整个 p2p 对象，而非只追踪 token）
   const p2pConfig = useMemo(() => config.p2p, [config.p2p]);
+  const isAudioConnectionEnabled = isConfigLoaded && (!p2pConfig || udpConnection.status === 'connected');
 
   const audio = useAudio({
     host: config.host,
     port: config.port,
     characterName: config.characterName,
     p2p: p2pConfig,  // P2P 配置（如果存在则使用 P2P 模式连接）
-    enabled: isConfigLoaded,  // 等待配置加载完成后再连接
+    enabled: isAudioConnectionEnabled,  // 等待配置和 LAN/P2P 连接确认后再连接
     isSwitchingRef: isSwitchingCharacterRef,  // 传入角色切换标志，用于在切换期间忽略错误
     isInBackgroundRef: isInBackgroundRef,  // 传入后台标志，用于在拍照等场景忽略错误
     onMessage: async (event) => {
@@ -374,7 +640,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       if (typeof event.data !== 'string') return;
 
       // 检查 clientMessageId 用于去重
-      let parsedMsg: any = null;
+      let parsedMsg: Record<string, unknown> | null = null;
       try {
         parsedMsg = JSON.parse(event.data);
         const clientMessageId = parsedMsg?.clientMessageId as string | undefined;
@@ -401,6 +667,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         } else {
           activeSessionModeRef.current = null;
         }
+        dispatchVrmBehavior({ type: 'session_started', inputMode });
         if (sessionTimeoutRef.current) {
           clearTimeout(sessionTimeoutRef.current);
           sessionTimeoutRef.current = null;
@@ -417,6 +684,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       if (parsedMsg?.type === 'session_failed') {
         console.log('❌ 收到 session_failed，input_mode:', parsedMsg.input_mode);
         setIsTextSessionActive(false);
+        dispatchVrmBehavior({ type: 'session_failed' });
         activeSessionModeRef.current = null;
         if (sessionTimeoutRef.current) {
           clearTimeout(sessionTimeoutRef.current);
@@ -434,7 +702,15 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       if (parsedMsg?.type === 'session_ended_by_server') {
         console.log('⚠️ 收到 session_ended_by_server，input_mode:', parsedMsg.input_mode);
         setIsTextSessionActive(false);
+        dispatchVrmBehavior({ type: 'session_ended' });
         activeSessionModeRef.current = null;
+        return;
+      }
+
+      // 处理 session_preparing 事件（服务端正在准备 session，如模型加载）
+      if (parsedMsg?.type === 'session_preparing') {
+        console.log('⏳ 收到 session_preparing，input_mode:', parsedMsg.input_mode);
+        dispatchVrmBehavior({ type: 'session_preparing' });
         return;
       }
 
@@ -444,12 +720,26 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       // 根据消息类型，通过 MainManager 触发相应的行为
       if (result?.type === 'gemini_response') {
         mainManager.onGeminiResponse(!!result.isNewMessage);
+        dispatchVrmBehavior({ type: 'assistant_response', isNewMessage: !!result.isNewMessage });
+        if (result.isNewMessage && Date.now() - lastVisionActivityAtRef.current < 45_000) {
+          const visionBehavior = inferVisionBehavior(result.text || '');
+          if (visionBehavior) dispatchVrmBehavior(visionBehavior);
+        }
       } else if (result?.type === 'user_activity') {
         mainManager.onUserSpeechDetected();
+        dispatchVrmBehavior({ type: 'user_activity' });
       } else if (result?.type === 'turn_end') {
         mainManager.onTurnEnd(result.fullText);
+        dispatchVrmBehavior({ type: 'turn_end' });
+      } else if (result?.type === 'response_discarded') {
+        // 后端丢弃了当前响应（如用户打断或新轮覆盖），清理流式 UI 状态
+        console.log('🗑️ 收到 response_discarded');
+        dispatchVrmBehavior({ type: 'response_discarded' });
       } else if ((result?.type === 'status' || result?.type === 'system_notice') && result.message) {
         // 系统状态消息通过 Toast 显示，不加入聊天列表
+        if (isErrorStatusMessage(result.message)) {
+          dispatchVrmBehavior({ type: 'status_error' });
+        }
         statusToastRef.current?.show(result.message, 3000);
       } else if (result?.type === 'catgirl_switched' && result.characterName) {
         // 幂等保护：如果已在切换中且目标角色相同，跳过重复处理
@@ -464,6 +754,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         // 本地和远端切换统一由此处驱动
         // 立即停止旧角色的音频播放，防止切换后还听到旧角色的声音
         audio.clearAudioQueue();
+        dispatchVrmBehavior({ type: 'character_switch_start' });
         setIsChatForceCollapsed(true);
         setCharacterLoading(true);
         isSwitchingCharacterRef.current = true;
@@ -471,7 +762,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         // 角色切换时重置 text session 状态，确保下次发送消息时重新初始化 session
         setIsTextSessionActive(false);
         await setConfig({ ...config, characterName: result.characterName });
-        await syncLive2dModel(result.characterName);
+        await syncCharacterModel(result.characterName);
 
         // 如果 config.characterName 已经等于新角色名，useAudio effect 不会重新运行
         // 需要手动发送 start_session 并完成切换
@@ -499,16 +790,14 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
             clearTimeout(switchErrorTimerRef.current);
             switchErrorTimerRef.current = null;
           }
-          setSwitchedCharacterName(result.characterName);
-          if (switchedNameTimerRef.current) clearTimeout(switchedNameTimerRef.current);
-          switchedNameTimerRef.current = setTimeout(() => setSwitchedCharacterName(null), 2500);
+          dispatchVrmBehavior({ type: 'character_switch_done' });
           return;
         }
 
-        // 竞态保护：syncLive2dModel 期间 onConnectionChange(true) 可能已经完成切换
+        // 竞态保护：syncCharacterModel 期间 onConnectionChange(true) 可能已经完成切换
         // 此时 isSwitchingCharacterRef 已被重置为 false，无需再设超时
         if (!isSwitchingCharacterRef.current) {
-          console.log('✅ [catgirl_switched] 切换已在 syncLive2dModel 期间完成，跳过超时设置');
+          console.log('✅ [catgirl_switched] 切换已在 syncCharacterModel 期间完成，跳过超时设置');
           return;
         }
 
@@ -521,6 +810,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
             isSwitchingCharacterRef.current = false;
             characterLoadingTimerRef.current = null;
             setSwitchError('连接超时，角色切换失败');
+            dispatchVrmBehavior({ type: 'status_error' });
             if (switchErrorTimerRef.current) clearTimeout(switchErrorTimerRef.current);
             switchErrorTimerRef.current = setTimeout(() => setSwitchError(null), 3000);
           }, 15000);
@@ -530,14 +820,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     onConnectionChange: (connected) => {
       sessionStore.set(connected);
       if (connected) {
-        // 连接成功，显示 Toast 提示
-        if (wasInBackgroundRef.current) {
-          // 从后台恢复后的重连
-          statusToastRef.current?.show('已恢复连接', 2000);
-        } else if (!isSwitchingCharacterRef.current) {
-          // 普通连接成功（非角色切换）
-          statusToastRef.current?.show('已连接到服务器', 2000);
-        }
+        dispatchVrmBehavior({ type: 'connection_ready' });
         if (isSwitchingCharacterRef.current) {
           // 发送 start_session 以重新加载角色音色
           console.log('📤 发送 start_session 以重新加载角色音色');
@@ -546,11 +829,16 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
             input_type: 'text',
             audio_format: 'PCM_48000HZ_MONO_16BIT',
             new_session: false,
+            language: i18nInstance?.language?.substring(0, 5) || 'zh-CN',
           });
           console.log('✅ start_session 已调用');
 
           // 立即重置角色切换标志，避免后续消息重复触发超时
           isSwitchingCharacterRef.current = false;
+          if (localSwitchReleaseTimerRef.current) {
+            clearTimeout(localSwitchReleaseTimerRef.current);
+            localSwitchReleaseTimerRef.current = null;
+          }
           console.log('🔄 角色切换标志已重置');
           setCharacterLoading(false);
           setIsChatForceCollapsed(false);
@@ -565,16 +853,10 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
             clearTimeout(switchErrorTimerRef.current);
             switchErrorTimerRef.current = null;
           }
-          const name = currentCatgirlRef.current;
-          setSwitchedCharacterName(name);
-          if (switchedNameTimerRef.current) clearTimeout(switchedNameTimerRef.current);
-          switchedNameTimerRef.current = setTimeout(() => setSwitchedCharacterName(null), 2500);
+          dispatchVrmBehavior({ type: 'character_switch_done' });
         }
       } else {
-        // 连接断开，显示 Toast 提示（仅在非后台状态下显示）
-        if (!isInBackgroundRef.current) {
-          statusToastRef.current?.show('连接已断开，正在尝试重连...', 3000);
-        }
+        dispatchVrmBehavior({ type: 'connection_lost' });
         // 连接断开时重置 text session 状态
         setIsTextSessionActive(false);
         activeSessionModeRef.current = null;
@@ -582,25 +864,170 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     }
   });
 
+  // 同步 reconnect 和连接状态到 ref，供 AppState 前台恢复时使用
+  audioReconnectRef.current = audio.reconnect;
+  audioConnectedRef.current = audio.isConnectedRef.current;
+
   // 摄像头流式 hook
   const cameraStream = useCameraStream({
     sendMessage: audio.sendMessage,
     isConnected: audio.isConnected,
     isInBackgroundRef,
+    onFrameSent: () => {
+      markVrmVisionActivity();
+      dispatchVrmBehavior({ type: 'vision_stream_frame' });
+    },
   });
+
+  const previousCameraStreamStatusRef = useRef(cameraStream.status);
+  useEffect(() => {
+    const previousStatus = previousCameraStreamStatusRef.current;
+    const nextStatus = cameraStream.status;
+    if (previousStatus === nextStatus) return;
+    previousCameraStreamStatusRef.current = nextStatus;
+
+    setIsVrmVisionMode(nextStatus === 'streaming' || nextStatus === 'paused');
+
+    if (nextStatus === 'streaming') {
+      dispatchVrmBehavior({ type: 'vision_stream_started' });
+    } else if (nextStatus === 'paused') {
+      dispatchVrmBehavior({ type: 'vision_stream_paused' });
+    } else if (nextStatus === 'idle' && (previousStatus === 'streaming' || previousStatus === 'paused')) {
+      dispatchVrmBehavior({ type: 'vision_stream_stopped' });
+    } else if (nextStatus === 'error') {
+      dispatchVrmBehavior({ type: 'vision_failed' });
+    }
+  }, [cameraStream.status, dispatchVrmBehavior]);
+
+  // 拍照和实时视觉共用相机资源；如果实时摄像头正在运行，先释放它再拉起系统相机。
+  const handleTakePhoto = useCallback(async () => {
+    dispatchVrmBehavior({ type: 'vision_capture_requested' });
+    if (cameraStream.isStreaming) {
+      console.log('📸 拍照前先暂停实时摄像头，避免相机资源冲突');
+      cameraStream.stopStreaming();
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    await camera.takePhoto();
+  }, [camera, cameraStream.isStreaming, cameraStream.stopStreaming, dispatchVrmBehavior]);
 
   // 监听摄像头流错误
   useEffect(() => {
     if (cameraStream.error) {
+      dispatchVrmBehavior({ type: 'vision_failed' });
       statusToastRef.current?.show(`摄像头错误: ${cameraStream.error}`, 3000);
     }
-  }, [cameraStream.error]);
+  }, [cameraStream.error, dispatchVrmBehavior]);
 
-  // 将 audio.connectionStatus 映射到 ConnectionStatus 类型
-  // 在角色切换期间，保持 'open' 状态，避免显示断开错误
+  const mobileRuntime = useMemo<{
+    phase: MobileRuntimePhase;
+    chatStatus: ConnectionStatus;
+    label: string;
+    detail: string;
+    canRetry: boolean;
+    canRescan: boolean;
+  }>(() => {
+    if (!isConfigLoaded) {
+      return {
+        phase: 'idle',
+        chatStatus: 'idle',
+        label: '正在读取连接配置',
+        detail: '',
+        canRetry: false,
+        canRescan: false,
+      };
+    }
+
+    if (p2pConfig) {
+      if (udpConnection.status === 'idle' || udpConnection.status === 'connecting') {
+        return {
+          phase: 'connecting',
+          chatStatus: 'connecting',
+          label: p2pConfig.token ? '正在连接电脑端' : '正在恢复配对',
+          detail: p2pConfig.token ? '正在确认二维码里的局域网地址。' : '请重新扫码以刷新连接凭证。',
+          canRetry: false,
+          canRescan: !p2pConfig.token,
+        };
+      }
+
+      if (udpConnection.status === 'failed') {
+        return {
+          phase: 'failed',
+          chatStatus: 'closed',
+          label: '无法连接电脑端',
+          detail: p2pConfig.token
+            ? '请确认电脑端在线、手机和电脑在同一网络，或重新扫码。'
+            : '连接凭证已失效，请重新扫码。',
+          canRetry: true,
+          canRescan: true,
+        };
+      }
+    }
+
+    if (audio.connectionPhase === 'connected') {
+      return {
+        phase: 'connected',
+        chatStatus: 'open',
+        label: '已连接',
+        detail: '',
+        canRetry: false,
+        canRescan: false,
+      };
+    }
+
+    if (audio.connectionPhase === 'connecting') {
+      return {
+        phase: 'connecting',
+        chatStatus: 'connecting',
+        label: '连接中',
+        detail: '',
+        canRetry: false,
+        canRescan: false,
+      };
+    }
+
+    if (audio.connectionPhase === 'reconnecting') {
+      return {
+        phase: 'reconnecting',
+        chatStatus: 'reconnecting',
+        label: '正在重连',
+        detail: audio.connectionError || '网络切换或电脑端短暂不可用，正在尝试恢复。',
+        canRetry: true,
+        canRescan: !!p2pConfig?.token,
+      };
+    }
+
+    if (audio.connectionPhase === 'failed') {
+      return {
+        phase: 'failed',
+        chatStatus: 'closed',
+        label: '连接失败',
+        detail: audio.connectionError || '请确认后端已启动，或重新扫码。',
+        canRetry: true,
+        canRescan: !!p2pConfig?.token,
+      };
+    }
+
+    return {
+      phase: 'disconnected',
+      chatStatus: 'closed',
+      label: '未连接',
+      detail: '请扫码或检查服务器配置。',
+      canRetry: true,
+      canRescan: true,
+    };
+  }, [
+    audio.connectionError,
+    audio.connectionPhase,
+    isConfigLoaded,
+    p2pConfig,
+    p2pConfig?.token,
+    udpConnection.status,
+  ]);
+
   const connectionStatus: ConnectionStatus = isSwitchingCharacterRef.current
     ? 'open'
-    : (audio.isConnected ? 'open' : 'closed');
+    : mobileRuntime.chatStatus;
 
   const live2d = useLive2D({
     modelName: live2dModel.name,
@@ -614,40 +1041,29 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     // 这需要修改 useLive2D 以支持持久化
   });
 
-  // 口型同步 hook（无平滑模式，与 Web 版本一致）
+  // 口型同步（attack/release 平滑 + 非线性响应曲线）
   const lipSync = useLipSync({
-    minAmplitude: 0.005,    // 最小振幅阈值（降低以更敏感）
-    amplitudeScale: 1.0,    // 振幅缩放（调整嘴巴张开幅度）
-    autoStart: false,       // 不自动启动，等待模型加载完成
+    minAmplitude: 0.008,    // 噪声门限
+    amplitudeScale: 1.0,    // 整体灵敏度
+    attackMs: 25,           // 张嘴速度（快）
+    releaseMs: 90,          // 闭嘴速度（慢，更自然）
+    curvePower: 0.55,       // 非线性曲线（<1 放大轻声）
+    autoStart: false,
   });
 
   useFocusEffect(
     useCallback(() => {
-      console.log('Live2D页面获得焦点');
-
-      // 设置页面为焦点状态
       setIsPageFocused(true);
 
-      // 只有 url 已就绪（syncLive2dModel 完成后）才触发加载
-      // 避免启动时 url 还是 undefined，回退到自拼 URL 加载错误模型
-      if (live2dModelRef.current.url) {
+      if (avatarModelTypeRef.current === 'live2d' && live2dModelRef.current.url) {
         live2d.loadModel();
       }
 
       return () => {
-        console.log('Live2D页面失去焦点');
-        // 停止口型同步（stop 应为幂等；避免把 isActive 放进依赖导致 focus effect 重跑）
         lipSync.stop();
-        console.log('👄 口型同步已停止（页面失焦）');
-        
-        // 设置页面为失去焦点状态
         setIsPageFocused(false);
-        // 页面失去焦点时，重置模型状态，避免在重新获得焦点时立即加载模型
-        // 这样可以确保 CubismFramework 有足够时间初始化
-        // 注意：原生视图会在 onDetachedFromWindow 中自动清理资源
-        live2d.unloadModel();
       };
-    }, [live2d.loadModel, live2d.unloadModel, lipSync.stop])
+    }, [live2d.loadModel, lipSync.stop])
   );
 
   // 角色切换后 modelUrl 变化时，页面已聚焦无法靠 useFocusEffect 触发，需单独监听
@@ -656,12 +1072,18 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   const loadModelRef = useRef(live2d.loadModel);
   loadModelRef.current = live2d.loadModel;
   useEffect(() => {
-    if (!isPageFocused || !live2dModel.url) return;
+    if (avatarModelType !== 'live2d' || !isPageFocused || !live2dModel.url) return;
     const timer = setTimeout(() => {
       loadModelRef.current();
     }, 0);
     return () => clearTimeout(timer);
-  }, [live2dModel]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [avatarModelType, isPageFocused, live2dModel]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (avatarModelType !== 'vrm') return;
+    live2d.unloadModel();
+    lipSync.stop();
+  }, [avatarModelType, live2d.unloadModel, lipSync.stop]);
 
   // ===== 初始化 MainManager =====
   useEffect(() => {
@@ -671,16 +1093,21 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
 
     if (audio.audioService) {
       mainManager.registerAudioService(audio.audioService);
+    } else {
+      mainManager.clearAudioService();
     }
 
-    if (live2d.live2dService) {
+    if (avatarModelType === 'live2d' && live2d.live2dService) {
       mainManager.registerLive2DService(live2d.live2dService);
+    } else if (avatarModelType === 'vrm') {
+      mainManager.clearLive2DService();
     }
 
     return () => {
       console.log('🧹 主界面清理');
+      mainManager.clearAudioService();
     };
-  }, [audio.audioService, live2d.live2dService]);
+  }, [audio.audioService, avatarModelType, live2d.live2dService]);
 
   useEffect(() => {
     console.log('live2d.live2dProps', live2d.live2dProps);
@@ -694,7 +1121,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   useEffect(() => {
     const jsReady = live2d.modelState.isReady && !!live2d.modelState.path;
     const nativeReady = live2d.isNativeModelLoaded;
-    const shouldRun = isPageFocused && jsReady && nativeReady;
+    const shouldRun = avatarModelType === 'live2d' && isPageFocused && jsReady && nativeReady;
 
     if (shouldRun) {
       if (!lipSync.isActive) {
@@ -712,6 +1139,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     }
   }, [
     isPageFocused,
+    avatarModelType,
     live2d.modelState.isReady,
     live2d.modelState.path,
     live2d.isNativeModelLoaded,
@@ -729,93 +1157,128 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   }, []);
 
   const handleLive2DTap = useCallback(() => {
+    if (avatarModelTypeRef.current === 'vrm') {
+      dispatchVrmBehavior({ type: 'tap' });
+      return;
+    }
+
     mainManager.onLive2DTap();
+  }, [dispatchVrmBehavior]);
+
+  const [vrmRenderPhase, setVrmRenderPhase] = useState<VRMRenderPhase>('idle');
+  const [vrmRenderError, setVrmRenderError] = useState<string | null>(null);
+
+  const handleVrmPhase = useCallback((phase: VRMRenderPhase) => {
+    setVrmRenderPhase(phase);
+    if (phase === 'loaded' || phase === 'fallback-loaded') {
+      setVrmRenderError(null);
+    }
   }, []);
 
-  // 双指长按拖动状态
-  const dragStartPositionRef = useRef<{ x: number; y: number } | null>(null);
-  // 使用独立 ref 跟踪当前位置，不依赖 React 状态（因为 setPosition 不会触发 React 更新）
+  const handleVrmError = useCallback((message: string | null) => {
+    setVrmRenderError(message);
+    if (!message) return;
+    console.warn('🎨 [VRM] render error:', message);
+    dispatchVrmBehavior({ type: 'status_error' });
+  }, [dispatchVrmBehavior]);
+
+  useEffect(() => {
+    setVrmRenderPhase('idle');
+    setVrmRenderError(null);
+  }, [avatarModelType, vrmAnimationUrl, vrmModelUrl]);
+
+  // Live2D 模型位置/缩放 ref（传给 Live2DStage）
   const currentModelPositionRef = useRef({ x: 0, y: 0 });
-  const [isDraggingModel, setIsDraggingModel] = useState(false);
-
-  // 双指缩放状态
-  const startScaleRef = useRef<number>(0.8);
   const currentScaleRef = useRef<number>(0.8);
-  const [isScalingModel, setIsScalingModel] = useState(false);
+  const [avatarTransformRevision, setAvatarTransformRevision] = useState(0);
 
-  // 拖动手势
-  const dragGesture = useMemo(() => {
-    let screenWidth = 1;
-    let screenHeight = 1;
-    return Gesture.Pan()
-      .minPointers(2)
-      .activateAfterLongPress(500)
-      .enabled(isPageFocused)
-      .runOnJS(true)
-      .onStart(() => {
-        const { width, height } = Dimensions.get('window');
-        screenWidth = width;
-        screenHeight = height;
-        // 使用持久化的位置 ref，而不是 React 状态
-        const pos = { ...currentModelPositionRef.current };
-        if (Math.abs(pos.x) > POSITION_LIMIT || Math.abs(pos.y) > POSITION_LIMIT) {
-          live2d.setModelPosition(0, 0);
-          currentModelPositionRef.current = { x: 0, y: 0 };
-          pos.x = 0;
-          pos.y = 0;
-        }
-        dragStartPositionRef.current = pos;
-        setIsDraggingModel(true);
+  useEffect(() => {
+    if (avatarModelType !== 'vrm' || !vrmModelUrl) return;
+    let cancelled = false;
+
+    preferencesRepository.load(vrmModelUrl)
+      .then((snapshot) => {
+        if (cancelled) return;
+
+        const position = snapshot?.position;
+        const scale = snapshot?.scale;
+        currentModelPositionRef.current = (
+          position &&
+          Number.isFinite(position.x) &&
+          Number.isFinite(position.y)
+        )
+          ? { x: position.x, y: position.y }
+          : { x: 0, y: 0 };
+        currentScaleRef.current = (
+          scale &&
+          Number.isFinite(scale.x) &&
+          scale.x > 0
+        )
+          ? scale.x
+          : 0.8;
+        setAvatarTransformRevision((revision) => revision + 1);
       })
-      .onUpdate((e) => {
-        const start = dragStartPositionRef.current;
-        if (!start) return;
-        // 大幅降低灵敏度：手指移动整个屏幕距离，模型仅移动 0.005 个逻辑单位
-        // 乘数越小灵敏度越低，0.005 = 低灵敏度（需要大幅度拖动才能移动模型）
-        const sensitivity = 0.005;
-        const newX = clampPos(start.x + (e.translationX / screenWidth) * sensitivity);
-        const newY = clampPos(start.y - (e.translationY / screenHeight) * sensitivity);
-        // 更新当前位置 ref，供下次拖动使用
-        currentModelPositionRef.current = { x: newX, y: newY };
-        live2d.setModelPosition(newX, newY);
-      })
-      .onFinalize(() => {
-        // 拖动结束时，保存最终位置到 ref（从 dragStartPositionRef 计算最终位置）
-        // 这样下次拖动时可以从上次结束的位置开始
-        dragStartPositionRef.current = null;
-        setIsDraggingModel(false);
+      .catch((e) => {
+        console.warn('[VRM] 加载模型位置偏好失败:', e);
       });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPageFocused]);
 
-  // 双指缩放手势（捏合/张开）
-  // 注意：Pinch 手势本身就需要双指，无需 minPointers
-  const pinchGesture = useMemo(() => {
-    return Gesture.Pinch()
-      .enabled(isPageFocused)
-      .runOnJS(true)
-      .onStart(() => {
-        // 记录开始时的缩放值
-        startScaleRef.current = currentScaleRef.current;
-        setIsScalingModel(true);
-      })
-      .onUpdate((e) => {
-        // 降低缩放灵敏度：缩放因子变化更平缓
-        const scaleSensitivity = 0.5;
-        const newScale = clampScale(startScaleRef.current * (1 + (e.scale - 1) * scaleSensitivity));
-        currentScaleRef.current = newScale;
-        live2d.setModelScale(newScale);
-      })
-      .onFinalize(() => {
-        setIsScalingModel(false);
-      });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPageFocused]);
+    return () => {
+      cancelled = true;
+    };
+  }, [avatarModelType, preferencesRepository, vrmModelUrl]);
 
-  // 组合手势：双指拖动 + 缩放同时识别
-  const live2dGesture = useMemo(() => {
-    return Gesture.Simultaneous(dragGesture, pinchGesture);
-  }, [dragGesture, pinchGesture]);
+  const handleModelAdjustEnd = useCallback(() => {
+    if (avatarModelTypeRef.current !== 'vrm' || !vrmModelUrl) return;
+
+    void preferencesRepository.save({
+      modelUri: vrmModelUrl,
+      position: { ...currentModelPositionRef.current },
+      scale: { x: currentScaleRef.current, y: currentScaleRef.current },
+    }).catch((e) => {
+      console.warn('[VRM] 保存模型位置偏好失败:', e);
+    });
+  }, [preferencesRepository, vrmModelUrl]);
+
+  const resetVrmTransform = useCallback(() => {
+    if (avatarModelTypeRef.current !== 'vrm' || !vrmModelUrl) return;
+    currentModelPositionRef.current = { x: 0, y: 0 };
+    currentScaleRef.current = 0.8;
+    setAvatarTransformRevision((revision) => revision + 1);
+    void preferencesRepository.save({
+      modelUri: vrmModelUrl,
+      position: { x: 0, y: 0 },
+      scale: { x: 0.8, y: 0.8 },
+    }).catch((e) => {
+      console.warn('[VRM] 重置模型位置偏好失败:', e);
+    });
+  }, [preferencesRepository, vrmModelUrl]);
+
+  const scaleVrmMotion = useCallback((factor: number) => {
+    const next = {
+      gaze: Math.max(0, Math.min(2, vrmMotionCalibration.gaze * factor)),
+      body: Math.max(0, Math.min(2, vrmMotionCalibration.body * factor)),
+      arms: Math.max(0, Math.min(2, vrmMotionCalibration.arms * factor)),
+      speech: Math.max(0, Math.min(2, vrmMotionCalibration.speech * factor)),
+      gesture: Math.max(0, Math.min(2, vrmMotionCalibration.gesture * factor)),
+      idle: Math.max(0, Math.min(2, vrmMotionCalibration.idle * factor)),
+    };
+    void saveVrmMotionCalibration(next);
+  }, [saveVrmMotionCalibration, vrmMotionCalibration]);
+
+  const finishMobileCharacterSwitch = useCallback((name: string | null) => {
+    if (characterLoadingTimerRef.current) {
+      clearTimeout(characterLoadingTimerRef.current);
+      characterLoadingTimerRef.current = null;
+    }
+    setCharacterLoading(false);
+    setIsChatForceCollapsed(false);
+    setSwitchError(null);
+    if (switchErrorTimerRef.current) {
+      clearTimeout(switchErrorTimerRef.current);
+      switchErrorTimerRef.current = null;
+    }
+    dispatchVrmBehavior({ type: 'character_switch_done' });
+  }, [dispatchVrmBehavior]);
 
   // 工具栏事件处理（与 Web 版本一致）
   const handleToolbarSettingsChange = useCallback((id: Live2DSettingsToggleId, next: boolean) => {
@@ -842,10 +1305,12 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
           switchErrorTimerRef.current = null;
         }
         setVoicePrepareStatus('ready');
+        dispatchVrmBehavior({ type: 'voice_ready' });
         setTimeout(() => setVoicePrepareStatus(null), 800);
       } catch {
         setVoicePrepareStatus(null);
         setToolbarMicEnabled(false);
+        dispatchVrmBehavior({ type: 'voice_failed' });
         // 显示与角色切换失败一致的底部错误横幅
         setSwitchError('语音系统准备失败');
         if (switchErrorTimerRef.current) clearTimeout(switchErrorTimerRef.current);
@@ -856,8 +1321,9 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       // 语音会话停止后，重置 text session 状态
       // 这样下次发送文本消息时会重新发送 start_session
       setIsTextSessionActive(false);
+      dispatchVrmBehavior({ type: 'voice_stop' });
     }
-  }, [mainManager]);
+  }, [dispatchVrmBehavior, mainManager]);
 
   const ensureRealtimeVisionSession = useCallback(async (): Promise<boolean> => {
     const getActiveSessionMode = (): 'text' | 'audio' | null => activeSessionModeRef.current;
@@ -871,6 +1337,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     }
 
     console.log('📤 为实时摄像头准备 audio session');
+    dispatchVrmBehavior({ type: 'vision_preparing' });
     audio.sendMessage({
       action: 'start_session',
       input_type: 'audio',
@@ -889,25 +1356,32 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
 
     console.warn('⚠️ 实时摄像头切换 audio session 超时');
     return false;
-  }, [audio.isConnected, audio.isRecording, audio.sendMessage]);
+  }, [audio.isConnected, audio.isRecording, audio.sendMessage, dispatchVrmBehavior]);
 
   const handleToggleCamera = useCallback(async (next: boolean) => {
     if (!next) {
       // 停止摄像头
       cameraStream.stopStreaming();
+      dispatchVrmBehavior({ type: 'vision_stream_stopped' });
+      setIsVrmVisionMode(false);
       statusToastRef.current?.show('已停止摄像头', 2000);
       return;
     }
 
+    dispatchVrmBehavior({ type: 'vision_preparing' });
     // 先检查权限
     const hasPermission = await cameraStream.checkAndRequestPermission();
-    if (!hasPermission) return;
+    if (!hasPermission) {
+      dispatchVrmBehavior({ type: 'vision_failed' });
+      return;
+    }
 
     // 显示选择对话框
     const startCameraStream = async (selectedFacing: 'front' | 'back') => {
       statusToastRef.current?.show('正在准备实时视觉...', 2000);
       const sessionReady = await ensureRealtimeVisionSession();
       if (!sessionReady) {
+        dispatchVrmBehavior({ type: 'vision_failed' });
         statusToastRef.current?.show('实时视觉会话准备失败', 3000);
         return;
       }
@@ -941,7 +1415,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
         },
       ]
     );
-  }, [cameraStream.startStreaming, cameraStream.stopStreaming, cameraStream.checkAndRequestPermission, ensureRealtimeVisionSession]);
+  }, [cameraStream.startStreaming, cameraStream.stopStreaming, cameraStream.checkAndRequestPermission, dispatchVrmBehavior, ensureRealtimeVisionSession]);
 
   const handleGoodbye = useCallback(() => {
     // 如果麦克风正在录音，先停止
@@ -954,16 +1428,63 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     // 如果摄像头流正在运行，停止
     if (cameraStream.isStreaming) {
       cameraStream.stopStreaming();
+      dispatchVrmBehavior({ type: 'vision_stream_stopped' });
+      setIsVrmVisionMode(false);
     }
     setToolbarGoodbyeMode(true);
     setToolbarOpenPanel(null);
-  }, [mainManager, toolbarMicEnabled, cameraStream.isStreaming, cameraStream.stopStreaming]);
+  }, [dispatchVrmBehavior, mainManager, toolbarMicEnabled, cameraStream.isStreaming, cameraStream.stopStreaming]);
 
   const handleReturn = useCallback(() => {
     setToolbarGoodbyeMode(false);
   }, []);
 
   const handleSettingsMenuClick = useCallback((id: string) => {
+    if (id === 'live2dSettings') {
+      if (avatarModelTypeRef.current === 'vrm') {
+        setToolbarOpenPanel(null);
+        Alert.alert(
+          'VRM 设置',
+          vrmAnimationUrl ? '当前角色已配置动画文件。' : '当前角色使用基础动作系统。',
+          [
+            {
+              text: '重置位置',
+              onPress: () => {
+                resetVrmTransform();
+                statusToastRef.current?.show('VRM 位置已重置', 1800);
+              },
+            },
+            {
+              text: '动作轻一点',
+              onPress: () => {
+                scaleVrmMotion(0.85);
+                statusToastRef.current?.show('VRM 动作已调轻', 1800);
+              },
+            },
+            {
+              text: '动作明显点',
+              onPress: () => {
+                scaleVrmMotion(1.15);
+                statusToastRef.current?.show('VRM 动作已增强', 1800);
+              },
+            },
+            {
+              text: '恢复默认动作',
+              onPress: () => {
+                void resetVrmMotionCalibration();
+                statusToastRef.current?.show('VRM 动作已恢复默认', 1800);
+              },
+            },
+            { text: t('common.cancel') as string, style: 'cancel' },
+          ],
+        );
+        return;
+      }
+
+      Alert.alert('模型设置', 'Live2D 设置稍后会接到这里。');
+      return;
+    }
+
     if (id === 'characterManage') {
       const loadCharacters = async () => {
         try {
@@ -979,7 +1500,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
           }
 
           setCharacterList(names);
-          setCurrentCatgirl(data.当前猫娘 || null);
+          setCurrentCatgirl(currentCatgirlRef.current || config.characterName || data.当前猫娘 || null);
           setToolbarOpenPanel(null);
           setCharacterModalVisible(true);
         } catch (err: any) {
@@ -1006,19 +1527,17 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
           // 2. 清空聊天记录
           chat.clearMessages();
 
-          // 3. 重连 WebSocket
+          // 3. P2P 场景先重试底层探测，再重连 WebSocket
+          if (p2pConfig) {
+            udpRetryRef.current();
+          }
           audio.reconnect();
 
-          // 4. 重新加载角色 + Live2D 模型
-          const apiBase = buildHttpBaseURL(config);
-          const client = createCharactersApiClient(apiBase, config.p2p?.token);
-          const res = await client.getCurrentCatgirl();
-          if (res.current_catgirl) {
-            setCurrentCatgirl(res.current_catgirl);
-            if (config.characterName !== res.current_catgirl) {
-              await setConfig({ ...config, characterName: res.current_catgirl });
-            }
-            await syncLive2dModel(res.current_catgirl);
+          // 4. 重新加载手机当前角色模型，不读取后端全局当前角色
+          const name = currentCatgirlRef.current || config.characterName;
+          if (name) {
+            setCurrentCatgirl(name);
+            await syncCharacterModel(name);
           }
 
           statusToastRef.current?.show('重新加载完成', 2000);
@@ -1042,8 +1561,35 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       return;
     }
 
+    if (id === 'chatFont') {
+      const currentLabel = FONT_OPTIONS.find(f => f.id === chatFontId)?.label ?? '系统默认';
+      const buttons: Array<{ text: string; onPress?: () => void; style?: 'cancel' }> =
+        FONT_OPTIONS.map(f => ({
+          text: f.label + (f.id === chatFontId ? ' ✓' : ''),
+          onPress: () => setChatFontId(f.id),
+        }));
+      buttons.push({ text: t('common.cancel') as string, style: 'cancel' });
+      Alert.alert('聊天字体', `当前: ${currentLabel}`, buttons);
+      return;
+    }
+
     Alert.alert(t('common.alert'), `即将打开: ${id}`);
-  }, [config, toolbarMicEnabled, mainManager, chat, audio, syncLive2dModel]);
+  }, [
+    audio,
+    chat,
+    chatFontId,
+    config,
+    mainManager,
+    p2pConfig,
+    resetVrmMotionCalibration,
+    resetVrmTransform,
+    scaleVrmMotion,
+    setChatFontId,
+    syncCharacterModel,
+    t,
+    toolbarMicEnabled,
+    vrmAnimationUrl,
+  ]);
 
   const handleSwitchCharacter = useCallback(async (name: string) => {
     // 检查是否在语音模式
@@ -1053,36 +1599,69 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     }
 
     try {
+      setCharacterModalVisible(false);
       setCharacterLoading(true);
-      const apiBase = buildHttpBaseURL(config);
-      const client = createCharactersApiClient(apiBase, config.p2p?.token);
-      const res = await client.setCurrentCatgirl(name);
-
-      if (res.success) {
-        setCharacterModalVisible(false);
-        // 立即置为切换中，屏蔽切换期间的 WebSocket 错误（不等服务端广播）
-        isSwitchingCharacterRef.current = true;
-        // UI 更新由服务端广播的 catgirl_switched 消息统一驱动
-        // 超时保护：15 秒内若未收到 onConnectionChange(true)，自动解除所有切换状态
-        if (characterLoadingTimerRef.current) clearTimeout(characterLoadingTimerRef.current);
-        characterLoadingTimerRef.current = setTimeout(() => {
-          setCharacterLoading(false);
-          setIsChatForceCollapsed(false);
-          isSwitchingCharacterRef.current = false;
-          characterLoadingTimerRef.current = null;
-          setSwitchError('连接超时，角色切换失败');
-          if (switchErrorTimerRef.current) clearTimeout(switchErrorTimerRef.current);
-          switchErrorTimerRef.current = setTimeout(() => setSwitchError(null), 3000);
-        }, 15000);
-      } else {
-        setCharacterLoading(false);
-        Alert.alert(t('main.character.switchError'), res.error || t('common.error'));
+      setIsChatForceCollapsed(true);
+      setSwitchError(null);
+      if (characterLoadingTimerRef.current) {
+        clearTimeout(characterLoadingTimerRef.current);
+        characterLoadingTimerRef.current = null;
       }
+      if (switchErrorTimerRef.current) {
+        clearTimeout(switchErrorTimerRef.current);
+        switchErrorTimerRef.current = null;
+      }
+      if (localSwitchReleaseTimerRef.current) {
+        clearTimeout(localSwitchReleaseTimerRef.current);
+        localSwitchReleaseTimerRef.current = null;
+      }
+
+      audio.clearAudioQueue();
+      dispatchVrmBehavior({ type: 'character_switch_start' });
+      isSwitchingCharacterRef.current = true;
+      setCurrentCatgirl(name);
+      setIsTextSessionActive(false);
+      activeSessionModeRef.current = null;
+      chat.clearMessages();
+
+      if (config.characterName !== name) {
+        await setConfig({ ...config, characterName: name });
+      }
+      await syncCharacterModel(name);
+
+      if (config.characterName === name && audio.isConnected) {
+        audio.sendMessage({
+          action: 'start_session',
+          input_type: 'text',
+          audio_format: 'PCM_48000HZ_MONO_16BIT',
+          new_session: false,
+          language: i18nInstance?.language?.substring(0, 5) || 'zh-CN',
+        });
+      }
+
+      finishMobileCharacterSwitch(name);
+      localSwitchReleaseTimerRef.current = setTimeout(() => {
+        isSwitchingCharacterRef.current = false;
+        localSwitchReleaseTimerRef.current = null;
+      }, 20_000);
     } catch (err: any) {
+      isSwitchingCharacterRef.current = false;
       setCharacterLoading(false);
+      setIsChatForceCollapsed(false);
       Alert.alert(t('main.character.switchError'), err.message || t('connection.errors.networkError'));
     }
-  }, [config, toolbarMicEnabled]);
+  }, [
+    audio,
+    chat,
+    config,
+    dispatchVrmBehavior,
+    finishMobileCharacterSwitch,
+    i18nInstance?.language,
+    setConfig,
+    syncCharacterModel,
+    t,
+    toolbarMicEnabled,
+  ]);
 
   // 确保 text session 已启动（与 Web 端一致的 Legacy 协议）
   const ensureTextSession = useCallback(async (): Promise<boolean> => {
@@ -1099,6 +1678,8 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     if (cameraStream.isStreaming) {
       console.log('📹 切换到文本会话，先暂停实时摄像头');
       cameraStream.stopStreaming();
+      dispatchVrmBehavior({ type: 'vision_stream_stopped' });
+      setIsVrmVisionMode(false);
       statusToastRef.current?.show('发送文本时已暂停实时摄像头', 2500);
     }
 
@@ -1155,7 +1736,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
 
     pendingSessionPromiseRef.current = promise;
     return promise;
-  }, [isTextSessionActive, audio.isConnected, audio.isRecording, audio.sendMessage, audio.toggleRecording, cameraStream.isStreaming, cameraStream.stopStreaming]);
+  }, [isTextSessionActive, audio.isConnected, audio.isRecording, audio.sendMessage, audio.toggleRecording, cameraStream.isStreaming, cameraStream.stopStreaming, dispatchVrmBehavior]);
 
   // 图片消息服务
   const imageMessageService = useMemo(() => new ImageMessageService(), []);
@@ -1164,14 +1745,16 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   // 使用 stream_data action 和 clientMessageId 与 N.E.K.O 协议一致
   const handleSendMessage = useCallback(async (text: string, images?: string[]) => {
     if (!audio.isConnected) {
-      Alert.alert(t('common.alert'), t('connection.status.disconnected'));
+      dispatchVrmBehavior({ type: 'connection_lost' });
       return;
     }
+
+    dispatchVrmBehavior({ type: 'user_message_sent' });
 
     // 确保 text session 已启动（与 Web 端一致）
     const sessionOk = await ensureTextSession();
     if (!sessionOk) {
-      Alert.alert(t('common.alert'), t('connection.status.reconnecting'));
+      dispatchVrmBehavior({ type: 'session_failed' });
       return;
     }
 
@@ -1209,25 +1792,32 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
 
     // 发送图片
     if (imagesToSend.length > 0) {
-      for (const imgBase64 of imagesToSend) {
+      markVrmVisionActivity();
+      dispatchVrmBehavior({ type: 'vision_image_sent' });
+      for (const rawBase64 of imagesToSend) {
         messageCounterRef.current += 1;
-        const clientMessageId = generateMessageId(messageCounterRef.current);
+        const clientMessageId = generateMessageId();
         sentClientMessageIds.current.set(clientMessageId, Date.now());
+
+        const imgBase64 = await compressImageIfNeeded(rawBase64);
 
         audio.sendMessage({
           action: 'stream_data',
           data: imgBase64,
-          input_type: 'camera', // 与 N.E.K.O 主项目兼容
+          input_type: 'camera',
           clientMessageId,
         });
       }
-      chat.addMessage(`[已发送${imagesToSend.length}张照片]`, 'user');
+      // 每张图片作为独立消息显示（保留 data: 前缀供 Image 组件使用）
+      for (const imgBase64 of imagesToSend) {
+        chat.addMessage(`📷 照片`, 'user', { image: imgBase64 });
+      }
     }
 
     // 再发送文本
     if (text.trim()) {
       messageCounterRef.current += 1;
-      const clientMessageId = generateMessageId(messageCounterRef.current);
+      const clientMessageId = generateMessageId();
       sentClientMessageIds.current.set(clientMessageId, Date.now());
 
       // 添加用户消息到 UI
@@ -1247,7 +1837,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     // 清除已选图片
     imagePicker.clearImages();
     setCameraPendingImages([]);
-  }, [audio.isConnected, audio.sendMessage, chat.addMessage, ensureTextSession, imagePicker, imageMessageService, setCameraPendingImages]);
+  }, [audio.isConnected, audio.sendMessage, chat.addMessage, dispatchVrmBehavior, ensureTextSession, imagePicker, imageMessageService, markVrmVisionActivity, setCameraPendingImages]);
 
   // 检测屏幕尺寸变化
   useEffect(() => {
@@ -1268,9 +1858,9 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   // 清理切换相关 timer，防止组件卸载后 setState
   useEffect(() => {
     return () => {
-      if (switchedNameTimerRef.current) clearTimeout(switchedNameTimerRef.current);
       if (switchErrorTimerRef.current) clearTimeout(switchErrorTimerRef.current);
       if (characterLoadingTimerRef.current) clearTimeout(characterLoadingTimerRef.current);
+      if (localSwitchReleaseTimerRef.current) clearTimeout(localSwitchReleaseTimerRef.current);
     };
   }, []);
 
@@ -1284,129 +1874,144 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     });
   }, [agent]);
 
+  const s = useMemo(() => StyleSheet.create({
+    container: { flex: 1, backgroundColor: cc.page },
+    live2dWrapper: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+    bottomSection: { position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 100 },
+    topBar: {
+      position: 'absolute', top: 0, left: 0, right: 72, zIndex: 200,
+      alignItems: 'flex-start',
+      paddingLeft: 16, paddingTop: insets.top + 8,
+    },
+    connectionChip: {
+      maxWidth: '100%',
+      minHeight: 34,
+      borderRadius: theme.radius.lg,
+      backgroundColor: theme.isDark ? cc.overlay : 'rgba(255, 255, 255, 0.74)',
+      borderWidth: 1,
+      paddingHorizontal: theme.spacing.xl,
+      paddingVertical: theme.spacing.sm,
+      ...theme.shadowBubble,
+    },
+    connectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    connectionTitle: {
+      fontSize: theme.fontSize.footnote,
+      lineHeight: theme.lineHeight.footnote,
+      fontWeight: theme.fontWeight.medium,
+      flexShrink: 1,
+    },
+  }), [theme, cc, insets.top]);
+
+  // Wrap send to auto-expand chat
+  const handleSendAndExpand = useCallback(async (text: string, images?: string[]) => {
+    setChatExpanded(true);
+    await handleSendMessage(text, images);
+  }, [handleSendMessage]);
+
+  const connectionAccentColor = cc.accent;
+  const isVrmLoadingStatus = avatarModelType === 'vrm' && !!vrmModelUrl && !vrmRenderError && (
+    vrmRenderPhase === 'idle' ||
+    vrmRenderPhase === 'canvas-ready' ||
+    vrmRenderPhase === 'fetching' ||
+    vrmRenderPhase === 'parsing'
+  );
+  const vrmStatusText = vrmRenderError
+    ? t('main.vrm.failed')
+    : isVrmLoadingStatus
+      ? t('main.vrm.loading')
+      : '';
+  const connectedChipText = `${config.characterName || 'N.E.K.O.'} · ${mobileRuntime.label}`;
+  const connectionChipText = vrmStatusText || (
+    mobileRuntime.phase === 'connected' ? connectedChipText : mobileRuntime.label
+  );
+
   return (
-    <View style={styles.container}>
-      {/* 状态提示 Toast */}
-      <StatusToast ref={statusToastRef} />
-
-      {/* Live2D 舞台区域 */}
-      {/* GestureDetector 包裹整个容器，Android & iOS 共用双指拖动 + 捏合缩放 */}
-      <GestureDetector gesture={live2dGesture}>
-        <View style={styles.live2dContainer}>
-          {/* 页面获得焦点时渲染 Live2D */}
-          {isPageFocused && (
-            <ReactNativeLive2dView
-              style={styles.live2dView}
-              {...live2d.live2dPropsForLipSync}
-              onTap={handleLive2DTap}
-            />
-          )}
-
-          {/* 失去焦点时的显示 */}
-          {!isPageFocused && (
-            <View style={styles.pausedContainer}>
-              <Text style={styles.pausedText}>
-                {live2d.live2dProps.modelPath ? 'Live2D 已暂停' : '页面未激活'}
-              </Text>
-            </View>
-          )}
-
-          {(isDraggingModel || isScalingModel) && (
-            <View style={styles.dragIndicator} pointerEvents="none">
-              <Text style={styles.dragIndicatorText}>
-                {isDraggingModel && isScalingModel ? '拖动/缩放中' : isDraggingModel ? '拖动中' : '缩放中'}
-              </Text>
-            </View>
-          )}
-        </View>
-      </GestureDetector>
-
-      {/* 
-        【跨平台组件】Live2DRightToolbar 右侧工具栏
-        
-        策略更新（2026-01-11）：
-        - 已实现 RN 原生版本（Live2DRightToolbar.native.tsx）
-        - 使用共享的类型和业务逻辑（types.ts + hooks.ts）
-        - Metro Bundler 自动根据平台选择：
-          * Web: Live2DRightToolbar.tsx（HTML/CSS 完整版）
-          * Android/iOS: Live2DRightToolbar.native.tsx（Modal 简化版）
-        - 详见：docs/strategy/cross-platform-components.md
-        
-        功能包括：
-        - 麦克风/摄像头切换
-        - Agent 设置面板
-        - Settings 面板
-        - 设置菜单（Live2D设置、API密钥、角色管理等）
-      */}
-      <View style={styles.toolbarContainer}>
-        <Live2DRightToolbar
-          visible
-          isMobile={isMobile}
-          right={isMobile ? 12 : 24}
-          top={isMobile ? screenHeight * 0.05 : 24}
-          micEnabled={toolbarMicEnabled}
-          cameraEnabled={cameraStream.isStreaming}
-          goodbyeMode={toolbarGoodbyeMode}
-          openPanel={toolbarOpenPanel}
-          onOpenPanelChange={setToolbarOpenPanel}
-          settings={toolbarSettings}
-          onSettingsChange={handleToolbarSettingsChange}
-          agent={agent}
-          onAgentChange={handleToolbarAgentChange}
-          onToggleMic={handleToggleMic}
-          onToggleCamera={handleToggleCamera}
-          onGoodbye={handleGoodbye}
-          onReturn={handleReturn}
-          onSettingsMenuClick={handleSettingsMenuClick}
+    <View style={s.container}>
+      {/* Live2D always full screen — never resizes */}
+      <View style={s.live2dWrapper}>
+        <Live2DStage
+          isPageFocused={isPageFocused}
+          avatarType={avatarModelType}
+          vrmModelUrl={vrmModelUrl}
+          vrmAnimationUrl={vrmAnimationUrl}
+          vrmLighting={vrmLighting}
+          vrmMotionCalibration={vrmMotionCalibration}
+          vrmEmotion={vrmEmotion}
+          vrmGesture={vrmGesture}
+          vrmGestureRevision={vrmGestureRevision}
+          transformRevision={avatarTransformRevision}
+          live2dPropsForLipSync={live2d.live2dPropsForLipSync}
+          live2dProps={live2d.live2dProps}
+          onTap={handleLive2DTap}
+          onVrmPhase={handleVrmPhase}
+          onVrmError={handleVrmError}
+          setModelScale={live2d.setModelScale}
+          setModelPosition={live2d.setModelPosition}
+          onAdjustEnd={handleModelAdjustEnd}
+          modelPositionRef={currentModelPositionRef}
+          scaleRef={currentScaleRef}
         />
       </View>
 
-      {/* 隐藏的摄像头视图（无预览模式）- 只在流传输时挂载，避免白占摄像头资源 */}
+      <View style={s.topBar} pointerEvents="box-none">
+        <View pointerEvents="auto" style={[s.connectionChip, { borderColor: connectionAccentColor + '99' }]}>
+          <View style={s.connectionHeader}>
+            <View style={{
+              width: 8,
+              height: 8,
+              borderRadius: 4,
+              backgroundColor: connectionAccentColor,
+            }} />
+            <Text numberOfLines={1} style={[s.connectionTitle, { color: connectionAccentColor }]}>
+              {connectionChipText}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Toolbar — floating buttons on the right side */}
+      <Live2DRightToolbar
+        visible
+        isMobile={isMobile}
+        right={8}
+        top={insets.top + 8}
+        micEnabled={toolbarMicEnabled}
+        cameraEnabled={cameraStream.isStreaming}
+        goodbyeMode={toolbarGoodbyeMode}
+        openPanel={toolbarOpenPanel}
+        onOpenPanelChange={setToolbarOpenPanel}
+        settings={toolbarSettings}
+        onSettingsChange={handleToolbarSettingsChange}
+        agent={agent}
+        onAgentChange={handleToolbarAgentChange}
+        onToggleMic={handleToggleMic}
+        onToggleCamera={handleToggleCamera}
+        onGoodbye={handleGoodbye}
+        onReturn={handleReturn}
+        onSettingsMenuClick={handleSettingsMenuClick}
+      />
+
       {cameraStream.shouldMount && cameraStream.hasPermission && (
         <CameraView
           ref={cameraStream.cameraRef}
-          style={{
-            position: 'absolute',
-            left: -9999,
-            top: -9999,
-            width: 1,
-            height: 1,
-            opacity: 0,
-          }}
+          style={{ position: 'absolute', left: -9999, top: -9999, width: 1, height: 1, opacity: 0 }}
           facing={cameraStream.facing}
           onCameraReady={cameraStream.onCameraReady}
           animateShutter={false}
         />
       )}
 
-      {/*
-        【跨平台组件】ChatContainer 聊天容器
-
-        策略更新（2026-01-11）：
-        - ✅ 已实现 RN 原生版本（ChatContainer.native.tsx）
-        - ✅ 使用共享的类型和业务逻辑（types.ts + hooks.ts）
-        - ✅ 已接入主界面 WS 文本消息数据流（P0-1 & P0-2）
-        - Metro Bundler 自动根据平台选择：
-          * Web: ChatContainer.tsx（HTML/CSS 完整版，支持截图）
-          * Android/iOS: ChatContainer.native.tsx（Modal 简化版）
-        - 详见：docs/strategy/cross-platform-components.md
-
-        功能包括：
-        - 浮动按钮（缩小态）
-        - 聊天面板（展开态）
-        - 消息列表（用户/系统/助手角色）- 实时显示 WS 消息
-        - 文本输入 - 发送到后端
-        - Web 平台支持截图功能
-      */}
-      <View style={styles.chatContainerWrapper}>
+      {/* Bottom section — floats above Live2D, keyboard-aware */}
+      <KeyboardAvoidingView behavior="padding" style={s.bottomSection}>
         <ChatContainer
           externalMessages={chat.messages}
           connectionStatus={connectionStatus}
-          onSendMessage={handleSendMessage}
+          statusText={mobileRuntime.label}
+          onSendMessage={handleSendAndExpand}
           disabled={!audio.isConnected}
           forceCollapsed={isChatForceCollapsed}
           onPickImage={imagePicker.pickImages}
-          onTakePhoto={camera.takePhoto}
+          onTakePhoto={handleTakePhoto}
           cameraEnabled={true}
           externalPendingImages={[
             ...imagePicker.images.map((img, index) => ({
@@ -1419,492 +2024,33 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
             imagePicker.clearImages();
             setCameraPendingImages([]);
           }}
+          chatExpanded={chatExpanded}
+          onToggleChat={() => setChatExpanded(prev => !prev)}
         />
-      </View>
+      </KeyboardAvoidingView>
 
-      {/* 语音准备状态遮罩 */}
       <VoicePrepareOverlay status={voicePrepareStatus} />
 
-      {/* 角色选择 Modal */}
-      <Modal
+      <CharacterSelectionModal
         visible={characterModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCharacterModalVisible(false)}
-      >
-        <TouchableWithoutFeedback onPress={() => setCharacterModalVisible(false)}>
-          <View style={styles.characterModalOverlay}>
-            <TouchableWithoutFeedback>
-              <View style={styles.characterModalContent}>
-                {/* Header — 对应 neko-header 蓝色背景 */}
-                <View style={styles.characterModalHeader}>
-                  <Text style={styles.characterModalTitle}>{t('characterManager.title')}</Text>
-                  <TouchableOpacity
-                    style={styles.characterModalCloseBtn}
-                    onPress={() => setCharacterModalVisible(false)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Text style={styles.characterModalCloseBtnText}>✕</Text>
-                  </TouchableOpacity>
-                </View>
-                <Text style={styles.characterModalSubtitle}>
-                  <Text style={styles.characterModalSubtitleLabel}>{t('settings.language.current')}: </Text><Text style={styles.characterModalSubtitleHighlight}>{currentCatgirl || t('main.character.noCharacters')}</Text>
-                </Text>
-                <ScrollView style={styles.characterModalList} showsVerticalScrollIndicator={false}>
-                  {characterList.map((name) => {
-                    const isCurrent = name === currentCatgirl;
-                    return (
-                      <TouchableOpacity
-                        key={name}
-                        style={[
-                          styles.characterModalItem,
-                          isCurrent && styles.characterModalItemCurrent,
-                        ]}
-                        disabled={isCurrent || characterLoading}
-                        activeOpacity={0.7}
-                        onPress={() => handleSwitchCharacter(name)}
-                      >
-                        <Image
-                          source={require('@/assets/icons/dropdown_arrow.png')}
-                          style={styles.characterModalItemIcon}
-                        />
-                        <Text style={[
-                          styles.characterModalItemText,
-                          isCurrent && styles.characterModalItemTextCurrent,
-                        ]}>
-                          {name}
-                        </Text>
-                        {isCurrent ? (
-                          <View style={styles.characterModalBadgeWrap}>
-                            <Text style={styles.characterModalBadge}>{t('main.character.current')}</Text>
-                          </View>
-                        ) : (
-                          <View style={styles.characterModalBadgePlaceholder} />
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+        characterList={characterList}
+        currentCatgirl={currentCatgirl}
+        loading={characterLoading}
+        onSelect={handleSwitchCharacter}
+        onClose={() => setCharacterModalVisible(false)}
+      />
 
-      {/* 语音模式下无法切换角色提示 Modal */}
-      <Modal
+      <VoiceBlockModal
         visible={voiceBlockModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setVoiceBlockModalVisible(false)}
-      >
-        <TouchableWithoutFeedback onPress={() => setVoiceBlockModalVisible(false)}>
-          <View style={styles.characterModalOverlay}>
-            <TouchableWithoutFeedback>
-              <View style={[styles.characterModalContent, styles.voiceBlockModalContent]}>
-                <View style={[styles.characterModalHeader, styles.voiceBlockModalHeader]}>
-                  <Text style={styles.characterModalTitle}>{t('main.character.voiceBlockTitle')}</Text>
-                  <TouchableOpacity
-                    style={styles.characterModalCloseBtn}
-                    onPress={() => setVoiceBlockModalVisible(false)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Text style={styles.characterModalCloseBtnText}>✕</Text>
-                  </TouchableOpacity>
-                </View>
-                <Text style={styles.voiceBlockModalBody}>
-                  {t('main.voice.cannotSwitchCharacter')}
-                </Text>
-                <TouchableOpacity
-                  style={styles.voiceBlockModalBtn}
-                  onPress={() => setVoiceBlockModalVisible(false)}
-                >
-                  <Text style={styles.voiceBlockModalBtnText}>{t('common.ok')}</Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+        onClose={() => setVoiceBlockModalVisible(false)}
+      />
 
-      {/* 角色切换全屏加载遮罩 */}
-      {characterLoading && (
-        <View style={styles.switchingOverlay}>
-          <ActivityIndicator size="large" color="#40c5f1" />
-          <Text style={styles.switchingText}>{t('main.character.switching')}</Text>
-        </View>
-      )}
-
-      {/* 切换成功提示条 */}
-      {switchedCharacterName !== null && (
-        <View style={styles.switchingSuccessBanner} pointerEvents="none">
-          <Text style={styles.switchingSuccessText}>{t('main.character.switched', { name: switchedCharacterName })}</Text>
-        </View>
-      )}
-
-      {/* 切换失败提示条 */}
-      {switchError !== null && (
-        <View style={styles.switchingErrorBanner} pointerEvents="none">
-          <Text style={styles.switchingErrorText}>{switchError}</Text>
-        </View>
-      )}
-
-      {/* 调试按钮 - 右下角浮动 */}
-      <TouchableOpacity
-        style={{
-          position: 'absolute',
-          bottom: 100,
-          right: 20,
-          backgroundColor: 'rgba(64, 197, 241, 0.9)',
-          borderRadius: 25,
-          width: 50,
-          height: 50,
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 9999,
-          elevation: 10,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.25,
-          shadowRadius: 3.84,
-        }}
-        onPress={() => setDebugPanelVisible(true)}
-      >
-        <Ionicons name="construct" size={20} color="#fff" />
-      </TouchableOpacity>
-
-      {/* 调试信息面板 */}
-      <Modal
-        visible={debugPanelVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setDebugPanelVisible(false)}
-      >
-        <TouchableOpacity
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}
-          activeOpacity={1}
-          onPress={() => setDebugPanelVisible(false)}
-        >
-          <View
-            style={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              backgroundColor: '#1a1a1a',
-              borderTopLeftRadius: 20,
-              borderTopRightRadius: 20,
-              maxHeight: '70%',
-              padding: 20,
-            }}
-            onStartShouldSetResponder={() => true}
-          >
-            <Text style={{ color: '#40c5f1', fontSize: 18, fontWeight: 'bold', marginBottom: 15 }}>
-              {t('main.debug.title')}
-            </Text>
-            <ScrollView>
-              <Text style={{ color: '#fff', fontSize: 12, fontFamily: 'monospace', marginBottom: 10 }}>
-                {`${t('connection.status.connected')}: ${udpConnection.status}
-${t('main.debug.p2pLayer')}: ${udpConnection.layer || t('connection.status.disconnected')}
-${t('serverInfo.host')}: ${udpConnection.endpoint ? `${udpConnection.endpoint.ip}:${udpConnection.endpoint.port}` : t('common.unavailable')}
-
-${t('settings.sections.serverInfo')}:
-${t('serverInfo.host')}: ${config.host}:${config.port}
-${t('serverInfo.character')}: ${config.characterName || t('main.character.noCharacters')}
-`}
-              </Text>
-              <Text style={{ color: '#40c5f1', fontSize: 12, fontWeight: 'bold', marginBottom: 4 }}>
-                {t('main.debug.connection')}：
-              </Text>
-              <Text style={{ color: '#ccc', fontSize: 11, fontFamily: 'monospace' }}>
-                {udpConnection.logs.length > 0 ? udpConnection.logs.join('\n') : t('common.warning')}
-              </Text>
-            </ScrollView>
-            <TouchableOpacity
-              style={{
-                backgroundColor: '#e05555',
-                borderRadius: 8,
-                paddingVertical: 12,
-                alignItems: 'center',
-                marginTop: 15,
-              }}
-              onPress={async () => {
-                await live2d.live2dService?.clearModelCache();
-                setDebugPanelVisible(false);
-              }}
-            >
-              <Text style={{ color: '#fff', fontWeight: 'bold' }}>🗑️ 清除模型缓存</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={{
-                backgroundColor: '#40c5f1',
-                borderRadius: 8,
-                paddingVertical: 12,
-                alignItems: 'center',
-                marginTop: 10,
-              }}
-              onPress={() => setDebugPanelVisible(false)}
-            >
-              <Text style={{ color: '#fff', fontWeight: 'bold' }}>{t('common.close')}</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+      <CharacterSwitchOverlay
+        loading={characterLoading}
+        error={switchError}
+      />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
-  live2dContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#1a1a2e',
-  },
-  live2dView: {
-    flex: 1,
-    width: '100%',
-    alignSelf: 'stretch',
-  },
-  pausedContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  pausedText: {
-    color: '#666',
-    fontSize: 16,
-  },
-  dragIndicator: {
-    position: 'absolute',
-    top: 16,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(64, 197, 241, 0.25)',
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(64, 197, 241, 0.6)',
-    zIndex: 10,
-  },
-  dragIndicatorText: {
-    color: '#40c5f1',
-    fontSize: 13,
-  },
-  toolbarContainer: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    zIndex: 1000,
-  },
-  chatContainerWrapper: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    zIndex: 100,
-    elevation: 100,
-    pointerEvents: 'box-none',
-  },
-  characterModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  characterModalContent: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    overflow: 'hidden',
-    width: '82%',
-    maxHeight: '65%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.3,
-    shadowRadius: 30,
-    elevation: 20,
-  },
-  characterModalHeader: {
-    backgroundColor: '#40C5F1',
-    paddingVertical: 18,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  characterModalCloseBtn: {
-    position: 'absolute',
-    right: 16,
-    top: '50%',
-    marginTop: -10,
-  },
-  characterModalCloseBtnText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '400',
-    lineHeight: 20,
-  },
-  characterModalTitle: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '600',
-    letterSpacing: 1,
-  },
-  characterModalSubtitle: {
-    color: '#666',
-    fontSize: 13,
-    textAlign: 'center',
-    marginTop: 12,
-    marginBottom: 12,
-    paddingHorizontal: 20,
-  },
-    characterModalSubtitle2: {
-    color: '#666',
-    fontSize: 6,
-    textAlign: 'center',
-    marginTop: 6,
-    marginBottom: 6,
-    paddingHorizontal: 10,
-  },
-  characterModalSubtitleLabel: {
-    color: '#40C5F1',
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  characterModalSubtitleHighlight: {
-    color: '#40C5F1',
-    fontWeight: '600',
-  },
-  characterModalList: {
-    maxHeight: 300,
-    paddingHorizontal: 16,
-    paddingBottom: 4,
-  },
-  characterModalItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 13,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    marginBottom: 8,
-    backgroundColor: '#f0f8ff',
-    borderWidth: 2,
-    borderColor: '#b3e5fc',
-    borderLeftWidth: 4,
-    borderLeftColor: '#40C5F1',
-  },
-  characterModalItemCurrent: {
-    backgroundColor: '#e3f4ff',
-    borderColor: '#40C5F1',
-    borderLeftColor: '#22b3ff',
-  },
-  characterModalItemIcon: {
-    width: 18,
-    height: 18,
-    marginRight: 10,
-    transform: [{ rotate: '-90deg' }],
-    tintColor: '#40C5F1',
-  },
-  characterModalItemText: {
-    flex: 1,
-    color: '#40C5F1',
-    fontSize: 15,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  characterModalItemTextCurrent: {
-    color: '#22b3ff',
-    fontWeight: '700',
-  },
-  characterModalBadgeWrap: {
-    backgroundColor: '#40C5F1',
-    borderRadius: 999,
-    paddingVertical: 2,
-    paddingHorizontal: 10,
-  },
-  characterModalBadgePlaceholder: {
-    width: 38,
-  },
-  characterModalBadge: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  switchingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 9999,
-  },
-  switchingText: {
-    color: '#fff',
-    fontSize: 16,
-    marginTop: 12,
-  },
-  switchingSuccessBanner: {
-    position: 'absolute',
-    bottom: 80,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(40, 40, 40, 0.9)',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-    zIndex: 9999,
-  },
-  switchingSuccessText: {
-    color: '#40c5f1',
-    fontSize: 15,
-  },
-  switchingErrorBanner: {
-    position: 'absolute',
-    bottom: 80,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(40, 40, 40, 0.9)',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-    zIndex: 9999,
-  },
-  switchingErrorText: {
-    color: '#f55',
-    fontSize: 15,
-  },
-  voiceBlockModalContent: {
-    backgroundColor: '#ffffff',
-    width: '72%',
-  },
-  voiceBlockModalHeader: {
-    backgroundColor: '#40C5F1',
-  },
-  voiceBlockModalBody: {
-    color: '#40C5F1',
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginVertical: 16,
-    paddingHorizontal: 20,
-    lineHeight: 22,
-  },
-  voiceBlockModalBtn: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    paddingVertical: 11,
-    borderRadius: 999,
-    backgroundColor: '#40C5F1',
-    alignItems: 'center',
-  },
-  voiceBlockModalBtnText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-});
 
 export default MainUIScreen;

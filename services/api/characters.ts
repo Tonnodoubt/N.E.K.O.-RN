@@ -29,7 +29,9 @@ export interface CatgirlProfile {
   live2d_item_id?: string;
   model_type?: 'live2d' | 'vrm';
   vrm?: string;
-  vrm_animation?: string;
+  vrm_animation?: string | null;
+  idleAnimation?: string | null;
+  idleAnimations?: string[] | null;
   voice_id?: string;
 }
 
@@ -97,11 +99,11 @@ export function createCharactersApiClient(apiBase: string, p2pToken?: string) {
   return {
     /**
      * Get all characters data (master + catgirls)
-     * GET /api/characters/
+     * GET /api/characters
      */
     async getCharacters(language?: string): Promise<CharactersData> {
       const params = language ? { language } : {};
-      return client.get('/characters/', { params });
+      return client.get('/characters', { params });
     },
 
     /**

@@ -5,7 +5,8 @@ export interface ChatMessage {
   text: string;
   sender: 'user' | 'gemini' | 'system';
   timestamp: string;
-  isComplete?: boolean; // 标记消息是否完成（用于流式消息）
+  isComplete?: boolean;
+  image?: string;
 }
 
 interface UseChatMessagesConfig {
@@ -37,6 +38,11 @@ function isServerMessage(value: unknown): value is ServerMessage {
   );
 }
 
+/** 生成唯一消息 ID（时间戳 + 随机后缀） */
+function generateChatId(): string {
+  return `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export const useChatMessages = (config: UseChatMessagesConfig = {}) => {
   const { maxMessages = 100, onMessageAdded, onMessageUpdated } = config;
 
@@ -44,7 +50,7 @@ export const useChatMessages = (config: UseChatMessagesConfig = {}) => {
 
   // 获取当前时间字符串
   const getCurrentTimeString = useCallback(() => {
-    return new Date().toLocaleTimeString('zh-CN', {
+    return new Date().toLocaleTimeString(undefined, {
       hour12: false,
       hour: '2-digit',
       minute: '2-digit',
@@ -54,17 +60,18 @@ export const useChatMessages = (config: UseChatMessagesConfig = {}) => {
 
   // 添加新消息
   const addMessage = useCallback((
-    text: string, 
+    text: string,
     sender: ChatMessage['sender'] = 'system',
-    options?: { skipTimestamp?: boolean; isComplete?: boolean }
+    options?: { skipTimestamp?: boolean; isComplete?: boolean; image?: string }
   ) => {
     const timestamp = getCurrentTimeString();
     const newMessage: ChatMessage = {
-      id: Date.now().toString(),
-      text: options?.skipTimestamp ? text : `[${timestamp}] ${sender === 'gemini' ? '🎀' : sender === 'user' ? '👤' : '📢'} ${text}`,
+      id: generateChatId(),
+      text: text,
       sender,
       timestamp,
       isComplete: options?.isComplete ?? true,
+      ...(options?.image ? { image: options.image } : {}),
     };
 
     setMessages(prevMessages => {
@@ -107,8 +114,8 @@ export const useChatMessages = (config: UseChatMessagesConfig = {}) => {
         console.log(`⚠️ 未找到 ${sender} 消息，创建新消息`);
         const timestamp = getCurrentTimeString();
         const newMessage: ChatMessage = {
-          id: Date.now().toString(),
-          text: `[${timestamp}] ${sender === 'gemini' ? '🎀' : '👤'} ${text}`,
+          id: generateChatId(),
+          text: text,
           sender,
           timestamp,
           isComplete: false,
@@ -149,7 +156,7 @@ export const useChatMessages = (config: UseChatMessagesConfig = {}) => {
     if (!lastMessage) return undefined;
     
     // 移除时间戳和表情符号前缀
-    return lastMessage.text.replace(/^\[\d{2}:\d{2}:\d{2}\] [🎀👤📢] /, '');
+    return lastMessage.text;
   }, [getLastMessage]);
 
   // 清空所有消息
@@ -236,6 +243,11 @@ export const useChatMessages = (config: UseChatMessagesConfig = {}) => {
           clearMessages();
           const characterName: string | undefined = parsed.new_catgirl;
           return { type: 'catgirl_switched', characterName };
+        }
+
+        else if (parsed.type === 'response_discarded') {
+          console.log('🗑️ 响应被丢弃');
+          return { type: 'response_discarded' };
         }
 
         else {

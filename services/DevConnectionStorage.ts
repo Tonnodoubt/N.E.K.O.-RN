@@ -11,30 +11,83 @@ function isValidPort(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 65536;
 }
 
-function sanitizePartial(input: any): Partial<DevConnectionConfig> {
+type DevConnectionConfigInput = Partial<DevConnectionConfig> & {
+  p2p?: DevConnectionConfig['p2p'] | null;
+};
+
+function sanitizeP2P(
+  input: unknown,
+  options: { includeToken?: boolean; includePairing?: boolean } = {}
+): DevConnectionConfig['p2p'] | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const p2p = input as Record<string, unknown>;
+
+  const sanitized: DevConnectionConfig['p2p'] = {
+    token: options.includeToken && isNonEmptyString(p2p.token) ? p2p.token.trim() : undefined,
+    deviceId: isNonEmptyString(p2p.deviceId) ? p2p.deviceId : undefined,
+    // 第1层：LAN 直连
+    lanIp: isNonEmptyString(p2p.lanIp) ? p2p.lanIp : undefined,
+    lanPort: isValidPort(p2p.lanPort) ? p2p.lanPort : undefined,
+    // 第2层：STUN 打洞
+    stunIp: isNonEmptyString(p2p.stunIp) ? p2p.stunIp : undefined,
+    stunPort: isValidPort(p2p.stunPort) ? p2p.stunPort : undefined,
+    pairingSupported: typeof p2p.pairingSupported === 'boolean' ? p2p.pairingSupported : undefined,
+    pairingRegisterPath: isNonEmptyString(p2p.pairingRegisterPath) ? p2p.pairingRegisterPath : undefined,
+    pairingResolvePath: isNonEmptyString(p2p.pairingResolvePath) ? p2p.pairingResolvePath : undefined,
+    pairing: options.includePairing ? sanitizePairing(p2p.pairing) : undefined,
+  };
+
+  const hasAnyValue = Object.values(sanitized).some((value) => value !== undefined);
+  return hasAnyValue ? sanitized : undefined;
+}
+
+function sanitizePairing(input: unknown): NonNullable<DevConnectionConfig['p2p']>['pairing'] | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const pairing = input as Record<string, unknown>;
+  if (!isNonEmptyString(pairing.pairingId) || !isNonEmptyString(pairing.pairingSecret)) {
+    return undefined;
+  }
+
+  return {
+    pairingId: pairing.pairingId.trim(),
+    pairingSecret: pairing.pairingSecret.trim(),
+    deviceId: isNonEmptyString(pairing.deviceId) ? pairing.deviceId.trim() : undefined,
+    createdAt: typeof pairing.createdAt === 'number' && Number.isFinite(pairing.createdAt)
+      ? pairing.createdAt
+      : undefined,
+  };
+}
+
+function sanitizePartial(input: unknown, includeSensitive = false): Partial<DevConnectionConfig> {
+  const obj = input as Record<string, unknown> | null | undefined;
   const out: Partial<DevConnectionConfig> = {};
-  if (isNonEmptyString(input?.host)) out.host = input.host.trim();
-  if (isValidPort(input?.port)) out.port = input.port;
-  if (isNonEmptyString(input?.characterName)) out.characterName = input.characterName.trim();
+  if (isNonEmptyString(obj?.host)) out.host = (obj.host as string).trim();
+  if (isValidPort(obj?.port)) out.port = obj.port as number;
+  if (isNonEmptyString(obj?.characterName)) out.characterName = (obj.characterName as string).trim();
 
   // 支持 P2P 配置 (v3: 完整的两层连接信息)
-  if (input?.p2p && typeof input.p2p === 'object') {
-    const p2p = input.p2p;
-    if (isNonEmptyString(p2p.token)) {
-      out.p2p = {
-        token: p2p.token,
-        deviceId: isNonEmptyString(p2p.deviceId) ? p2p.deviceId : undefined,
-        // 第1层：LAN 直连
-        lanIp: isNonEmptyString(p2p.lanIp) ? p2p.lanIp : undefined,
-        lanPort: isValidPort(p2p.lanPort) ? p2p.lanPort : undefined,
-        // 第2层：STUN 打洞
-        stunIp: isNonEmptyString(p2p.stunIp) ? p2p.stunIp : undefined,
-        stunPort: isValidPort(p2p.stunPort) ? p2p.stunPort : undefined,
-      };
+  if (Object.prototype.hasOwnProperty.call(obj ?? {}, 'p2p')) {
+    const p2p = sanitizeP2P(obj?.p2p, { includeToken: includeSensitive, includePairing: includeSensitive });
+    if (p2p) {
+      out.p2p = p2p;
+    } else {
+      // 显式传入 `p2p: undefined/null` 时，表示清掉旧的 P2P 配置。
+      out.p2p = undefined;
     }
   }
 
   return out;
+}
+
+function stripSensitiveConfig(config: DevConnectionConfig): DevConnectionConfig {
+  const p2p = sanitizeP2P(config.p2p, { includeToken: true, includePairing: true });
+  const next: DevConnectionConfig = {
+    host: config.host,
+    port: config.port,
+    characterName: config.characterName,
+  };
+  if (p2p) next.p2p = p2p;
+  return next;
 }
 
 export async function getStoredDevConnectionConfig(): Promise<DevConnectionConfig> {
@@ -53,7 +106,7 @@ export async function getStoredDevConnectionConfig(): Promise<DevConnectionConfi
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_DEV_CONNECTION_CONFIG;
     const parsed = JSON.parse(raw);
-    const partial = sanitizePartial(parsed);
+    const partial = sanitizePartial(parsed, true);
     return { ...DEFAULT_DEV_CONNECTION_CONFIG, ...partial };
   } catch {
     return DEFAULT_DEV_CONNECTION_CONFIG;
@@ -61,13 +114,13 @@ export async function getStoredDevConnectionConfig(): Promise<DevConnectionConfi
 }
 
 export async function setStoredDevConnectionConfig(
-  next: Partial<DevConnectionConfig> | DevConnectionConfig
+  next: DevConnectionConfigInput
 ): Promise<DevConnectionConfig> {
   let current: DevConnectionConfig = DEFAULT_DEV_CONNECTION_CONFIG;
   try {
     current = await getStoredDevConnectionConfig();
-    const merged: DevConnectionConfig = { ...current, ...sanitizePartial(next) };
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+    const merged: DevConnectionConfig = { ...current, ...sanitizePartial(next, true) };
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(stripSensitiveConfig(merged)));
     return merged;
   } catch (error) {
     console.error('[DevConnectionStorage] Failed to persist dev connection config', error);
@@ -101,4 +154,3 @@ export async function hasUserStoredConfig(): Promise<boolean> {
     return false;
   }
 }
-

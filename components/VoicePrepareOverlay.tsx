@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '@/constants/ThemeContext';
+import { useTranslation } from 'react-i18next';
 
 type VoicePrepareStatus = 'preparing' | 'ready' | null;
 
@@ -8,17 +10,14 @@ interface VoicePrepareOverlayProps {
   status: VoicePrepareStatus;
 }
 
-/**
- * 语音模式准备状态遮罩
- * - preparing: 脉冲动画 + "语音系统准备中..."
- * - ready: 绿色对勾 + "语音已就绪"
- */
-export const VoicePrepareOverlay: React.FC<VoicePrepareOverlayProps> = ({ status }) => {
+export function VoicePrepareOverlay({ status }: VoicePrepareOverlayProps) {
+  const theme = useTheme();
+  const cc = theme.colors;
+  const { t } = useTranslation();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseOpacity = useRef(new Animated.Value(0.6)).current;
 
-  // 淡入淡出
   useEffect(() => {
     if (status) {
       Animated.timing(fadeAnim, {
@@ -35,7 +34,6 @@ export const VoicePrepareOverlay: React.FC<VoicePrepareOverlayProps> = ({ status
     }
   }, [status, fadeAnim]);
 
-  // 脉冲动画（仅 preparing 阶段）
   useEffect(() => {
     if (status !== 'preparing') {
       pulseAnim.setValue(1);
@@ -80,11 +78,9 @@ export const VoicePrepareOverlay: React.FC<VoicePrepareOverlayProps> = ({ status
   const isPreparing = status === 'preparing';
 
   return (
-    <Animated.View style={[styles.overlay, { opacity: fadeAnim }]} pointerEvents="none">
+    <Animated.View style={[styles.overlay, { opacity: fadeAnim, backgroundColor: cc.overlay }]} pointerEvents="none">
       <View style={styles.content}>
-        {/* 圆圈区域（固定尺寸，波纹从这里散出） */}
         <View style={styles.circleArea}>
-          {/* 脉冲圆环（preparing 时显示） */}
           {isPreparing && (
             <Animated.View
               style={[
@@ -92,39 +88,40 @@ export const VoicePrepareOverlay: React.FC<VoicePrepareOverlayProps> = ({ status
                 {
                   transform: [{ scale: pulseAnim }],
                   opacity: pulseOpacity,
+                  borderColor: cc.accent,
+                  backgroundColor: cc.accentSoft,
                 },
               ]}
             />
           )}
 
-          {/* 中心圆 */}
           <View
             style={[
               styles.centerCircle,
-              isPreparing ? styles.centerCirclePreparing : styles.centerCircleReady,
+              isPreparing
+                ? { backgroundColor: cc.accentSoft, borderWidth: 2, borderColor: cc.accent }
+                : { backgroundColor: `${cc.success}80`, borderWidth: 2, borderColor: cc.success },
             ]}
           >
             {isPreparing ? (
-              <Ionicons name="mic" size={32} color="#fff" />
+              <Ionicons name="mic" size={32} color={cc.textOnAccent} />
             ) : (
-              <Ionicons name="checkmark" size={32} color="#73d13d" />
+              <Ionicons name="checkmark" size={32} color={cc.success} />
             )}
           </View>
         </View>
 
-        {/* 状态文字 */}
-        <Text style={styles.statusText}>
-          {isPreparing ? '语音系统准备中...' : '语音已就绪'}
+        <Text style={[styles.statusText, { color: cc.textOnAccent, textShadowColor: cc.accent }]}>
+          {isPreparing ? t('main.voice.systemPreparing') : t('main.voice.systemReady')}
         </Text>
       </View>
     </Animated.View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 2000,
@@ -145,8 +142,6 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 40,
     borderWidth: 3,
-    borderColor: '#5CE6FF',
-    backgroundColor: 'rgba(64, 197, 241, 0.15)',
   },
   centerCircle: {
     width: 80,
@@ -155,25 +150,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  centerCirclePreparing: {
-    backgroundColor: 'rgba(64, 197, 241, 0.45)',
-    borderWidth: 2,
-    borderColor: '#5CE6FF',
-  },
-  centerCircleReady: {
-    backgroundColor: 'rgba(82, 196, 26, 0.5)',
-    borderWidth: 2,
-    borderColor: '#73d13d',
-  },
-  iconText: {
-    fontSize: 32,
-  },
   statusText: {
-    color: '#fff',
     fontSize: 16,
     marginTop: 16,
     fontWeight: '600',
-    textShadowColor: 'rgba(64, 197, 241, 0.6)',
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 8,
   },

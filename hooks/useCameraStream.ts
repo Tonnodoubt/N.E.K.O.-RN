@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, AppState } from 'react-native';
 import { CameraView, useCameraPermissions, type CameraType } from 'expo-camera';
 import {
   CameraStreamService,
@@ -10,6 +10,7 @@ export interface UseCameraStreamConfig {
   sendMessage: (message: object) => void;
   isConnected: boolean;
   isInBackgroundRef: React.RefObject<boolean>;
+  onFrameSent?: () => void;
 }
 
 export interface UseCameraStreamReturn {
@@ -49,18 +50,21 @@ export function useCameraStream(
   // 使用 ref 存储配置，避免闭包过期
   const sendMessageRef = useRef(config.sendMessage);
   const isConnectedRef = useRef(config.isConnected);
+  const onFrameSentRef = useRef(config.onFrameSent);
 
   // 同步 ref
   useEffect(() => {
     sendMessageRef.current = config.sendMessage;
     isConnectedRef.current = config.isConnected;
-  }, [config.sendMessage, config.isConnected]);
+    onFrameSentRef.current = config.onFrameSent;
+  }, [config.sendMessage, config.isConnected, config.onFrameSent]);
 
   // 初始化 Service
   useEffect(() => {
     const service = new CameraStreamService({
       sendFrame: (payload) => {
         sendMessageRef.current(payload);
+        onFrameSentRef.current?.();
       },
       isConnected: () => isConnectedRef.current,
       onStatusChange: (newStatus) => {
@@ -110,24 +114,22 @@ export function useCameraStream(
     setError(null);
   }, []);
 
-  // 后台暂停 / 前台恢复
+  // 后台暂停 / 前台恢复（事件驱动，替代轮询）
   useEffect(() => {
-    const checkBackground = () => {
-      const isInBackground = config.isInBackgroundRef.current;
+    const subscription = AppState.addEventListener('change', (nextState) => {
       const service = serviceRef.current;
-
       if (!service) return;
 
-      if (isInBackground && status === 'streaming') {
+      const goingBackground = nextState === 'background' || nextState === 'inactive';
+      if (goingBackground && status === 'streaming') {
         service.pause();
-      } else if (!isInBackground && status === 'paused') {
+      } else if (!goingBackground && status === 'paused') {
         service.resume();
       }
-    };
+    });
 
-    const interval = setInterval(checkBackground, 500);
-    return () => clearInterval(interval);
-  }, [config.isInBackgroundRef, status]);
+    return () => subscription.remove();
+  }, [status]);
 
   // WS 断连处理
   useEffect(() => {

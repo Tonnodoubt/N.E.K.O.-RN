@@ -12,6 +12,7 @@ export type AudioServiceState =
 export type NekoWsIncomingJson =
   | { type: "session_preparing"; input_mode?: "audio" | "text" | string }
   | { type: "session_started"; input_mode?: "audio" | "text" | string }
+  | { type: "session_failed"; input_mode?: "audio" | "text" | string }
   | { type: "user_activity"; interrupted_speech_id?: string | null }
   | { type: "audio_chunk"; speech_id?: string | null }
   | Record<string, unknown>;
@@ -79,4 +80,3 @@ export interface AudioService {
    */
   stopPlayback: () => void;
 }
-

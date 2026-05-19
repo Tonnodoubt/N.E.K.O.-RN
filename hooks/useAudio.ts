@@ -18,11 +18,22 @@ interface UseAudioConfig {
   isInBackgroundRef?: React.RefObject<boolean>;
 }
 
+export type AudioConnectionPhase =
+  | 'idle'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'disconnected'
+  | 'failed';
+
 export interface UseAudioReturn {
   // 状态
   isConnected: boolean;
+  isConnectedRef: React.MutableRefObject<boolean>;
   isRecording: boolean;
   connectionStatus: string;
+  connectionPhase: AudioConnectionPhase;
+  connectionError: string | null;
   audioStats: AudioStats;
 
   // 方法
@@ -39,11 +50,39 @@ export interface UseAudioReturn {
   isReadyRef: React.RefObject<boolean>;
 }
 
+function errorToString(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function getConnectionErrorMessage(error: unknown, config: UseAudioConfig): string {
+  const raw = errorToString(error);
+  const lower = raw.toLowerCase();
+
+  if (config.p2p?.token && /401|403|token|credential|unauthorized|forbidden|invalid/.test(lower)) {
+    return '连接凭证可能已失效，请重新扫码。';
+  }
+
+  if (/timeout|timed out|network|failed to connect|econnrefused|1006|abnormal/.test(lower)) {
+    return `无法连接 ${config.host}:${config.port}。请确认电脑端在线、手机和电脑在同一网络，或重新扫码。`;
+  }
+
+  return raw ? `连接失败：${raw}` : '连接失败，请重试或重新扫码。';
+}
+
 export const useAudio = (config: UseAudioConfig): UseAudioReturn => {
   // 状态管理
   const [isConnected, setIsConnected] = useState(false);
+  const isConnectedRef = useRef(false);
   const [isRecording, setIsRecording] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('未连接');
+  const [connectionPhase, setConnectionPhase] = useState<AudioConnectionPhase>('idle');
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const [audioStats, setAudioStats] = useState<AudioStats>({
     audioChunksCount: 0,
     sendCount: 0,
@@ -57,9 +96,14 @@ export const useAudio = (config: UseAudioConfig): UseAudioReturn => {
   // Service 引用（内部使用 ref，外部暴露 state 以避免 stale snapshot）
   const audioServiceRef = useRef<AudioService | null>(null);
   const [audioService, setAudioService] = useState<AudioService | null>(null);
+  const latestConfigRef = useRef(config);
 
   // 🔥 AudioService 是否完全就绪的 ref（避免闭包引用问题）
   const isReadyRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    latestConfigRef.current = config;
+  }, [config]);
 
   // 切换录音状态
   const toggleRecording = async () => {
@@ -91,17 +135,26 @@ export const useAudio = (config: UseAudioConfig): UseAudioReturn => {
 
   // 重连 key：递增触发 useEffect 销毁旧连接并重建
   const [reconnectKey, setReconnectKey] = useState(0);
+  const hasConnectedRef = useRef(false);
 
   const reconnect = useCallback(() => {
     console.log('🔄 手动触发重连');
+    setConnectionPhase((prev) => prev === 'idle' ? 'connecting' : 'reconnecting');
+    setConnectionStatus('重新连接中...');
+    setConnectionError(null);
     setReconnectKey(k => k + 1);
   }, []);
+
+  // 自动重连定时器
+  const autoReconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 组件初始化
   useEffect(() => {
     // 配置未加载完成时不初始化连接，避免用 DEFAULT config 发起无效连接
     if (config.enabled === false) {
       console.log('🎧 useAudio 跳过初始化（配置未就绪）');
+      setConnectionPhase('idle');
+      setConnectionStatus('等待连接配置');
       return;
     }
 
@@ -111,6 +164,9 @@ export const useAudio = (config: UseAudioConfig): UseAudioReturn => {
       characterName: config.characterName,
       p2pToken: p2pToken ? '***' : undefined,
     });
+    setConnectionPhase(hasConnectedRef.current ? 'reconnecting' : 'connecting');
+    setConnectionStatus(hasConnectedRef.current ? '重新连接中...' : '连接中...');
+    setConnectionError(null);
 
     // 创建 AudioService
     const service = new AudioService({
@@ -119,31 +175,62 @@ export const useAudio = (config: UseAudioConfig): UseAudioReturn => {
       characterName: config.characterName,
       p2p: config.p2p,
       onConnectionChange: (connected) => {
+        if (audioServiceRef.current !== service) return;
+        isConnectedRef.current = connected;
         setIsConnected(connected);
         setConnectionStatus(connected ? '已连接' : '未连接');
-        config.onConnectionChange?.(connected);
+        if (connected) {
+          hasConnectedRef.current = true;
+          isReadyRef.current = service.isReady();
+          setConnectionPhase('connected');
+          setConnectionError(null);
+          // 连接恢复，清除自动重连定时器
+          if (autoReconnectTimerRef.current) {
+            clearTimeout(autoReconnectTimerRef.current);
+            autoReconnectTimerRef.current = null;
+          }
+        } else {
+          isReadyRef.current = false;
+          setConnectionPhase(hasConnectedRef.current ? 'reconnecting' : 'disconnected');
+          // 连接断开，延迟后触发重建（兜底 realtime client 内部重连耗尽的情况）
+          if (autoReconnectTimerRef.current) clearTimeout(autoReconnectTimerRef.current);
+          autoReconnectTimerRef.current = setTimeout(() => {
+            autoReconnectTimerRef.current = null;
+            console.log('🔄 连接断开超时，触发完整重建');
+            setReconnectKey(k => k + 1);
+          }, 20_000); // realtime client 内部重连最多 5*3s=15s，给 20s 余量
+        }
+        latestConfigRef.current.onConnectionChange?.(connected);
       },
       onMessage: (event) => {
-        config.onMessage?.(event);
+        if (audioServiceRef.current !== service) return;
+        latestConfigRef.current.onMessage?.(event);
       },
       onError: (error) => {
+        if (audioServiceRef.current !== service) return;
+        const latestConfig = latestConfigRef.current;
         // 🔥 修复：在角色切换期间忽略错误，避免显示"连接错误"
-        if (config.isSwitchingRef?.current) {
+        if (latestConfig.isSwitchingRef?.current) {
           console.log('🔄 角色切换中，忽略 WebSocket 错误:', error);
           return;
         }
         // 🔥 修复：在应用进入后台期间忽略错误（如拍照时）
-        if (config.isInBackgroundRef?.current) {
+        if (latestConfig.isInBackgroundRef?.current) {
           console.log('📷 应用处于后台，忽略 WebSocket 错误:', error);
           return;
         }
         console.warn('⚠️ 音频服务错误:', error);
+        const message = getConnectionErrorMessage(error, latestConfig);
         setConnectionStatus('连接错误');
+        setConnectionPhase(hasConnectedRef.current ? 'reconnecting' : 'failed');
+        setConnectionError(message);
       },
       onRecordingStateChange: (recording) => {
+        if (audioServiceRef.current !== service) return;
         setIsRecording(recording);
       },
       onAudioStatsUpdate: (stats) => {
+        if (audioServiceRef.current !== service) return;
         setAudioStats(stats);
       },
     });
@@ -163,18 +250,23 @@ export const useAudio = (config: UseAudioConfig): UseAudioReturn => {
       if (audioServiceRef.current !== service) return;
       console.error('❌ AudioService 初始化失败:', error);
       setConnectionStatus('初始化失败');
+      setConnectionPhase('failed');
+      setConnectionError(getConnectionErrorMessage(error, config));
       isReadyRef.current = false;
     });
 
     // 清理函数
     return () => {
       console.log('🧹 useAudio 清理中...');
+      if (autoReconnectTimerRef.current) {
+        clearTimeout(autoReconnectTimerRef.current);
+        autoReconnectTimerRef.current = null;
+      }
       audioServiceRef.current?.destroy();
       audioServiceRef.current = null;
       setAudioService(null);
       setIsRecording(false);
       setIsConnected(false);
-      // 🔥 修复：清理时重置 isReadyRef，避免 waitForConnection 误判
       isReadyRef.current = false;
     };
   }, [config.host, config.port, config.characterName, p2pToken, config.enabled, reconnectKey]);
@@ -182,8 +274,11 @@ export const useAudio = (config: UseAudioConfig): UseAudioReturn => {
   return {
     // 状态
     isConnected,
+    isConnectedRef,
     isRecording,
     connectionStatus,
+    connectionPhase,
+    connectionError,
     audioStats,
 
     // 方法

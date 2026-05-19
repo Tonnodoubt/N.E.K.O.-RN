@@ -19,10 +19,27 @@ const safeStringify = (value: unknown): string => {
   }
 };
 
-// 由 Vite 构建时注入（见 packages/request/vite.config.ts）。
-// 在 React Native/Metro 环境中这些常量通常不存在，应保持可选。
-declare const __NEKO_VITE_MODE__: string | undefined;
-declare const __NEKO_VITE_NODE_ENV__: string | undefined;
+const SENSITIVE_KEY_RE = /(^|[_-])(api[-_]?key|key|token|secret|password|authorization|auth)([_-]|$)|authorization/i;
+
+const redactSensitive = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(redactSensitive);
+  if (!value || typeof value !== "object") return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    out[key] = SENSITIVE_KEY_RE.test(key) ? "***" : redactSensitive(item);
+  }
+  return out;
+};
+
+const safeLogStringify = (value: unknown): string => safeStringify(redactSensitive(value));
+
+const parseMaybeJson = (value: string): unknown => {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+};
 
 /**
  * 检查是否启用请求日志
@@ -35,19 +52,7 @@ const isRequestLogEnabled = (logEnabledOverride?: boolean): boolean => {
   const globalFlag = (globalThis as any)?.NEKO_REQUEST_LOG_ENABLED;
   if (typeof globalFlag === "boolean") return globalFlag;
 
-  // 注意：不要使用 import.meta（Metro/Hermes 可能无法解析）。
-  // Web(Vite) 侧通过全局常量注入保持“开发默认开日志”的体验；
-  // RN 侧可通过 __DEV__ 或 process.env.NODE_ENV 判断。
-  const mode =
-    (typeof __NEKO_VITE_MODE__ === "string" && __NEKO_VITE_MODE__) ||
-    (typeof __NEKO_VITE_NODE_ENV__ === "string" && __NEKO_VITE_NODE_ENV__) ||
-    // React Native 常见全局：__DEV__
-    (typeof (globalThis as any).__DEV__ === "boolean" ? ((globalThis as any).__DEV__ ? "development" : "production") : "") ||
-    // Node/Jest/某些打包环境
-    (typeof process !== "undefined" && (process as any)?.env?.NODE_ENV ? String((process as any).env.NODE_ENV) : "") ||
-    "";
-
-  return mode === "development";
+  return false;
 };
 
 /**
@@ -106,11 +111,13 @@ export function createRequestClient(options: RequestClientConfig): AxiosInstance
         
         const logInfo: Record<string, unknown> = {};
         if (config.params) {
-          const paramsStr = safeStringify(config.params);
+          const paramsStr = safeLogStringify(config.params);
           logInfo.params = paramsStr.length > 200 ? paramsStr.substring(0, 200) + '...' : paramsStr;
         }
         if (config.data) {
-          const dataStr = typeof config.data === 'string' ? config.data : safeStringify(config.data);
+          const dataStr = typeof config.data === 'string'
+            ? safeLogStringify(parseMaybeJson(config.data))
+            : safeLogStringify(config.data);
           logInfo.data = dataStr.length > 200 ? dataStr.substring(0, 200) + '...' : dataStr;
         }
         
@@ -239,7 +246,9 @@ export function createRequestClient(options: RequestClientConfig): AxiosInstance
         
         let responseDataStr = '';
         if (response.data !== undefined && response.data !== null) {
-          const rawDataStr = typeof response.data === 'string' ? response.data : safeStringify(response.data);
+          const rawDataStr = typeof response.data === 'string'
+            ? safeLogStringify(parseMaybeJson(response.data))
+            : safeLogStringify(response.data);
           responseDataStr = rawDataStr.length > 200 ? rawDataStr.substring(0, 200) + '...' : rawDataStr;
         }
         
@@ -271,7 +280,7 @@ export function createRequestClient(options: RequestClientConfig): AxiosInstance
           const errorDataStr =
             typeof error.response.data === 'string'
               ? error.response.data
-              : safeStringify(error.response.data);
+              : safeLogStringify(error.response.data);
           const truncated = errorDataStr.length > 200 ? errorDataStr.substring(0, 200) + '...' : errorDataStr;
           errorInfo.data = truncated;
         }
@@ -327,4 +336,3 @@ export function createRequestClient(options: RequestClientConfig): AxiosInstance
 
   return instance;
 }
-

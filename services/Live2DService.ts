@@ -239,18 +239,51 @@ export class Live2DService {
     try {
       const cacheDirName = this.config.modelItemId ?? this.config.modelName;
       const baseName = this.actualModelBaseName ?? this.config.modelName;
+      const modelDir = new Directory(Paths.cache, `live2d/${cacheDirName}`);
       const modelFile = new File(
-        Paths.cache,
-        `live2d/${cacheDirName}/${baseName}.model3.json`
+        modelDir,
+        `${baseName}.model3.json`
       );
       const mocFile = new File(
-        Paths.cache,
-        `live2d/${cacheDirName}/${baseName}.moc3`
+        modelDir,
+        `${baseName}.moc3`
       );
 
-      const isValid = modelFile.exists && mocFile.exists;
+      let isValid = modelFile.exists && mocFile.exists;
 
       console.log(`🔍 验证: modelFile=${modelFile.uri} exists=${modelFile.exists}, mocFile=${mocFile.uri} exists=${mocFile.exists}`);
+
+      if (isValid) {
+        const modelJson = JSON.parse(modelFile.textSync());
+        const refs = modelJson?.FileReferences;
+        const files: string[] = [];
+        if (refs) {
+          if (refs.Moc) files.push(refs.Moc);
+          if (refs.Textures) files.push(...refs.Textures);
+          if (refs.Physics) files.push(refs.Physics);
+          if (refs.Pose) files.push(refs.Pose);
+          if (refs.DisplayInfo) files.push(refs.DisplayInfo);
+          if (Array.isArray(refs.Expressions)) {
+            files.push(...refs.Expressions.map((e: any) => e?.File).filter(Boolean));
+          }
+          if (refs.Motions && typeof refs.Motions === 'object') {
+            Object.values(refs.Motions).forEach((arr: unknown) => {
+              if (Array.isArray(arr)) {
+                files.push(...arr.map((m: any) => m?.File).filter(Boolean));
+              }
+            });
+          }
+        }
+
+        const missing = Array.from(new Set(files)).filter((relPath) => {
+          const file = new File(modelDir, relPath);
+          return !file.exists;
+        });
+        if (missing.length > 0) {
+          console.log('❌ 模型依赖缺失:', missing.slice(0, 8), missing.length > 8 ? `+${missing.length - 8}` : '');
+          isValid = false;
+        }
+      }
 
       if (isValid) {
         console.log('✅ 模型文件验证通过');
@@ -627,4 +660,3 @@ export class Live2DService {
     console.log('✅ Live2DService 已销毁');
   }
 }
-

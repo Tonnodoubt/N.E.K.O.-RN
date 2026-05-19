@@ -318,6 +318,11 @@ export function useSettingsMenuItems<TIcon = ToolbarIcon>(
         label: tOrDefault(t, 'settings.menu.connectionHelp', '连接帮助'),
         icon: mkIcon('connectionHelp', 'set_off.png'),
       },
+      {
+        id: 'chatFont' as const,
+        label: tOrDefault(t, 'settings.menu.chatFont', '聊天字体'),
+        icon: mkIcon('chatFont', 'set_off.png'),
+      },
     ];
   }, [t, iconBasePath, icons]);
 }

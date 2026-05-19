@@ -1,0 +1,70 @@
+export const accent = '#FF7EB3' as const;
+const accentSecondary = '#B794F6' as const;
+
+const semantic = {
+  accent,
+  accentSecondary,
+  accentMuted: '#C4577A',
+  accentSoft: 'rgba(255, 126, 179, 0.12)',
+  accentGradientStart: '#FF7EB3',
+  accentGradientEnd: '#B794F6',
+  success: '#7EDCA0',
+  warning: '#FFD166',
+  error: '#FF6B8A',
+} as const;
+
+export const lightPalette = {
+  ...semantic,
+  page: '#FFF5F7',
+  elevated: '#FFFFFF',
+  surfaceGlass: 'rgba(255, 255, 255, 0.82)',
+  surfaceGlassBorder: 'rgba(255, 126, 179, 0.18)',
+  textPrimary: '#2D1B33',
+  textSecondary: '#6B5475',
+  textMuted: '#A090A8',
+  textOnAccent: '#FFFFFF',
+  border: 'rgba(183, 148, 246, 0.25)',
+  borderStrong: 'rgba(255, 126, 179, 0.30)',
+  separator: 'rgba(45, 27, 51, 0.06)',
+  overlay: 'rgba(30, 15, 36, 0.45)',
+  chatSheetBg: 'rgba(0, 0, 0, 0.06)',
+  aiBubbleBg: 'rgba(255, 255, 255, 0.55)',
+  aiBubbleBorder: 'rgba(255, 255, 255, 0.60)',
+  aiBubbleText: '#2D1B33',
+  userBubbleBg: 'rgba(255, 126, 179, 0.55)',
+  userBubbleText: '#FFFFFF',
+  timestampText: 'rgba(45, 27, 51, 0.45)',
+  timestampLine: 'rgba(45, 27, 51, 0.10)',
+  dotUser: '#FF7EB3',
+  dotAssistant: '#B794F6',
+  inputBarBg: 'rgba(255, 255, 255, 0.45)',
+} as const;
+
+export const darkPalette = {
+  ...semantic,
+  page: '#1E1B2E',
+  elevated: '#2A2540',
+  surfaceGlass: 'rgba(42, 37, 64, 0.88)',
+  surfaceGlassBorder: 'rgba(255, 126, 179, 0.20)',
+  textPrimary: '#F5F0F8',
+  textSecondary: '#B8A9C6',
+  textMuted: '#7A6B88',
+  textOnAccent: '#FFFFFF',
+  border: 'rgba(183, 148, 246, 0.18)',
+  borderStrong: 'rgba(255, 126, 179, 0.25)',
+  separator: 'rgba(255, 255, 255, 0.06)',
+  overlay: 'rgba(10, 5, 15, 0.55)',
+  chatSheetBg: 'rgba(0, 0, 0, 0.15)',
+  aiBubbleBg: 'rgba(255, 255, 255, 0.08)',
+  aiBubbleBorder: 'rgba(255, 255, 255, 0.12)',
+  aiBubbleText: '#F5F0F8',
+  userBubbleBg: 'rgba(255, 126, 179, 0.50)',
+  userBubbleText: '#FFFFFF',
+  timestampText: 'rgba(255, 255, 255, 0.35)',
+  timestampLine: 'rgba(255, 255, 255, 0.08)',
+  dotUser: '#FF7EB3',
+  dotAssistant: '#B794F6',
+  inputBarBg: 'rgba(0, 0, 0, 0.25)',
+} as const;
+
+export type SemanticColor = keyof typeof lightPalette;
