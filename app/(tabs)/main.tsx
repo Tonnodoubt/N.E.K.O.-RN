@@ -1539,7 +1539,10 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
           // 2. 清空聊天记录
           chat.clearMessages();
 
-          // 3. 重连 WebSocket
+          // 3. P2P 场景先重试底层探测，再重连 WebSocket
+          if (p2pConfig) {
+            udpRetryRef.current();
+          }
           audio.reconnect();
 
           // 4. 重新加载手机当前角色模型，不读取后端全局当前角色
@@ -1589,6 +1592,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
     chatFontId,
     config,
     mainManager,
+    p2pConfig,
     resetVrmMotionCalibration,
     resetVrmTransform,
     scaleVrmMotion,

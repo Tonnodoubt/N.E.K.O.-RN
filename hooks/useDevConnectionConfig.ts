@@ -82,6 +82,10 @@ export function useDevConnectionConfig(): {
         return { ok: true, config: finalConfig, isP2p, pairingRegistered: true };
       }
 
+      if (['qr_missing', 'qr_invalid', 'qr_used', 'qr_expired'].includes(registered.code || '')) {
+        return { ok: false, error: registered.error };
+      }
+
       return { ok: true, config: next, isP2p, pairingError: registered.error };
     },
     [setConfig]

@@ -49,7 +49,7 @@ export default function RootLayout() {
               <Stack>
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                 {/* <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} /> */}
-                <Stack.Screen name="audio-test" options={{ title: '音频测试' }} />
+                <Stack.Screen name="audio-test" options={{ title: 'Legacy 音频测试' }} />
                 <Stack.Screen name="audio-debug" options={{ title: '🎤 音频诊断' }} />
                 <Stack.Screen name="qr-scanner" options={{ title: '扫码（Dev）' }} />
                 <Stack.Screen name="request-lab" options={{ title: 'Request/组件实验室' }} />

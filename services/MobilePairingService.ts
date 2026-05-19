@@ -1,10 +1,11 @@
 import { type DevConnectionConfig } from '@/utils/devConnectionConfig';
 
 type PairingPayload = NonNullable<NonNullable<DevConnectionConfig['p2p']>['pairing']>;
+type PairingErrorCode = 'qr_missing' | 'qr_invalid' | 'qr_used' | 'qr_expired' | string;
 
 type PairingResult =
   | { ok: true; config: DevConnectionConfig; registered?: boolean; resolved?: boolean }
-  | { ok: false; error: string };
+  | { ok: false; error: string; code?: PairingErrorCode };
 
 const DEFAULT_REGISTER_PATH = '/pairing/register';
 const DEFAULT_RESOLVE_PATH = '/pairing/resolve';
@@ -30,6 +31,38 @@ function pickString(value: unknown): string | undefined {
 
 function pickNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function pairingErrorMessage(code: PairingErrorCode | undefined, fallback: string): string {
+  switch (code) {
+    case 'qr_used':
+      return '二维码已使用，请在电脑端刷新二维码后重新扫码';
+    case 'qr_expired':
+      return '二维码已过期，请在电脑端刷新二维码后重新扫码';
+    case 'qr_invalid':
+      return '二维码凭证无效，请重新扫码';
+    case 'qr_missing':
+      return '二维码缺少配对凭证，请重新扫码';
+    default:
+      return fallback;
+  }
+}
+
+async function parsePairingErrorResponse(response: Response, fallback: string): Promise<{ error: string; code?: string }> {
+  try {
+    const payload: unknown = await response.json();
+    if (isObject(payload)) {
+      const code = pickString(payload.code);
+      const serverError = pickString(payload.error);
+      return {
+        error: pairingErrorMessage(code, serverError || fallback),
+        code,
+      };
+    }
+  } catch {
+    // ignore invalid error payload
+  }
+  return { error: fallback };
 }
 
 function isPrivateIpv4(host: string | undefined): boolean {
@@ -86,6 +119,12 @@ function configFromInfo(
     pickString(info.pairing_register_path) || current.p2p?.pairingRegisterPath;
   const pairingResolvePath =
     pickString(info.pairing_resolve_path) || current.p2p?.pairingResolvePath;
+  const qrOneTime =
+    typeof info.qr_one_time === 'boolean' ? info.qr_one_time : current.p2p?.qrOneTime;
+  const qrTokenTtlSeconds =
+    pickNumber(info.qr_token_ttl_seconds) ?? current.p2p?.qrTokenTtlSeconds;
+  const qrExpiresAt =
+    pickNumber(info.qr_expires_at) ?? current.p2p?.qrExpiresAt;
 
   return {
     ...current,
@@ -103,6 +142,9 @@ function configFromInfo(
       pairingSupported: info.pairing_supported === true || current.p2p?.pairingSupported,
       pairingRegisterPath,
       pairingResolvePath,
+      qrOneTime,
+      qrTokenTtlSeconds,
+      qrExpiresAt,
       pairing,
     },
   };
@@ -136,7 +178,11 @@ export async function registerMobilePairing(config: DevConnectionConfig): Promis
     );
 
     if (!response.ok) {
-      return { ok: false, error: `Pairing register failed: HTTP ${response.status}` };
+      const parsed = await parsePairingErrorResponse(
+        response,
+        `Pairing register failed: HTTP ${response.status}`,
+      );
+      return { ok: false, ...parsed };
     }
 
     const payload: unknown = await response.json();
@@ -196,7 +242,11 @@ export async function resolveMobilePairing(config: DevConnectionConfig): Promise
     );
 
     if (!response.ok) {
-      return { ok: false, error: `Pairing resolve failed: HTTP ${response.status}` };
+      const parsed = await parsePairingErrorResponse(
+        response,
+        `Pairing resolve failed: HTTP ${response.status}`,
+      );
+      return { ok: false, ...parsed };
     }
 
     const payload: unknown = await response.json();

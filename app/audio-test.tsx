@@ -238,6 +238,9 @@ const AudioTest: React.FC<AudioTestProps> = () => {
     return (
         <View style={styles.container}>
             <View style={styles.statusContainer}>
+                <Text style={styles.legacyNotice}>
+                    Legacy debug page: 主语音链路已迁移到 @project_neko/audio-service。
+                </Text>
                 <Text style={styles.statusText}>连接状态: {connectionStatus}</Text>
                 <Text style={styles.statusText}>已收集音频块: {audioStats?.audioChunksCount}</Text>
                 <Text style={styles.statusText}>已发送数据包: {audioStats?.sendCount}</Text>
@@ -336,6 +339,12 @@ const styles = StyleSheet.create({
         fontSize: 16,
         marginBottom: 5,
         color: '#666',
+    },
+    legacyNotice: {
+        fontSize: 14,
+        marginBottom: 10,
+        color: '#8A6D3B',
+        fontWeight: '600',
     },
     statsTitle: {
         fontSize: 16,

@@ -19,6 +19,9 @@ export type DevConnectionConfig = {
     pairingSupported?: boolean;
     pairingRegisterPath?: string;
     pairingResolvePath?: string;
+    qrOneTime?: boolean;
+    qrTokenTtlSeconds?: number;
+    qrExpiresAt?: number;
     pairing?: {
       pairingId: string;
       pairingSecret: string;
@@ -79,6 +82,9 @@ export function parseDevConnectionConfig(raw: string): Partial<DevConnectionConf
           pairingSupported: obj.pairing_supported === true,
           pairingRegisterPath: typeof obj.pairing_register_path === 'string' ? obj.pairing_register_path : undefined,
           pairingResolvePath: typeof obj.pairing_resolve_path === 'string' ? obj.pairing_resolve_path : undefined,
+          qrOneTime: obj.qr_one_time === true,
+          qrTokenTtlSeconds: typeof obj.qr_token_ttl_seconds === 'number' ? obj.qr_token_ttl_seconds : undefined,
+          qrExpiresAt: typeof obj.qr_expires_at === 'number' ? obj.qr_expires_at : undefined,
         };
         return out;
       }
