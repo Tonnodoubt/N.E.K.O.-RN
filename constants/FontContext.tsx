@@ -37,10 +37,16 @@ export function FontProvider({ children }: { children: React.ReactNode }) {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
-      setFontIdState((stored && FONT_OPTIONS.find(f => f.id === stored)) ? stored as FontId : 'system');
-      setLoaded(true);
-    });
+    AsyncStorage.getItem(STORAGE_KEY)
+      .then((stored) => {
+        setFontIdState((stored && FONT_OPTIONS.find(f => f.id === stored)) ? stored as FontId : 'system');
+      })
+      .catch(() => {
+        setFontIdState('system');
+      })
+      .finally(() => {
+        setLoaded(true);
+      });
   }, []);
 
   const setFontId = useCallback((id: FontId) => {

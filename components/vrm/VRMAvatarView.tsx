@@ -587,7 +587,7 @@ async function createNativeTextureFromUri(
   if (/^(?:blob|data|https?):/i.test(uri)) {
     const response = await fetch(uri);
     const bytes = new Uint8Array(await response.arrayBuffer());
-    localUri = writeTextureToCache(bytes, resolvedMimeType);
+    localUri = await writeTextureToCache(bytes, resolvedMimeType);
     cachedUri = localUri;
   }
 
@@ -609,7 +609,7 @@ async function createNativeTextureFromBuffer(
   buffer: ArrayBuffer,
   mimeType?: string,
 ): Promise<THREE.Texture> {
-  const localUri = writeTextureToCache(new Uint8Array(buffer), mimeType);
+  const localUri = await writeTextureToCache(new Uint8Array(buffer), mimeType);
   const texture = await createNativeTextureFromUri(localUri, mimeType);
   texture.userData[NEKO_CACHED_TEXTURE_URI] = localUri;
   return texture;

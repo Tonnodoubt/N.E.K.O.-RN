@@ -4,15 +4,24 @@ This document pins the current mobile-focused baseline across backend, desktop t
 
 Scope: mobile connection only. Do not use this baseline to reason about unrelated desktop sync work.
 
+Path placeholders:
+
+- `<BACKEND_ROOT>`: local checkout of the mobile backend
+- `<PC_ROOT>`: local checkout of the PC tray entry
+- `<RN_ROOT>`: local checkout of this RN app
+- `<MAIN_ROOT>`: local checkout of the main desktop/backend project
+- `<ANDROID_SDK_ROOT>`: local Android SDK directory
+- `<LAN_IP>`: current LAN IPv4 address used during manual testing
+
 ## Baseline Matrix
 
 | Part | Path | Branch | Commit | Status |
 | --- | --- | --- | --- | --- |
-| Backend | `/Users/tongqianqiu/N.E.K.O.TONG-mobile-backend` | `mobile-backend` | `ff81a6e6 feat(mobile): restore LAN proxy backend` | Clean |
-| PC tray | `/Users/tongqianqiu/N.E.K.O.-PC-mobile-connect` | `mobile-connect` | `89416f1 feat(mobile): add tray QR connect window` | Clean |
-| RN app | `/Users/tongqianqiu/N.E.K.O.-RN` | `rn-alignment` | `7cd9d7c feat(mobile): consolidate RN app shell` | App commit clean; see notes below |
-| Live2D native package | `/Users/tongqianqiu/N.E.K.O.-RN/packages/react-native-live2d` | `main` | `1964596 test: allow empty expo module tests` | Committed; branch is ahead/behind upstream |
-| PCM native package | `/Users/tongqianqiu/N.E.K.O.-RN/packages/react-native-pcm-stream` | `mobile-rn-support` | `46be383 test: allow empty expo module tests` | Commit clean; generated Android files remain untracked |
+| Backend | `<BACKEND_ROOT>` | `mobile-backend` | `ff81a6e6 feat(mobile): restore LAN proxy backend` | Clean |
+| PC tray | `<PC_ROOT>` | `mobile-connect` | `89416f1 feat(mobile): add tray QR connect window` | Clean |
+| RN app | `<RN_ROOT>` | `rn-alignment` | `7cd9d7c feat(mobile): consolidate RN app shell` | App commit clean; see notes below |
+| Live2D native package | `<RN_ROOT>/packages/react-native-live2d` | `main` | `1964596 test: allow empty expo module tests` | Committed; branch is ahead/behind upstream |
+| PCM native package | `<RN_ROOT>/packages/react-native-pcm-stream` | `mobile-rn-support` | `46be383 test: allow empty expo module tests` | Commit clean; generated Android files remain untracked |
 
 ## Backend
 
@@ -43,7 +52,7 @@ Verified:
 Default run check:
 
 ```bash
-cd /Users/tongqianqiu/N.E.K.O.TONG-mobile-backend
+cd <BACKEND_ROOT>
 NEKO_ENABLE_CLOUD_REGISTRY=false NEKO_ENABLE_STUN=false uv run python launcher.py
 ```
 
@@ -86,7 +95,7 @@ node -e "require('./src/main/mobile-connect-window-data-url'); require('./src/ma
 Default run check:
 
 ```bash
-cd /Users/tongqianqiu/N.E.K.O.-PC-mobile-connect
+cd <PC_ROOT>
 npm start
 ```
 
@@ -118,11 +127,11 @@ Included:
 Verified:
 
 ```bash
-cd /Users/tongqianqiu/N.E.K.O.-RN
+cd <RN_ROOT>
 npm run type-check
 npm run test
 npm run lint
-cd android && JAVA_HOME=/opt/homebrew/opt/openjdk@17 ANDROID_HOME=/Users/tongqianqiu/Library/Android/sdk ./gradlew assembleDebug --no-daemon
+cd android && JAVA_HOME=/opt/homebrew/opt/openjdk@17 ANDROID_HOME=<ANDROID_SDK_ROOT> ./gradlew assembleDebug --no-daemon
 ```
 
 Results:
@@ -132,7 +141,7 @@ Results:
 - Lint passed with `0` errors
 - Lint still reports existing formatting/import warnings
 - Android debug APK build passed
-  - APK: `/Users/tongqianqiu/N.E.K.O.-RN/android/app/build/outputs/apk/debug/app-debug.apk`
+  - APK: `<RN_ROOT>/android/app/build/outputs/apk/debug/app-debug.apk`
   - Size: `215M`
   - SHA-256: `eae3a7745485422f78c6322850174e725b25e10c57af3eb92988f73b2e0b700b`
 
@@ -158,7 +167,7 @@ Second-step checks are complete.
 RN artifact:
 
 - `./gradlew assembleDebug --no-daemon` passed.
-- APK: `/Users/tongqianqiu/N.E.K.O.-RN/android/app/build/outputs/apk/debug/app-debug.apk`
+- APK: `<RN_ROOT>/android/app/build/outputs/apk/debug/app-debug.apk`
 - Size: `215M`
 - SHA-256: `eae3a7745485422f78c6322850174e725b25e10c57af3eb92988f73b2e0b700b`
 - Gradle reported existing deprecation warnings and the existing Expo `NODE_ENV` warning.
@@ -172,7 +181,7 @@ Backend runtime smoke:
 - LAN proxy `/p2p-info`: `200`.
 - `/lanproxyqrcode`: `200`, `2110` bytes.
 - QR payload confirmed:
-  - `lan_ip: 192.168.1.8`
+  - `lan_ip: <LAN_IP>`
   - `port: 50920`
   - `character: test`
   - token present
@@ -181,7 +190,7 @@ Backend runtime smoke:
 
 PC runtime smoke:
 
-- `/Users/tongqianqiu/N.E.K.O.-PC-mobile-connect` was started with `npm start` for about 30 seconds.
+- `<PC_ROOT>` was started with `npm start` for about 30 seconds.
 - Startup produced useful Electron/app output and no failure pattern was detected.
 - The test harness terminated the app after the timeout; the final renderer/GPU termination lines are from that controlled shutdown.
 - `npm install` was required in the new PC worktree to restore `node_modules`; `package-lock.json` was restored afterward and the PC worktree remained clean.
@@ -193,8 +202,8 @@ Manual three-side validation passed on the real LAN.
 
 Validated flow:
 
-- Backend was run from `/Users/tongqianqiu/N.E.K.O.TONG-mobile-backend` on `mobile-backend`.
-- PC was run from `/Users/tongqianqiu/N.E.K.O.-PC-mobile-connect` on `mobile-connect`.
+- Backend was run from `<BACKEND_ROOT>` on `mobile-backend`.
+- PC was run from `<PC_ROOT>` on `mobile-connect`.
 - RN used the debug APK from this baseline.
 - PC tray Mobile Connect QR rendered correctly.
 - Phone scanned the QR and entered the mobile connection flow.
@@ -205,8 +214,8 @@ Validated flow:
 
 Runtime note:
 
-- A stale main server from `/Users/tongqianqiu/N.E.K.O.TONG` was previously occupying `48911`, causing `/p2p-info` to return HTML instead of JSON.
-- The valid manual run requires `48911` to be served by `/Users/tongqianqiu/N.E.K.O.TONG-mobile-backend`, with LAN proxy on `48920`.
+- A stale main server from `<MAIN_ROOT>` was previously occupying `48911`, causing `/p2p-info` to return HTML instead of JSON.
+- The valid manual run requires `48911` to be served by `<BACKEND_ROOT>`, with LAN proxy on `48920`.
 
 ## Next Step
 

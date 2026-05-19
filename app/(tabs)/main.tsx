@@ -212,9 +212,7 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   const [characterList, setCharacterList] = useState<string[]>([]);
   const [currentCatgirl, setCurrentCatgirl] = useState<string | null>(null);
   const [characterLoading, setCharacterLoading] = useState(false);
-  const [switchedCharacterName, setSwitchedCharacterName] = useState<string | null>(null);
   const [switchError, setSwitchError] = useState<string | null>(null);
-  const switchedNameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const switchErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const characterLoadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isChatForceCollapsed, setIsChatForceCollapsed] = useState(false);
@@ -792,9 +790,6 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
             clearTimeout(switchErrorTimerRef.current);
             switchErrorTimerRef.current = null;
           }
-          setSwitchedCharacterName(result.characterName);
-          if (switchedNameTimerRef.current) clearTimeout(switchedNameTimerRef.current);
-          switchedNameTimerRef.current = setTimeout(() => setSwitchedCharacterName(null), 2500);
           dispatchVrmBehavior({ type: 'character_switch_done' });
           return;
         }
@@ -858,10 +853,6 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
             clearTimeout(switchErrorTimerRef.current);
             switchErrorTimerRef.current = null;
           }
-          const name = currentCatgirlRef.current;
-          setSwitchedCharacterName(name);
-          if (switchedNameTimerRef.current) clearTimeout(switchedNameTimerRef.current);
-          switchedNameTimerRef.current = setTimeout(() => setSwitchedCharacterName(null), 2500);
           dispatchVrmBehavior({ type: 'character_switch_done' });
         }
       } else {
@@ -1286,9 +1277,6 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
       clearTimeout(switchErrorTimerRef.current);
       switchErrorTimerRef.current = null;
     }
-    setSwitchedCharacterName(name);
-    if (switchedNameTimerRef.current) clearTimeout(switchedNameTimerRef.current);
-    switchedNameTimerRef.current = setTimeout(() => setSwitchedCharacterName(null), 2500);
     dispatchVrmBehavior({ type: 'character_switch_done' });
   }, [dispatchVrmBehavior]);
 
@@ -1870,7 +1858,6 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
   // 清理切换相关 timer，防止组件卸载后 setState
   useEffect(() => {
     return () => {
-      if (switchedNameTimerRef.current) clearTimeout(switchedNameTimerRef.current);
       if (switchErrorTimerRef.current) clearTimeout(switchErrorTimerRef.current);
       if (characterLoadingTimerRef.current) clearTimeout(characterLoadingTimerRef.current);
       if (localSwitchReleaseTimerRef.current) clearTimeout(localSwitchReleaseTimerRef.current);
@@ -2060,7 +2047,6 @@ const MainUIScreen: React.FC<MainUIScreenProps> = () => {
 
       <CharacterSwitchOverlay
         loading={characterLoading}
-        switchedName={switchedCharacterName}
         error={switchError}
       />
     </View>

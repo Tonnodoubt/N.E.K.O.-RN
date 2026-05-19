@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Modal, View, Text, TouchableOpacity, TouchableWithoutFeedback, ScrollView, Image, StyleSheet } from 'react-native';
+import { ActivityIndicator, Modal, View, Text, TouchableOpacity, TouchableWithoutFeedback, ScrollView, Image, StyleSheet } from 'react-native';
 import { useTheme } from '@/constants/ThemeContext';
 import { useTranslation } from 'react-i18next';
 
@@ -81,6 +81,18 @@ export function CharacterSelectionModal({
       color: cc.accent,
       fontWeight: '600',
     },
+    loadingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: theme.spacing.sm,
+      marginBottom: theme.spacing.md,
+    },
+    loadingText: {
+      color: cc.accent,
+      fontSize: theme.fontSize.footnote,
+      fontWeight: '600',
+    },
     list: {
       maxHeight: 300,
       paddingHorizontal: theme.spacing.xl,
@@ -155,6 +167,12 @@ export function CharacterSelectionModal({
                 <Text style={s.subtitleLabel}>{t('main.character.currentLabel')}</Text>
                 <Text style={s.subtitleHighlight}>{currentCatgirl || t('main.character.noCharacter')}</Text>
               </Text>
+              {loading && (
+                <View style={s.loadingRow}>
+                  <ActivityIndicator size="small" color={cc.accent} />
+                  <Text style={s.loadingText}>{t('main.character.switching')}</Text>
+                </View>
+              )}
               <ScrollView style={s.list} showsVerticalScrollIndicator={false}>
                 {characterList.map((name) => {
                   const isCurrent = name === currentCatgirl;

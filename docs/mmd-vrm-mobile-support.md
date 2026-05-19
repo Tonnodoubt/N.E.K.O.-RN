@@ -49,7 +49,7 @@
 
 ### 2.1 文件结构
 
-主项目目录：`/Users/tongqianqiu/N.E.K.O.TONG/`
+主项目目录：`<N.E.K.O.TONG_ROOT>/`
 
 ```
 N.E.K.O.TONG/

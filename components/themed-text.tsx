@@ -32,11 +32,9 @@ export function ThemedText({
 
   const resolvedVariant: TextVariant = variant ?? typeToVariant[type ?? 'default'] ?? 'body';
 
-  const color = lightColor && theme.isDark
-    ? undefined
-    : darkColor && !theme.isDark
-      ? undefined
-      : (lightColor ?? darkColor ?? theme.colors.textPrimary);
+  const color = theme.isDark
+    ? (darkColor ?? theme.colors.textPrimary)
+    : (lightColor ?? theme.colors.textPrimary);
 
   return (
     <Text

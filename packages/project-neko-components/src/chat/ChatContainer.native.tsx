@@ -246,6 +246,7 @@ export default function ChatContainer({
           onImageAction={handleImageAction}
           hasImagePicker={!!(onPickImage || onTakePhotoProp)}
           disabled={disabled}
+          canSendImages={pendingScreenshots.length > 0}
           onFocus={chatExpanded ? undefined : onToggleChat}
         />
       </>
@@ -527,13 +528,14 @@ function ChatSheetContent({
 function BottomInputBar({
   theme, cc,
   inputValue, onInputChange, onSend, onImageAction,
-  hasImagePicker, disabled, onFocus,
+  hasImagePicker, disabled, onFocus, canSendImages = false,
 }: {
   theme: ReturnType<typeof useTheme>; cc: Record<string, string>;
   inputValue: string; onInputChange: (t: string) => void;
   onSend: () => void; onImageAction: () => void;
   hasImagePicker: boolean; disabled: boolean;
   onFocus?: () => void;
+  canSendImages?: boolean;
 }) {
   return (
     <View style={{
@@ -559,7 +561,7 @@ function BottomInputBar({
           multiline blurOnSubmit={false} editable={!disabled}
           style={{ flex: 1, fontSize: theme.fontSize.body, maxHeight: 80, paddingVertical: theme.spacing.sm, color: cc.textPrimary }}
         />
-        {inputValue.trim().length > 0 && (
+        {(inputValue.trim().length > 0 || canSendImages) && (
           <TouchableOpacity onPress={onSend} activeOpacity={0.7} disabled={disabled} style={{ paddingVertical: 6 }}>
             <View style={{
               width: 32, height: 32, borderRadius: theme.radius.full,

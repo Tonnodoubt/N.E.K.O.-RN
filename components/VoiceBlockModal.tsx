@@ -21,7 +21,7 @@ export function VoiceBlockModal({ visible, onClose }: VoiceBlockModalProps) {
       alignItems: 'center',
     },
     content: {
-      backgroundColor: theme.isDark ? cc.elevated : '#ffffff',
+      backgroundColor: cc.elevated,
       borderRadius: theme.radius.lg,
       overflow: 'hidden',
       width: '72%',

@@ -26,8 +26,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY)
       .then((stored) => {
-        if (stored === 'sakura' || stored === 'ocean') {
-          setPresetIdState(stored);
+        if (stored && Object.prototype.hasOwnProperty.call(presets, stored)) {
+          setPresetIdState(stored as PresetId);
         } else {
           setPresetIdState(defaultPresetId);
         }

@@ -5,11 +5,10 @@ import { useTranslation } from 'react-i18next';
 
 interface CharacterSwitchOverlayProps {
   loading: boolean;
-  switchedName: string | null;
   error: string | null;
 }
 
-export function CharacterSwitchOverlay({ loading, switchedName, error }: CharacterSwitchOverlayProps) {
+export function CharacterSwitchOverlay({ loading, error }: CharacterSwitchOverlayProps) {
   const theme = useTheme();
   const cc = theme.colors;
   const { t } = useTranslation();
@@ -20,7 +19,7 @@ export function CharacterSwitchOverlay({ loading, switchedName, error }: Charact
       backgroundColor: cc.overlay,
       justifyContent: 'center',
       alignItems: 'center',
-      zIndex: 9999,
+      zIndex: 9998,
     },
     text: {
       color: cc.textPrimary,
@@ -35,7 +34,7 @@ export function CharacterSwitchOverlay({ loading, switchedName, error }: Charact
       paddingVertical: theme.spacing.sm,
       paddingHorizontal: theme.spacing.xl,
       borderRadius: theme.radius.xl,
-      zIndex: 9999,
+      zIndex: 10000,
     },
     successText: {
       color: cc.accent,

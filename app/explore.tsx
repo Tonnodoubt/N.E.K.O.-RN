@@ -75,6 +75,7 @@ export default function ExploreScreen() {
   const audioServiceRef = useRef<AudioService | null>(null);
   const lastQueueClearAtMsRef = useRef<number>(0);
   const lastAppliedQrRef = useRef<string | null>(null);
+  const isRecordingRef = useRef(false);
 
   const { config: connectionConfig, setConfig: setConnectionConfig } = useDevConnectionConfig();
 
@@ -84,6 +85,10 @@ export default function ExploreScreen() {
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [focusModeState, setFocusModeState] = useState<boolean>(false);
+
+  useEffect(() => {
+    isRecordingRef.current = isRecording;
+  }, [isRecording]);
 
   const getErrorMessage = (error: unknown): string => {
     if (error instanceof Error && error.message) {
@@ -216,7 +221,7 @@ export default function ExploreScreen() {
       try {
         const msg: string = data?.message ?? '';
         if (typeof msg === 'string' && msg.includes('失联了，即将重启')) {
-          const shouldRestart = audioServiceRef.current?.getIsSessionActive() || isRecording;
+          const shouldRestart = audioServiceRef.current?.getIsSessionActive() || isRecordingRef.current;
           if (shouldRestart) {
             console.log('检测到失联状态，执行自动重启会话');
             (async () => {

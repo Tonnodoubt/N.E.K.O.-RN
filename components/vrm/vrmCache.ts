@@ -5,6 +5,11 @@ export const NEKO_CACHED_TEXTURE_URI = "nekoCachedTextureUri";
 const textureCacheDirectory = new Directory(Paths.cache, "neko-vrm-textures");
 let textureCacheCounter = 0;
 
+type WritableExpoFile = File & {
+  create(options?: { intermediates?: boolean; overwrite?: boolean }): void | Promise<void>;
+  write(content: Uint8Array): void | Promise<void>;
+};
+
 function getTextureExtension(mimeType?: string): string {
   switch (mimeType) {
     case "image/jpeg":
@@ -16,14 +21,14 @@ function getTextureExtension(mimeType?: string): string {
   }
 }
 
-export function writeTextureToCache(bytes: Uint8Array, mimeType?: string): string {
+export async function writeTextureToCache(bytes: Uint8Array, mimeType?: string): Promise<string> {
   textureCacheDirectory.create({ idempotent: true, intermediates: true });
   const file = new File(
     textureCacheDirectory,
     `texture-${Date.now()}-${textureCacheCounter++}.${getTextureExtension(mimeType)}`,
-  );
-  (file as any).create({ intermediates: true, overwrite: true });
-  (file as any).write(bytes);
+  ) as WritableExpoFile;
+  await file.create({ intermediates: true, overwrite: true });
+  await file.write(bytes);
   return file.uri;
 }
 
