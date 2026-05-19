@@ -3,4 +3,4 @@
 	url = https://github.com/noahzaozao/react-native-pcm-stream.git
 [submodule "packages/react-native-live2d"]
 	path = packages/react-native-live2d
-	url = https://github.com/noahzaozao/react-native-live2d.git
+	url = https://github.com/Tonnodoubt/react-native-live2d.git
